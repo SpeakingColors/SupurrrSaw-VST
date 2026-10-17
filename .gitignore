@@ -1,0 +1,6 @@
+build/
+*.o
+# Third-party sample packs must never be committed (copyright). Keep them in your local waveform library.
+*.wav
+!assets/**/*.wav
+/samples/
