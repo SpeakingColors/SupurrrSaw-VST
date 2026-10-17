@@ -6,15 +6,19 @@ using namespace supurr;
 static std::shared_ptr<Sample> loadWav(const char* fn, int root) {
   FILE* f = fopen(fn, "rb"); if (!f) return nullptr;
   std::vector<unsigned char> b; unsigned char tmp[65536]; size_t n; while ((n = fread(tmp, 1, sizeof tmp, f)) > 0) b.insert(b.end(), tmp, tmp + n); fclose(f);
-  size_t i = 12; int ch = 2, bits = 16; uint32_t sr = 44100; auto sm = std::make_shared<Sample>();
+  size_t i = 12; int ch = 2, bits = 16; bool isFloat = false; uint32_t sr = 44100; auto sm = std::make_shared<Sample>();
   while (i + 8 <= b.size()) {
     uint32_t sz = b[i+4] | b[i+5] << 8 | b[i+6] << 16 | (uint32_t)b[i+7] << 24;
-    if (!memcmp(&b[i], "fmt ", 4)) { ch = b[i+10] | b[i+11] << 8; sr = b[i+12] | b[i+13] << 8 | b[i+14] << 16 | (uint32_t)b[i+15] << 24; bits = b[i+22] | b[i+23] << 8; }
-    if (!memcmp(&b[i], "data", 4) && bits == 16) {
-      size_t frames = std::min<size_t>(sz, b.size() - i - 8) / (2 * ch);
-      for (size_t k = 0; k < frames; ++k) { const unsigned char* q = &b[i + 8 + k * 2 * ch];
-        int16_t a = (int16_t)(q[0] | q[1] << 8), c = ch > 1 ? (int16_t)(q[2] | q[3] << 8) : a;
-        sm->l.push_back(a / 32768.f); sm->r.push_back(c / 32768.f); }
+    if (!memcmp(&b[i], "fmt ", 4)) { ch = b[i+10] | b[i+11] << 8; sr = b[i+12] | b[i+13] << 8 | b[i+14] << 16 | (uint32_t)b[i+15] << 24; bits = b[i+22] | b[i+23] << 8; isFloat = (b[i+8] | b[i+9] << 8) == 3; }
+    if (!memcmp(&b[i], "data", 4) && (bits == 16 || bits == 24 || bits == 32)) {
+      int bps = bits / 8; size_t frames = std::min<size_t>(sz, b.size() - i - 8) / (bps * ch);
+      auto rd = [&](const unsigned char* q) -> float {
+        if (bits == 16) return (int16_t)(q[0] | q[1] << 8) / 32768.f;
+        if (bits == 24) { int32_t v = (q[0] << 8 | q[1] << 16 | q[2] << 24); return (v >> 8) / 8388608.f; }
+        if (isFloat) { float fv; memcpy(&fv, q, 4); return fv; }
+        return (int32_t)(q[0] | q[1] << 8 | q[2] << 16 | (uint32_t)q[3] << 24) / 2147483648.f; };
+      for (size_t k = 0; k < frames; ++k) { const unsigned char* q = &b[i + 8 + k * bps * ch];
+        float a = rd(q), c = ch > 1 ? rd(q + bps) : a; sm->l.push_back(a); sm->r.push_back(c); }
     }
     i += 8 + sz + (sz & 1);
   }
@@ -55,36 +59,44 @@ static void play(const char* name, Engine& e, const std::vector<Note>& seq, floa
 }
 int main(int argc, char** argv) {
   auto vec = argc > 1 ? loadWav(argv[1], 66) : nullptr;  // F#4
+  if (vec) vec->oneShot = true;
   std::vector<Note> riff; int mel[] = {69, 69, 72, 76, 74, 72, 71, 72, 77, 76, 74, 72, 71, 72, 74, 76}; for (int k = 0; k < 16; ++k) riff.push_back({mel[k], k * 0.30f, 0.22f});
-  { // 1. Ah pluck lead (needs the sample); without it Layer A falls back to a super square
+  { // 1. Ah stab: the sample IS the sound. A little supersaw underneath for body. Filter wide open.
     Engine e; Params& p = e.p;
-    if (vec) { p.layer[0].wave = Wave::Sample; p.layer[0].sample = vec; p.layer[0].level = 0.9f; }
+    if (vec) { p.layer[0].wave = Wave::Sample; p.layer[0].sample = vec; p.layer[0].level = 1.0f; }
     else { p.layer[0].wave = Wave::SuperSquare; p.layer[0].level = 0.7f; }
-    p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 7; p.layer[1].detune = 0.35f; p.layer[1].level = 0.45f;
-    p.layer[2].wave = Wave::SuperSquare; p.layer[2].octave = -1; p.layer[2].level = 0.25f; p.layer[2].detune = 0.2f;
-    p.subLevel = 0.3f; p.cutoff = 2500; p.reso = 0.12f; p.envAmt = 0.55f; p.fenv = {0.001f, 0.25f, 0.15f, 0.2f}; p.amp = {0.001f, 0.35f, 0.25f, 0.25f};
-    play("ah_pluck_lead", e, riff, 5.6f, 0.28f);
+    p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 7; p.layer[1].detune = 0.35f; p.layer[1].level = 0.12f;
+    p.cutoff = 18000; p.reso = 0.f; p.lowCutHz = 60; p.amp = {0.001f, 1.2f, 0.f, 0.3f}; p.spread = 1.f;
+    play("ah_stab_classic", e, riff, 5.6f);
   }
-  { // 2. Hoover: 3 PWM pulses an octave apart, pitch dive, resonant filter
+  { // 2. Hoover, an octave higher, low rumble cut, less drive
     Engine e; Params& p = e.p;
-    for (int l = 0; l < 3; ++l) { p.layer[l].wave = Wave::Pulse; p.layer[l].octave = l - 1; p.layer[l].level = 0.45f; }
-    p.lfoRate = 6.5f; p.lfoPwm = 0.9f; p.lfoPitch = 0.1f; p.pitchAmt = 12.f; p.pitchTime = 0.09f; p.cutoff = 1800; p.reso = 0.55f; p.drive = 0.3f;
-    p.amp = {0.002f, 0.5f, 0.8f, 0.25f}; p.spread = 0.8f; p.subLevel = 0.2f;
-    play("hoover", e, {{45, 0.f, 0.9f}, {48, 1.f, 0.9f}, {43, 2.f, 1.2f}}, 4.0f, 0.12f);
+    for (int l = 0; l < 3; ++l) { p.layer[l].wave = Wave::Pulse; p.layer[l].octave = l; p.layer[l].level = 0.45f; }
+    p.lfoRate = 6.5f; p.lfoPwm = 0.9f; p.lfoPitch = 0.1f; p.pitchAmt = 12.f; p.pitchTime = 0.09f; p.cutoff = 2600; p.reso = 0.45f; p.drive = 0.1f; p.dist = 0.1f; p.lowCutHz = 150.f;
+    p.amp = {0.002f, 0.5f, 0.8f, 0.25f}; p.spread = 0.8f;
+    play("hoover", e, {{57, 0.f, 0.9f}, {60, 1.f, 0.9f}, {55, 2.f, 1.2f}}, 4.0f, 0.12f);
   }
-  { // 3. Supersaw lead at 0% detune vs 40% detune
-    for (float d : {0.f, 0.4f, 1.f}) { Engine e; Params& p = e.p; p.layer[0].wave = Wave::SuperSaw; p.layer[0].detune = d; p.layer[0].voices = 7; p.cutoff = 6000; p.reso = 0.1f;
-      p.amp = {0.002f, 0.6f, 0.7f, 0.3f}; char nm[32]; snprintf(nm, sizeof nm, "supersaw_detune_%d", (int)(d * 100)); play(nm, e, {{57, 0.f, 1.2f}}, 1.6f); }
+  { // 3. mono-compatibility sweep: worst case settings across the keyboard
+    double worst = 0; for (float d : {0.f, 0.5f, 1.f}) for (float sp : {0.7f, 1.f}) for (int note : {36, 48, 60, 72}) {
+      Engine e; Params& p = e.p; p.layer[0].wave = Wave::SuperSaw; p.layer[0].detune = d; p.layer[0].voices = 15; p.spread = sp; p.detuneRange = 1.f; p.cutoff = 12000; p.amp = {0.002f, 2.f, 1.f, 0.3f};
+      e.prepare(48000); e.noteOn(note, 0.9f); float l[64], r[64]; double sL = 0, sR = 0, sM = 0;
+      for (int k = 0; k < 750; ++k) { e.render(l, r, 64); for (int i = 0; i < 64; ++i) { sL += l[i] * l[i]; sR += r[i] * r[i]; sM += 0.25 * (l[i] + r[i]) * (l[i] + r[i]); } }
+      double db = 10 * std::log10(sM / (0.5 * (sL + sR) + 1e-12)); worst = std::min(worst, db); }
+    printf("worst mono-sum loss over 15-voice detune/spread/note sweep: %.2f dB\n", worst);
   }
-  { // 4. Reese-style bass with sub, mono bass check
-    Engine e; Params& p = e.p; p.layer[0].wave = Wave::Saw; p.layer[1].wave = Wave::Saw; p.layer[1].tune = 14.f; p.layer[0].tune = -14.f; p.layer[0].level = p.layer[1].level = 0.5f;
-    p.layer[0].pan = -0.6f; p.layer[1].pan = 0.6f; p.cutoff = 500; p.reso = 0.3f; p.subLevel = 0.5f; p.bassMonoHz = 150; p.amp = {0.005f, 0.5f, 0.9f, 0.2f};
-    play("reese_bass", e, {{36, 0.f, 1.5f}, {39, 1.6f, 1.5f}}, 3.4f);
+  { // 4. Reese bass, clean and dirty
+    for (int dirty = 0; dirty < 2; ++dirty) { Engine e; Params& p = e.p;
+      if (!dirty) { p.layer[0].wave = Wave::Saw; p.layer[1].wave = Wave::Saw; p.layer[1].tune = 14.f; p.layer[0].tune = -14.f; p.layer[0].level = p.layer[1].level = 0.5f; p.layer[0].pan = -0.6f; p.layer[1].pan = 0.6f; p.cutoff = 500; p.reso = 0.3f; p.subLevel = 0.5f; }
+      else { p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 5; p.layer[0].detune = 0.3f; p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 5; p.layer[1].detune = 0.3f; p.layer[1].tune = 19.f; p.layer[2].wave = Wave::Saw; p.layer[2].tune = -19.f;
+        for (auto& l : p.layer) l.level = 0.4f; p.cutoff = 700; p.reso = 0.4f; p.drive = 0.4f; p.dist = 0.55f; p.lfoRate = 0.35f; p.lfoCutoff = 0.35f; p.subLevel = 0.35f; p.detuneRange = 1.5f; }
+      p.bassMonoHz = 150; p.amp = {0.005f, 0.5f, 0.9f, 0.2f};
+      play(dirty ? "reese_dirty" : "reese_clean", e, {{36, 0.f, 1.5f}, {39, 1.6f, 1.5f}}, 3.4f); }
   }
-  { // 5. Acid-ish: saw, LP18, resonant, short decay
-    Engine e; Params& p = e.p; p.layer[0].wave = Wave::Saw; p.filterMode = FilterMode::LP18; p.cutoff = 500; p.reso = 0.8f; p.envAmt = 0.7f; p.fenv = {0.001f, 0.18f, 0.f, 0.1f}; p.amp = {0.001f, 0.25f, 0.6f, 0.05f}; p.subLevel = 0.3f; p.spread = 0.f;
-    std::vector<Note> sq; int nn[] = {36, 36, 48, 39, 36, 36, 43, 46}; for (int k = 0; k < 8; ++k) sq.push_back({nn[k], k * 0.15f, 0.12f});
-    play("acid", e, sq, 1.6f);
+  { // 5. Acid: saw, LP18, high resonance, hard distorted
+    Engine e; Params& p = e.p; p.layer[0].wave = Wave::Saw; p.filterMode = FilterMode::LP18; p.cutoff = 450; p.reso = 0.85f; p.envAmt = 0.75f; p.fenv = {0.001f, 0.2f, 0.f, 0.1f}; p.amp = {0.001f, 0.3f, 0.7f, 0.05f}; p.subLevel = 0.25f; p.spread = 0.f;
+    p.drive = 0.6f; p.dist = 0.75f; p.lowCutHz = 35.f; p.master = 0.55f;
+    std::vector<Note> sq; int nn[] = {36, 36, 48, 39, 36, 36, 43, 46, 36, 48, 36, 51, 36, 43, 39, 48}; for (int k = 0; k < 16; ++k) sq.push_back({nn[k], k * 0.15f, 0.12f});
+    play("acid_dirty", e, sq, 2.6f, 0.08f);
   }
   return 0;
 }

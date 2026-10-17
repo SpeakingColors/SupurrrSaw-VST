@@ -23,6 +23,7 @@ struct Sample {
   double sampleRate = 44100.0;
   int rootNote = 60;
   bool loop = false;
+  bool oneShot = false;  // plays to the end, key release does not cut it (stabs)
   size_t loopStart = 0, loopEnd = 0;
 };
 
@@ -49,6 +50,8 @@ struct Params {
   // filter
   FilterMode filterMode = FilterMode::LP24;
   float cutoff = 4000.f, reso = 0.2f, drive = 0.f, envAmt = 0.f, keyTrack = 0.f;
+  float lowCutHz = 20.f;       // removes low rumble before the sub is added
+  float dist = 0.f;            // 0..1 post-filter distortion (acid, hoover, dirty reese)
   Adsr amp, fenv;
   // pitch envelope (hoover dive): starts at +pitchAmt semitones, decays to 0
   float pitchAmt = 0.f, pitchTime = 0.09f;
@@ -144,7 +147,7 @@ struct Voice {
   double samplePos[kLayers] = {};
   float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   float lfoPhase = 0.f, t = 0.f;
-  EnvState amp, fenv; Filter fl, fr;
+  EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
 };
 
 class Engine {
@@ -158,8 +161,9 @@ class Engine {
     *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->age = ++clock;
     for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = rng.next();
     v->amp.on(); v->fenv.on();
+    for (int l = 0; l < kLayers; ++l) if (p.layer[l].wave == Wave::Sample && p.layer[l].sample && p.layer[l].sample->oneShot) v->oneShot = true;
   }
-  void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3) { v.amp.off(); v.fenv.off(); } }
+  void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) { v.amp.off(); v.fenv.off(); } }
   void allOff() { for (auto& v : voices) v.active = false; }
 
   // adds nothing, overwrites outL/outR
@@ -268,6 +272,12 @@ class Engine {
       cut = std::min(18000.f, std::max(20.f, cut));
       L = v.fl.process(L, p.filterMode, cut, p.reso, p.drive, sr);
       R = v.fr.process(R, p.filterMode, cut, p.reso, p.drive, sr);
+      { // low cut, then distortion
+        float a = 1.f - std::exp(-2.f * kPi * std::max(5.f, p.lowCutHz) / sr);
+        v.hpL += a * (L - v.hpL); v.hpR += a * (R - v.hpR); L -= v.hpL; R -= v.hpR;
+        if (p.dist > 0.f) { float k = 1.f + p.dist * 14.f, norm = 1.f / std::tanh(k * 0.6f);
+          L = std::tanh(k * L + 0.15f * p.dist) * norm * 0.8f; R = std::tanh(k * R + 0.15f * p.dist) * norm * 0.8f; }
+      }
       // sub (mono, centred, after the filter so the low end stays solid)
       if (p.subLevel > 0.f) {
         float sf = 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f);
