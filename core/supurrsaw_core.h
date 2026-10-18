@@ -44,6 +44,8 @@ struct LayerParams {
   float syncSemis = 7.f;       // 0..36 semitones above the master
   float syncEnv = 0.f;         // semitones added by the filter envelope
   float syncLfo = 0.f;         // semitones added by the LFO
+  float syncKey = 0.f;         // semitones added per octave above/below middle C (the sync opens more or less by note)
+  float syncWheel = 0.f;       // semitones added at full mod wheel (automate or play it live)
   std::shared_ptr<const Sample> sample;
 };
 
@@ -80,6 +82,7 @@ struct Params {
   float delayMix = 0.f, delayTime = 0.25f, delayFb = 0.4f;
   float reverbMix = 0.f, reverbSize = 0.6f, reverbWidth = 0.8f;
   float master = 0.8f;
+  float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
 };
 
 inline float midiToHz(float n) { return 440.f * std::exp2((n - 69.f) / 12.f); }
@@ -331,7 +334,7 @@ class Engine {
           float& sph = v.syncPhase[ly];
           float odt = dt;
           if (lp.sync) {
-            float sem = std::min(48.f, std::max(0.f, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo));
+            float sem = std::min(48.f, std::max(0.f, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo + lp.syncKey * (float)(v.note - 60) / 12.f + lp.syncWheel * p.modWheel));
             odt = std::min(0.45f, dt * std::exp2(sem / 12.f));
           }
           float& op = lp.sync ? sph : ph;

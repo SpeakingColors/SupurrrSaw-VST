@@ -38,11 +38,11 @@ int main(int argc, char** argv) {
     CHECK(!r.nan); CHECK(r.peak < 1.0 && r.peak > 0.05); CHECK(r.rms > 0.01); CHECK(monoDb > -6.0);
     writeWav(dir + "/preset_" + pr.name + ".wav", r.l, r.r);
   }
-  { // pick: the pitch envelope is the sound, so it must end up lower than it starts (dive from +12)
+  { // pick: pitch rises into the note like a bubble (negative pitch envelope)
     Engine e; presets::pick(e.p); e.p.chorusMix = e.p.delayMix = e.p.reverbMix = 0; e.p.dist = 0; e.p.filterMode = FilterMode::LP24; e.p.cutoff = 18000;
     Result r = render(e, 57, 0.4f, 0.5f);
     auto zc = [&](size_t a, size_t b) { int z = 0; for (size_t i = a + 1; i < b; ++i) if ((r.l[i-1] < 0) != (r.l[i] < 0)) ++z; return z; };
-    CHECK(zc(200, 1400) > zc(9000, 10200) * 1.5);
+    CHECK(zc(9000, 10200) > zc(200, 1400) * 1.15);
   }
   { // sync: slave pitch sets the timbre. Same master pitch, higher sync interval gives a brighter sound
     double b[2];
@@ -52,6 +52,17 @@ int main(int argc, char** argv) {
     // sync off must equal the plain saw (nothing changes unless the switch is on)
     Engine a, c; a.p.layer[0].wave = c.p.layer[0].wave = Wave::Saw; c.p.layer[0].syncSemis = 12.f;
     Result ra = render(a, 52, 0.5f, 0.6f), rc = render(c, 52, 0.5f, 0.6f); double d = 0; for (size_t i = 0; i < ra.l.size(); ++i) d += std::fabs(ra.l[i] - rc.l[i]); CHECK(d < 1e-3);
+  }
+  { // sync follows the note: with syncKey the slave interval grows with pitch, so high notes get a bigger timbre change
+    double r[2];
+    for (int k = 0; k < 2; ++k) { double b[2];
+      for (int n = 0; n < 2; ++n) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.layer[0].sync = true; e.p.layer[0].syncSemis = 6.f; e.p.layer[0].syncKey = k ? 8.f : 0.f; e.p.cutoff = 18000;
+        Result x = render(e, n ? 72 : 48, 0.8f, 1.0f); b[n] = brightness(x.l); }
+      r[k] = b[1] / b[0]; }
+    CHECK(r[1] > r[0] * 1.15);
+    // mod wheel opens the sync
+    double bw[2]; for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.layer[0].sync = true; e.p.layer[0].syncSemis = 3.f; e.p.layer[0].syncWheel = 16.f; e.p.modWheel = k; e.p.cutoff = 18000; Result x = render(e, 52, 0.8f, 1.0f); bw[k] = brightness(x.l); }
+    CHECK(bw[1] > bw[0] * 1.2);
   }
   { // noise: adds high-frequency content, nothing below its high-pass (low end stays clean)
     double b[2], lo[2];
