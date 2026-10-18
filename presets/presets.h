@@ -9,12 +9,15 @@ namespace supurr::presets {
 // a fast LFO on the saw detune, then saturation and a little chorus/reverb to thicken.
 inline void hoover(Params& p) {
   p = Params();
-  p.layer[0].wave = Wave::SuperSaw;    p.layer[0].voices = 5; p.layer[0].detune = 0.55f; p.layer[0].octave = 0;  p.layer[0].level = 0.5f;
-  p.layer[1].wave = Wave::SuperSquare; p.layer[1].voices = 3; p.layer[1].detune = 0.35f; p.layer[1].octave = -1; p.layer[1].level = 0.5f; p.layer[1].pwm = 0.5f;
-  p.detuneRange = 1.3f; p.lfoRate = 6.5f; p.lfoPwm = 0.7f; p.lfoDetune = 0.35f;
+  // three layers: two detuned super saws (one an octave down) and a super square on a different octave, plus a sub for weight
+  p.layer[0].wave = Wave::SuperSaw;    p.layer[0].voices = 9; p.layer[0].detune = 0.65f; p.layer[0].octave = 0;  p.layer[0].level = 0.55f;
+  p.layer[1].wave = Wave::SuperSaw;    p.layer[1].voices = 7; p.layer[1].detune = 0.5f;  p.layer[1].octave = -1; p.layer[1].level = 0.55f; p.layer[1].tune = 9.f;
+  p.layer[2].wave = Wave::SuperSquare; p.layer[2].voices = 5; p.layer[2].detune = 0.4f;  p.layer[2].octave = -1; p.layer[2].level = 0.5f; p.layer[2].pwm = 0.5f;
+  p.subLevel = 0.3f; p.subWave = Wave::Tri; p.subOctave = -1;
+  p.detuneRange = 1.4f; p.lfoRate = 6.5f; p.lfoPwm = 0.7f; p.lfoDetune = 0.35f;
   p.pitchAmt = 12.f; p.pitchTime = 0.09f;
-  p.cutoff = 3000.f; p.reso = 0.35f; p.drive = 0.15f; p.dist = 0.3f; p.lowCutHz = 90.f;
-  p.master = 0.6f; p.amp = {0.002f, 0.5f, 0.8f, 0.25f}; p.spread = 0.8f; p.chorusMix = 0.25f; p.reverbMix = 0.03f; p.reverbSize = 0.5f;
+  p.cutoff = 5500.f; p.reso = 0.3f; p.drive = 0.45f; p.dist = 0.5f; p.lowCutHz = 45.f;   // more drive into the filter and saturation after it
+  p.master = 0.9f; p.amp = {0.002f, 0.5f, 0.85f, 0.25f}; p.spread = 0.85f; p.chorusMix = 0.4f; p.reverbMix = 0.03f; p.reverbSize = 0.5f;
 }
 
 // Pick (makina / Afrojack style blip, like a synth water bubble): a square and a saw, pitch rising into the note
@@ -43,11 +46,11 @@ inline void pluck(Params& p) {
 // Low cutoff = plucky, open cutoff = sustained lead (short attack, long decay, high sustain, long release).
 inline void tranceLead(Params& p) {
   p = Params();
-  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 15; p.layer[0].detune = 1.0f; p.layer[0].level = 0.6f;
-  p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 9;  p.layer[1].detune = 0.9f;  p.layer[1].octave = 1; p.layer[1].level = 0.25f;
-  p.detuneRange = 1.7f; p.noiseLevel = 0.14f; p.noiseHpHz = 5000.f;
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 15; p.layer[0].detune = 0.92f; p.layer[0].level = 0.6f;
+  p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 9;  p.layer[1].detune = 0.75f; p.layer[1].octave = 1; p.layer[1].level = 0.25f;
+  p.detuneRange = 1.3f; p.noiseLevel = 0.09f; p.noiseHpHz = 5000.f;
   p.cutoff = 2200.f; p.reso = 0.15f; p.envAmt = 0.45f; p.fenv = {0.004f, 0.6f, 0.55f, 0.5f}; p.lowCutHz = 120.f;
-  p.amp = {0.004f, 0.8f, 0.85f, 0.45f}; p.spread = 0.85f; p.chorusMix = 0.25f; p.delayMix = 0.2f; p.delayTime = 0.28f; p.delayFb = 0.35f; p.reverbMix = 0.2f; p.reverbSize = 0.7f;
+  p.amp = {0.004f, 0.8f, 0.85f, 0.45f}; p.spread = 1.f; p.chorusMix = 0.25f; p.delayMix = 0.2f; p.delayTime = 0.28f; p.delayFb = 0.35f; p.reverbMix = 0.2f; p.reverbSize = 0.7f;
 }
 
 // Talking lead (Daft Punk style): a sync oscillator whose slave pitch is swept by an LFO and the envelope, follows the
