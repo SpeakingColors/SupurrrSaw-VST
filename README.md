@@ -35,3 +35,7 @@ AGPL-3.0-or-later (the JUCE framework is used under the AGPLv3). You can use, ch
 Free to use. Donations welcome (link coming soon).
 
 Not affiliated with or endorsed by Roland, Korg or any other brand mentioned. Names are used only to describe sounds and compatibility.
+
+## Docs
+- [Interactive mockups](docs/README.md)
+- [Roadmap](ROADMAP.md)
