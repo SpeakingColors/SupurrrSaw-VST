@@ -31,7 +31,9 @@ int main(int argc, char** argv) {
   P list[] = {{"hoover", presets::hoover, 57, 1.2f, 2.5f}, {"pick", presets::pick, 69, 0.15f, 1.0f}, {"pluck", presets::pluck, 69, 0.2f, 1.2f},
               {"trance_lead", presets::tranceLead, 69, 1.5f, 3.0f}, {"talking_lead", presets::talkingLead, 64, 1.5f, 3.0f},
               {"daft_funk", presets::daftFunk, 64, 3.0f, 4.5f}, {"hoover_classic", presets::hooverClassic, 57, 1.5f, 3.5f}, {"hoover_prodigy", presets::hooverProdigy, 57, 1.5f, 2.5f},
-              {"better_off_alone", presets::betterOffAlone, 69, 1.5f, 3.0f}, {"gimme_lead", presets::gimmeLead, 69, 1.0f, 2.5f}, {"levels_lead", presets::levelsLead, 69, 1.0f, 2.5f}, {"sandstorm_lead", presets::sandstormLead, 69, 2.0f, 3.5f}};
+              {"better_off_alone", presets::betterOffAlone, 69, 1.5f, 3.0f}, {"gimme_lead", presets::gimmeLead, 69, 1.0f, 2.5f}, {"levels_lead", presets::levelsLead, 69, 1.0f, 2.5f}, {"sandstorm_lead", presets::sandstormLead, 69, 2.0f, 3.5f},
+              {"gigi_lead", presets::gigiLead, 69, 1.0f, 2.5f}, {"alexf_lead", presets::alexFLead, 69, 1.0f, 2.5f}, {"mgmt_lead", presets::mgmtLead, 69, 1.0f, 2.5f}, {"pendulum_lead", presets::pendulumLead, 69, 1.0f, 3.0f},
+              {"nightcall_keys", presets::nightCallKeys, 60, 1.0f, 4.5f}, {"freeway_bass", presets::freewayBass, 40, 0.5f, 1.5f}};
   for (auto& pr : list) {
     Engine e; pr.fn(e.p); Result r = render(e, pr.note, pr.hold, pr.total);
     double sl = 0, sr = 0, sm = 0; for (size_t i = 0; i < r.l.size(); ++i) { sl += r.l[i]*r.l[i]; sr += r.r[i]*r.r[i]; sm += 0.25*(r.l[i]+r.r[i])*(r.l[i]+r.r[i]); }

@@ -163,11 +163,66 @@ inline void sandstormLead(Params& p) {
   p.amp = {0.001f, 6.f, 0.f, 0.02f}; p.spread = 0.f; p.reverbMix = 0.1f; p.reverbSize = 0.6f; p.master = 1.23f;
 }
 
+// Gigi D'Agostino lead: mono saw unison (4 voices, 17 cents), low-pass at 85%, chorus, a little delay (1/2 note at 150 BPM) and a big reverb.
+// (The recipe also has a short envelope on oscillator 2 pitch; with only one oscillator in the recipe it is not heard, so it is left out.)
+inline void gigiLead(Params& p) {
+  p = Params();
+  p.mono = true; p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 4; p.layer[0].cents = 17.f; p.layer[0].level = 1.0f;
+  p.cutoff = 7100.f; p.keyTrack = 0.5f; p.dist = 0.09f; p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.7f;
+  p.chorusMix = 0.5f; p.delayMix = 0.1f; p.delayTime = 0.8f; p.delayFb = 0.2f; p.reverbMix = 0.2f; p.reverbSize = 0.9f; p.master = 1.22f;
+}
+
+// Alex F "Axel F" style lead: narrow pulse, 2-voice unison with full stereo, low-pass, PWM from a triangle LFO at 1/4 note (2.5 Hz at 150 BPM), 1/8 delay.
+inline void alexFLead(Params& p) {
+  p = Params();
+  p.mono = true; p.layer[0].wave = Wave::SuperSquare; p.layer[0].voices = 2; p.layer[0].cents = 4.f; p.layer[0].pwm = 0.8f; p.layer[0].level = 1.0f;
+  p.lfoRate = 2.5f; p.lfoPwm = 0.65f; p.cutoff = 7100.f; p.amp = {0.01f, 0.1f, 1.f, 0.07f}; p.spread = 1.f;
+  p.delayMix = 0.3f; p.delayTime = 0.2f; p.delayFb = 0.3f; p.master = 1.59f;
+}
+
+// MGMT "Time to Pretend" lead: mono legato pulse (30%), low-pass with resonance, 70 cent vibrato at 1/32 note (20 Hz at 150 BPM), 20 ms glide, chorus, a little reverb.
+inline void mgmtLead(Params& p) {
+  p = Params();
+  p.mono = true; p.glide = 0.02f; p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.3f; p.layer[0].level = 1.0f; p.layer[0].lfoPitchCents = 70.f;
+  p.lfoRate = 20.f; p.cutoff = 3560.f; p.reso = 0.45f; p.dist = 0.02f; p.amp = {0.001f, 0.1f, 1.f, 0.06f}; p.spread = 0.4f;
+  p.chorusMix = 0.2f; p.reverbMix = 0.1f; p.reverbSize = 0.6f; p.master = 1.04f;
+}
+
+// Pendulum "Nothing for Free" lead: two 7-voice saw stacks (the first an octave up), 24 dB low-pass at 90%, drive, 41% chorus, large reverb with its low end cut.
+inline void pendulumLead(Params& p) {
+  p = Params();
+  p.mono = true;
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 7; p.layer[0].detune = 0.5f; p.layer[0].octave = 1; p.layer[0].level = 0.71f;
+  p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 7; p.layer[1].detune = 0.5f; p.layer[1].level = 0.29f;
+  p.cutoff = 6450.f; p.reso = 0.28f; p.drive = 0.17f; p.amp = {0.001f, 0.1f, 1.f, 0.73f}; p.spread = 1.f;
+  p.chorusMix = 0.41f; p.reverbMix = 0.37f; p.reverbSize = 0.99f; p.reverbLowCutHz = 530.f; p.master = 3.27f;
+}
+
+// Kavinsky "Nightcall" keys: poly saw with 2-voice unison, noise, resonant low-pass with a long envelope that closes slowly, chorus and reverb.
+inline void nightCallKeys(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 2; p.layer[0].cents = 8.f; p.layer[0].level = 1.0f;
+  p.noiseLevel = 0.15f; p.noiseHpHz = 200.f;
+  p.cutoff = 632.f; p.reso = 0.45f; p.envAmt = 0.9f; p.fenv = {0.001f, 3.7f, 0.f, 0.1f};
+  p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.6f; p.chorusMix = 0.35f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 2.85f;
+}
+
+// Aretha Franklin "Freeway of Love" bass: mono saw with a pulse sub, resonant low-pass with full key tracking and a short envelope, chorus.
+inline void freewayBass(Params& p) {
+  p = Params();
+  p.mono = true; p.subPreFilter = true; p.layer[0].wave = Wave::Saw; p.layer[0].level = 1.0f;
+  p.subLevel = 0.35f; p.subWave = Wave::Pulse; p.subOctave = -1;
+  p.cutoff = 1260.f; p.reso = 0.6f; p.keyTrack = 1.0f; p.envAmt = 0.4f; p.fenv = {0.001f, 0.35f, 0.f, 0.001f};
+  p.amp = {0.01f, 0.1f, 1.f, 0.05f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.chorusMix = 0.45f; p.delayMix = 0.1f; p.delayTime = 0.05f; p.master = 1.08f;
+}
+
 inline bool byName(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
   else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p);
   else if (n == "daft_funk") daftFunk(p); else if (n == "hoover_classic") hooverClassic(p); else if (n == "hoover_prodigy") hooverProdigy(p);
   else if (n == "better_off_alone") betterOffAlone(p); else if (n == "gimme_lead") gimmeLead(p); else if (n == "levels_lead") levelsLead(p); else if (n == "sandstorm_lead") sandstormLead(p);
+  else if (n == "gigi_lead") gigiLead(p); else if (n == "alexf_lead") alexFLead(p); else if (n == "mgmt_lead") mgmtLead(p); else if (n == "pendulum_lead") pendulumLead(p);
+  else if (n == "nightcall_keys") nightCallKeys(p); else if (n == "freeway_bass") freewayBass(p);
   else return false;
   return true;
 }

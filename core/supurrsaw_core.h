@@ -61,6 +61,7 @@ struct Params {
   FilterMode filterMode = FilterMode::LP24;
   float cutoff = 4000.f, reso = 0.2f, drive = 0.f, envAmt = 0.f, keyTrack = 0.f;
   bool subPreFilter = false;   // true: the sub oscillator goes through the filter like the other oscillators
+  float glide = 0.f;           // seconds of portamento in mono mode (0 = off)
   bool mono = false;           // one voice, last note wins, a new note restarts the envelopes without a click
   float lowCutHz = 20.f;       // removes low rumble before the sub is added
   float dist = 0.f;            // 0..1 distortion (acid, hoover, dirty reese, screech)
@@ -169,7 +170,7 @@ struct Voice {
   bool active = false; int note = 60; float vel = 1.f; uint64_t age = 0;
   float phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
-  float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
+  float gl = 0.f; float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
   float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   float lfoPhase = 0.f, t = 0.f;
   EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
@@ -243,7 +244,7 @@ class Engine {
     Voice* v = nullptr;
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
-      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
+      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
     }
     for (auto& c : voices) if (!c.active) { v = &c; break; }
     if (!v) { v = &voices[0]; for (auto& c : voices) if (c.age < v->age) v = &c; }
@@ -300,6 +301,7 @@ class Engine {
       float pAtt = p.pitchAttack > 0.f ? std::min(1.f, v.t / p.pitchAttack) : 1.f;
       float pitchEnv = p.pitchAmt * pAtt * std::exp(-std::max(0.f, v.t - p.pitchAttack) / std::max(0.001f, p.pitchTime)) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
       v.t += invSr;
+      if (v.gl != 0.f) { v.gl *= std::exp(-invSr / std::max(0.001f, p.glide)); if (std::fabs(v.gl) < 1e-4f) v.gl = 0.f; }
       if ((int)(v.t * sr) % 512 == 0)
         for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004f * (2.f * rng.next() - 1.f);
       for (int j = 0; j < kMaxSaws; ++j) v.drift[j] += 0.0005f * (v.driftT[j] - v.drift[j]);
@@ -308,7 +310,7 @@ class Engine {
       for (int ly = 0; ly < kLayers; ++ly) {
         const LayerParams& lp = p.layer[ly];
         if (lp.wave == Wave::Off || lp.level <= 0.f) continue;
-        float semis = (float)(v.note - 69) + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo;
+        float semis = (float)(v.note - 69) + v.gl + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo;
         float f = 440.f * std::exp2(semis / 12.f);
         float dt = std::min(0.45f, f * invSr);
         float lL = 0.f, lR = 0.f;
