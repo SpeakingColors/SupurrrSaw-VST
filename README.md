@@ -11,17 +11,20 @@ A free, open source supersaw, hoover and acid synth for **Linux, Windows and mac
 - **3 layers.** Each one is an oscillator or a loaded sample: Super Saw (JP-8000 style), Super Square (PWM), Saw, Pulse, Triangle, Sine, Sample.
 - **0% detune gives one clean oscillator.** Push the detune range further than the original when you want.
 - **Sub oscillator** you can switch on for any sound.
-- **Hoover:** pitch envelope dive, PWM and an LFO.
+- **Hoover:** pitch envelope dive, PWM and an LFO on the pulse width and on the detune.
+- **Hard sync** with a sweepable slave (envelope and LFO) for talking leads.
+- **Noise** with its own high-pass, and **distortion before or after the filter** (screech).
 - **Acid:** 18 dB and 24 dB ladder filters, plus HP and BP. A piano roll sequencer with accent, slide and tie is planned.
 - **Mono safe:** low frequencies are summed to mono, and the engine checks the mono sum.
 - **Waveform library** (planned): import single-cycle WAVs or draw your own, stored locally.
-- **Presets** as starting points: trance leads and plucks, basses, hoover, reese, acid.
+- **Presets** as starting points: Hoover, Pick, Pluck, Trance Lead, Talking Lead (more: basses, reese, acid).
 
 ## Try the engine today
 
 ```
 g++ -O2 -std=c++17 -o demo tools/demo.cpp
 ./demo            # renders hoover, acid, reese and supersaw demos as WAV files
+g++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp && ./presets_test .   # renders and checks the built-in presets
 ```
 
 ## Samples and copyright

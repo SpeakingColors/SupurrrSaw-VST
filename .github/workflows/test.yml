@@ -1,0 +1,19 @@
+name: engine tests
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the preset checks
+        shell: bash
+        run: |
+          mkdir -p out
+          c++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp
+          ./presets_test out
+      - name: Build the demo renderer
+        shell: bash
+        run: c++ -O2 -std=c++17 -o demo tools/demo.cpp

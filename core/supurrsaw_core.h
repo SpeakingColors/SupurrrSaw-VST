@@ -38,6 +38,12 @@ struct LayerParams {
   int octave = 0;          // -3..+3
   float tune = 0.f;        // cents
   float pan = 0.f;         // -1..1 for the whole layer
+  // hard sync (Saw, Pulse, Tri, Sine layers): the master runs at the played pitch and restarts the slave every cycle.
+  // The slave runs syncSemis above the master; sweeping it (envelope or LFO) makes the lead "talk".
+  bool sync = false;
+  float syncSemis = 7.f;       // 0..36 semitones above the master
+  float syncEnv = 0.f;         // semitones added by the filter envelope
+  float syncLfo = 0.f;         // semitones added by the LFO
   std::shared_ptr<const Sample> sample;
 };
 
@@ -51,7 +57,10 @@ struct Params {
   FilterMode filterMode = FilterMode::LP24;
   float cutoff = 4000.f, reso = 0.2f, drive = 0.f, envAmt = 0.f, keyTrack = 0.f;
   float lowCutHz = 20.f;       // removes low rumble before the sub is added
-  float dist = 0.f;            // 0..1 post-filter distortion (acid, hoover, dirty reese)
+  float dist = 0.f;            // 0..1 distortion (acid, hoover, dirty reese, screech)
+  bool distPre = false;        // true: distortion before the filter (the filter shapes the screech), false: after it
+  float noiseLevel = 0.f;      // 0..1 white noise added before the filter
+  float noiseHpHz = 3000.f;    // high-pass on the noise so it never muddies the low end
   Adsr amp, fenv;
   // pitch envelope (hoover dive): starts at +pitchAmt semitones, decays to 0
   float pitchAmt = 0.f, pitchTime = 0.09f;
@@ -59,6 +68,7 @@ struct Params {
   float pitchFall = 0.f, pitchFallTime = 1.f;
   // LFO
   float lfoRate = 6.f, lfoPwm = 0.f, lfoPitch = 0.f, lfoCutoff = 0.f;
+  float lfoDetune = 0.f;       // 0..1: LFO moves the super saw detune (hoover shimmer)
   // analog feel and range
   float drift = 0.f;
   float detuneRange = 1.f;     // 1 = JP-8000 range. Raise it to push further.
@@ -151,6 +161,7 @@ struct Voice {
   bool active = false; int note = 60; float vel = 1.f; uint64_t age = 0;
   float phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
+  float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
   float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   float lfoPhase = 0.f, t = 0.f;
   EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
@@ -270,7 +281,7 @@ class Engine {
         float lL = 0.f, lR = 0.f;
         if (lp.wave == Wave::SuperSaw || lp.wave == Wave::SuperSquare) {
           int nv = std::max(1, std::min(kMaxSaws, lp.voices));
-          float det = jpDetune(lp.detune) * kMaxDetune * p.detuneRange;
+          float det = jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo)))) * kMaxDetune * p.detuneRange;
           float sideFade = std::min(1.f, lp.detune * 20.f);  // detune 0 = one clean voice
           float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f));
           float norm = 1.f / (1.f + (float)(nv - 1) * 0.62f * sideFade);
@@ -316,19 +327,53 @@ class Engine {
         } else {
           float& ph = v.phase[ly][0];
           float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f));
-          float s = 0.f;
-          switch (lp.wave) {
-            case Wave::Saw:   s = (2.f * ph - 1.f) - blep(ph, dt); break;
-            case Wave::Pulse: { s = (ph < pw ? 1.f : -1.f) + blep(ph, dt); float t2 = ph - pw; if (t2 < 0) t2 += 1.f; s -= blep(t2, dt); s *= 0.8f; } break;
-            case Wave::Tri:   s = 4.f * std::fabs(ph - 0.5f) - 1.f; break;
-            default:          s = std::sin(2.f * kPi * ph); break;
+          // with sync on, the slave oscillator makes the sound and the master only restarts it
+          float& sph = v.syncPhase[ly];
+          float odt = dt;
+          if (lp.sync) {
+            float sem = std::min(48.f, std::max(0.f, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo));
+            odt = std::min(0.45f, dt * std::exp2(sem / 12.f));
           }
-          ph += dt; if (ph >= 1.f) ph -= 1.f;
+          float& op = lp.sync ? sph : ph;
+          auto shape = [&](float x, float d) {
+            float w = 0.f;
+            switch (lp.wave) {
+              case Wave::Saw:   w = (2.f * x - 1.f) - blep(x, d); break;
+              case Wave::Pulse: { w = (x < pw ? 1.f : -1.f) + blep(x, d); float t2 = x - pw; if (t2 < 0) t2 += 1.f; w -= blep(t2, d); w *= 0.8f; } break;
+              case Wave::Tri:   w = 4.f * std::fabs(x - 0.5f) - 1.f; break;
+              default:          w = std::sin(2.f * kPi * x); break;
+            }
+            return w;
+          };
+          float s = shape(op, odt);
+          bool wrapped = false; ph += dt; if (ph >= 1.f) { ph -= 1.f; wrapped = true; }
+          if (lp.sync) {
+            float before = s;
+            sph += odt;
+            if (wrapped) {  // master wrapped this sample: restart the slave at the exact fractional position
+              float frac = ph / dt;                       // 0..1, how far past the wrap we already are
+              sph = frac * odt;
+              float after = shape(sph, odt);
+              s = before * frac + after * (1.f - frac);   // short crossfade over the step: first-order band limiting
+            } else if (sph >= 1.f) sph -= 1.f;
+          }
           lL = lR = s;
         }
         float pg = (lp.pan + 1.f) * kPi * 0.25f;
         L += lp.level * lL * std::cos(pg) * 1.414f; R += lp.level * lR * std::sin(pg) * 1.414f;
       }
+      if (p.noiseLevel > 0.f) {  // white noise, high-passed (two poles) so only the top end is added
+        float n = (2.f * rng.next() - 1.f);
+        float a = 1.f - std::exp(-2.f * kPi * std::min(0.45f * sr, std::max(100.f, p.noiseHpHz)) / sr);
+        v.noiseHp += a * (n - v.noiseHp); float h1 = n - v.noiseHp;
+        v.noiseHp2 += a * (h1 - v.noiseHp2); float h2 = h1 - v.noiseHp2;
+        L += p.noiseLevel * 0.5f * h2; R += p.noiseLevel * 0.5f * h2;
+      }
+      auto distort = [&](float& l, float& r) {
+        if (p.dist <= 0.f) return;
+        float k = 1.f + p.dist * 14.f, norm = 1.f / std::tanh(k * 0.6f);
+        l = std::tanh(k * l + 0.15f * p.dist) * norm * 0.8f; r = std::tanh(k * r + 0.15f * p.dist) * norm * 0.8f; };
+      if (p.distPre) distort(L, R);
       // filter
       float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f);
       cut = std::min(18000.f, std::max(20.f, cut));
@@ -337,8 +382,7 @@ class Engine {
       { // low cut, then distortion
         float a = 1.f - std::exp(-2.f * kPi * std::max(5.f, p.lowCutHz) / sr);
         v.hpL += a * (L - v.hpL); v.hpR += a * (R - v.hpR); L -= v.hpL; R -= v.hpR;
-        if (p.dist > 0.f) { float k = 1.f + p.dist * 14.f, norm = 1.f / std::tanh(k * 0.6f);
-          L = std::tanh(k * L + 0.15f * p.dist) * norm * 0.8f; R = std::tanh(k * R + 0.15f * p.dist) * norm * 0.8f; }
+        if (!p.distPre) distort(L, R);
       }
       // sub (mono, centred, after the filter so the low end stays solid)
       if (p.subLevel > 0.f) {

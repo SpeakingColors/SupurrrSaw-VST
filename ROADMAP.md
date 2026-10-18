@@ -9,6 +9,11 @@ Supersaw, hoover and acid synth.
 - [ ] Default OTT-style starting point for dance, UK hardcore and hardstyle
 - [ ] 303 sequencer with accent, slide and tie, classic patterns, clickable roll
 - [ ] "Ah" pluck and lead preset, PWM on square layers
+- [x] Engine: hard sync with swept slave, high-passed noise, distortion before or after the filter, LFO on detune
+- [x] Built-in presets (code): Hoover, Pick, Pluck, Trance Lead, Talking Lead (`presets/presets.h`, checked by `tools/presets_test.cpp`)
+- [ ] Screech tools from the Airwave manual: feedback oscillator, X-Mod, ring mod
+- [ ] Shared FX rack (catfx from cat-ui) once the plugin shell exists
+- [ ] Presets to be tuned by ear; sync aliasing is only first-order band limited, add oversampling
 - [ ] Tune the acid and hoover sounds against reference recordings
 
 ## Every cat plugin
