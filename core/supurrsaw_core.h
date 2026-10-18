@@ -75,6 +75,10 @@ struct Params {
   float pitchFall = 0.f, pitchFallTime = 1.f;
   // LFO
   float lfoRate = 6.f, lfoPwm = 0.f, lfoPitch = 0.f, lfoCutoff = 0.f;
+  int lfoShape = 0;            // 0 sine, 1 triangle, 2 square
+  float lfoPan = 0.f, lfoAmp = 0.f;   // LFO auto-pan (0..1 of the full width) and LFO volume tremolo (0..1 depth)
+  float wheelCutoff = 0.f;     // cutoff added at full mod wheel, same units as envAmt (1 = 5 octaves)
+  bool phaseReset = false;     // true: oscillators start at phase 0 on every note (tight, repeatable)
   float lfoDetune = 0.f;       // 0..1: LFO moves the super saw detune (hoover shimmer)
   // analog feel and range
   float drift = 0.f;
@@ -183,7 +187,7 @@ struct DelayLine {
   void init(size_t n) { b.assign(n + 4, 0.f); w = 0; }
   void push(float x) { b[w] = x; if (++w >= b.size()) w = 0; }
   float read(float d) const {  // d samples back, linear interpolation
-    float rp = (float)w - d; while (rp < 0) rp += (float)b.size(); size_t i0 = (size_t)rp; float f = rp - (float)i0;
+    float rp = (float)w - d; while (rp < 0) rp += (float)b.size(); if (rp >= (float)b.size()) rp -= (float)b.size(); size_t i0 = (size_t)rp; float f = rp - (float)i0;
     size_t i1 = i0 + 1 >= b.size() ? 0 : i0 + 1; return b[i0] * (1.f - f) + b[i1] * f; }
 };
 struct Reverb {
@@ -249,7 +253,7 @@ class Engine {
     for (auto& c : voices) if (!c.active) { v = &c; break; }
     if (!v) { v = &voices[0]; for (auto& c : voices) if (c.age < v->age) v = &c; }
     *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->age = ++clock;
-    for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = rng.next();
+    for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.f : rng.next();
     v->amp.on(); v->fenv.on();
     for (int l = 0; l < kLayers; ++l) if (p.layer[l].wave == Wave::Sample && p.layer[l].sample && p.layer[l].sample->oneShot) v->oneShot = true;
   }
@@ -297,7 +301,7 @@ class Engine {
       float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
       if (v.amp.stage == 0) { v.active = false; return; }
       v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.f) v.lfoPhase -= 1.f;
-      float lfo = std::sin(2.f * kPi * v.lfoPhase);
+      float lfo = p.lfoShape == 1 ? 4.f * std::fabs(v.lfoPhase - 0.5f) - 1.f : (p.lfoShape == 2 ? (v.lfoPhase < 0.5f ? 1.f : -1.f) : std::sin(2.f * kPi * v.lfoPhase));
       float pAtt = p.pitchAttack > 0.f ? std::min(1.f, v.t / p.pitchAttack) : 1.f;
       float pitchEnv = p.pitchAmt * pAtt * std::exp(-std::max(0.f, v.t - p.pitchAttack) / std::max(0.001f, p.pitchTime)) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
       v.t += invSr;
@@ -394,7 +398,7 @@ class Engine {
           }
           lL = lR = s;
         }
-        float pg = (lp.pan + 1.f) * kPi * 0.25f;
+        float pg = (std::min(1.f, std::max(-1.f, lp.pan + p.lfoPan * lfo)) + 1.f) * kPi * 0.25f;
         L += lp.level * lL * std::cos(pg) * 1.414f; R += lp.level * lR * std::sin(pg) * 1.414f;
       }
       if (p.noiseLevel > 0.f) {  // white noise, high-passed (two poles) so only the top end is added
@@ -411,7 +415,7 @@ class Engine {
       if (p.subPreFilter) addSub(v, L, R, invSr);
       if (p.distPre) distort(L, R);
       // filter
-      float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f);
+      float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f + p.wheelCutoff * p.modWheel * 5.f);
       cut = std::min(18000.f, std::max(20.f, cut));
       L = v.fl.process(L, p.filterMode, cut, p.reso, p.drive, sr);
       R = v.fr.process(R, p.filterMode, cut, p.reso, p.drive, sr);
@@ -421,7 +425,7 @@ class Engine {
         if (!p.distPre) distort(L, R);
       }
       if (!p.subPreFilter) addSub(v, L, R, invSr);
-      float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f;
+      float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f * (1.f - p.lfoAmp * 0.5f * (1.f - lfo));
       oL[i] += L * g; oR[i] += R * g;
     }
   }

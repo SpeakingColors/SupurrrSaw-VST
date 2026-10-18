@@ -138,7 +138,7 @@ inline void gimmeLead(Params& p) {
   p.mono = true;
   p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.5f; p.layer[0].lfoPitchCents = 42.f;
   p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.9f; p.layer[1].octave = 1; p.layer[1].level = 0.5f; p.layer[1].lfoPitchCents = 42.f;
-  p.lfoRate = 10.f; p.cutoff = 7100.f; p.reso = 0.4f;
+  p.lfoShape = 1; p.lfoRate = 10.f; p.cutoff = 7100.f; p.reso = 0.4f;
   p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.5f; p.chorusMix = 0.3f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 1.78f;
 }
 
@@ -148,7 +148,7 @@ inline void levelsLead(Params& p) {
   p.mono = true;
   p.layer[0].wave = Wave::SuperSquare; p.layer[0].voices = 4; p.layer[0].cents = 13.f; p.layer[0].pwm = 0.3f; p.layer[0].level = 0.3f;
   p.layer[1].wave = Wave::SuperSquare; p.layer[1].voices = 4; p.layer[1].cents = 13.f; p.layer[1].pwm = 0.5f; p.layer[1].octave = 1; p.layer[1].level = 0.7f; p.layer[1].lfoPitchCents = 28.f;
-  p.lfoRate = 10.f; p.cutoff = 3560.f; p.reso = 0.35f; p.keyTrack = 0.2f;
+  p.lfoShape = 1; p.lfoRate = 10.f; p.cutoff = 3560.f; p.reso = 0.35f; p.keyTrack = 0.2f;
   p.amp = {0.001f, 0.3f, 0.4f, 0.6f}; p.spread = 0.6f;
   p.delayMix = 0.2f; p.delayTime = 0.2f; p.delayFb = 0.5f; p.reverbMix = 0.1f; p.reverbSize = 0.6f; p.master = 5.10f;   // delay 1/8 note at 150 BPM
 }
@@ -176,7 +176,7 @@ inline void gigiLead(Params& p) {
 inline void alexFLead(Params& p) {
   p = Params();
   p.mono = true; p.layer[0].wave = Wave::SuperSquare; p.layer[0].voices = 2; p.layer[0].cents = 4.f; p.layer[0].pwm = 0.8f; p.layer[0].level = 1.0f;
-  p.lfoRate = 2.5f; p.lfoPwm = 0.65f; p.cutoff = 7100.f; p.amp = {0.01f, 0.1f, 1.f, 0.07f}; p.spread = 1.f;
+  p.lfoShape = 1; p.lfoRate = 2.5f; p.lfoPwm = 0.65f; p.cutoff = 7100.f; p.amp = {0.01f, 0.1f, 1.f, 0.07f}; p.spread = 1.f;
   p.delayMix = 0.3f; p.delayTime = 0.2f; p.delayFb = 0.3f; p.master = 1.59f;
 }
 
@@ -184,7 +184,7 @@ inline void alexFLead(Params& p) {
 inline void mgmtLead(Params& p) {
   p = Params();
   p.mono = true; p.glide = 0.02f; p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.3f; p.layer[0].level = 1.0f; p.layer[0].lfoPitchCents = 70.f;
-  p.lfoRate = 20.f; p.cutoff = 3560.f; p.reso = 0.45f; p.dist = 0.02f; p.amp = {0.001f, 0.1f, 1.f, 0.06f}; p.spread = 0.4f;
+  p.lfoShape = 1; p.lfoRate = 20.f; p.cutoff = 3560.f; p.reso = 0.45f; p.dist = 0.02f; p.amp = {0.001f, 0.1f, 1.f, 0.06f}; p.spread = 0.4f;
   p.chorusMix = 0.2f; p.reverbMix = 0.1f; p.reverbSize = 0.6f; p.master = 1.04f;
 }
 
@@ -216,6 +216,55 @@ inline void freewayBass(Params& p) {
   p.amp = {0.01f, 0.1f, 1.f, 0.05f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.chorusMix = 0.45f; p.delayMix = 0.1f; p.delayTime = 0.05f; p.master = 1.08f;
 }
 
+// ---- Bass recipes ----
+// Boris Brejcha style bass: saw + saw an octave up, heavy noise, low-pass with a quick envelope, delay, reverb; the mod wheel opens the cutoff. Tight phase reset.
+inline void brejchaBass(Params& p) {
+  p = Params();
+  p.mono = true; p.phaseReset = true;
+  p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.8f; p.layer[1].wave = Wave::Saw; p.layer[1].octave = 1; p.layer[1].level = 0.2f;
+  p.noiseLevel = 0.7f; p.noiseHpHz = 100.f;
+  p.cutoff = 159.f; p.envAmt = 0.7f; p.fenv = {0.001f, 0.17f, 0.f, 10.f}; p.wheelCutoff = 1.1f;
+  p.amp = {0.001f, 1.05f, 0.7f, 0.15f}; p.spread = 0.2f; p.bassMonoHz = 200.f;
+  p.delayMix = 0.15f; p.delayTime = 0.2f; p.delayFb = 0.25f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 1.84f;
+}
+
+// Donna Summer "I Feel Love" bass: saw + triangle sub, low-pass with a short envelope, square-wave auto-pan at 1/8 note, chorus. (The FM amount in the recipe has the modulator at 0%, so it is not used.)
+inline void feelLoveBass(Params& p) {
+  p = Params();
+  p.mono = true; p.subPreFilter = true;
+  p.layer[0].wave = Wave::Saw; p.layer[0].level = 1.0f; p.subLevel = 0.4f; p.subWave = Wave::Tri; p.subOctave = -1;
+  p.cutoff = 317.f; p.envAmt = 1.0f; p.fenv = {0.001f, 0.25f, 0.f, 0.19f};
+  p.lfoShape = 2; p.lfoRate = 5.f; p.lfoPan = 0.6f;
+  p.amp = {0.001f, 0.65f, 0.f, 0.22f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.chorusMix = 0.5f; p.chorusRate = 0.3f; p.master = 1.03f;
+}
+
+// Fatboy Slim "Everybody Needs a 303" bass: narrow pulse, low-pass at 45% with 90% resonance, short decaying envelope, drive. (The recipe's 100% pulse width is a very thin pulse here.)
+inline void nboy303(Params& p) {
+  p = Params();
+  p.mono = true; p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.95f; p.layer[0].level = 1.0f;
+  p.cutoff = 448.f; p.reso = 0.9f; p.keyTrack = 0.3f; p.envAmt = 0.4f; p.fenv = {0.001f, 0.45f, 0.f, 0.05f};
+  p.dist = 0.65f; p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.f; p.reverbMix = 0.1f; p.reverbSize = 0.6f; p.master = 0.97f;
+}
+
+// Le Sserafim "Spaghetti" bass: two sines (one an octave up), very low cutoff opened by an envelope, a tiny pitch blip, glide, heavy soft-clip, chorus. The recipe's multiband compressor and EQ are not modelled.
+inline void spaghettiBass(Params& p) {
+  p = Params();
+  p.mono = true; p.glide = 0.024f;
+  p.layer[0].wave = Wave::Sine; p.layer[0].octave = 1; p.layer[0].level = 0.71f; p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.71f;
+  p.cutoff = 59.f; p.drive = 0.5f; p.envAmt = 0.64f; p.fenv = {0.001f, 0.171f, 0.14f, 0.09f};
+  p.pitchAmt = 7.f; p.pitchTime = 0.01f; p.dist = 0.71f;
+  p.amp = {0.001f, 0.1f, 1.f, 0.09f}; p.spread = 0.2f; p.bassMonoHz = 200.f; p.chorusMix = 0.26f; p.reverbMix = 0.18f; p.reverbSize = 0.3f; p.master = 0.76f;
+}
+
+// Martin Garrix "Access" bass: three-voice saw, resonant low-pass with key tracking, a fast volume LFO for the rhythmic gating (the recipe has two LFOs, this has one at 1/16), mod wheel on cutoff.
+inline void accessBass(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 3; p.layer[0].detune = 0.1f; p.layer[0].level = 1.0f;
+  p.cutoff = 404.f; p.reso = 0.76f; p.keyTrack = 0.28f; p.wheelCutoff = 0.46f;
+  p.lfoShape = 1; p.lfoRate = 10.f; p.lfoAmp = 0.76f;
+  p.amp = {0.001f, 0.1f, 1.f, 0.09f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.master = 2.87f;
+}
+
 inline bool byName(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
   else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p);
@@ -223,6 +272,7 @@ inline bool byName(const std::string& n, Params& p) {
   else if (n == "better_off_alone") betterOffAlone(p); else if (n == "gimme_lead") gimmeLead(p); else if (n == "levels_lead") levelsLead(p); else if (n == "sandstorm_lead") sandstormLead(p);
   else if (n == "gigi_lead") gigiLead(p); else if (n == "alexf_lead") alexFLead(p); else if (n == "mgmt_lead") mgmtLead(p); else if (n == "pendulum_lead") pendulumLead(p);
   else if (n == "nightcall_keys") nightCallKeys(p); else if (n == "freeway_bass") freewayBass(p);
+  else if (n == "brejcha_bass") brejchaBass(p); else if (n == "feellove_bass") feelLoveBass(p); else if (n == "nboy_303") nboy303(p); else if (n == "spaghetti_bass") spaghettiBass(p); else if (n == "access_bass") accessBass(p);
   else return false;
   return true;
 }
