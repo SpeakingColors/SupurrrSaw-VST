@@ -65,6 +65,10 @@ struct Params {
   // stereo
   float spread = 0.7f;         // 0 = mono, 1 = full width
   float bassMonoHz = 120.f;    // everything below this is summed to mono
+  // effects, all built to stay mono compatible (side-only chorus, mid/side reverb)
+  float chorusMix = 0.f, chorusDepth = 0.5f, chorusRate = 0.6f;
+  float delayMix = 0.f, delayTime = 0.25f, delayFb = 0.4f;
+  float reverbMix = 0.f, reverbSize = 0.6f, reverbWidth = 0.8f;
   float master = 0.8f;
 };
 
@@ -152,10 +156,65 @@ struct Voice {
   EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
 };
 
+
+// ---- effects ----
+struct DelayLine {
+  std::vector<float> b; size_t w = 0;
+  void init(size_t n) { b.assign(n + 4, 0.f); w = 0; }
+  void push(float x) { b[w] = x; if (++w >= b.size()) w = 0; }
+  float read(float d) const {  // d samples back, linear interpolation
+    float rp = (float)w - d; while (rp < 0) rp += (float)b.size(); size_t i0 = (size_t)rp; float f = rp - (float)i0;
+    size_t i1 = i0 + 1 >= b.size() ? 0 : i0 + 1; return b[i0] * (1.f - f) + b[i1] * f; }
+};
+struct Reverb {
+  struct Comb { std::vector<float> b; size_t i = 0; float lp = 0; float run(float x, float fb, float damp) { float o = b[i]; lp = o * (1.f - damp) + lp * damp; b[i] = x + lp * fb; if (++i >= b.size()) i = 0; return o; } };
+  struct Ap { std::vector<float> b; size_t i = 0; float run(float x) { float o = b[i]; float y = -x + o; b[i] = x + o * 0.5f; if (++i >= b.size()) i = 0; return y; } };
+  Comb c[2][8]; Ap a[2][4];
+  void init(float sr) {
+    const int cl[8] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617}, al[4] = {556, 441, 341, 225};
+    float k = sr / 44100.f;
+    for (int ch = 0; ch < 2; ++ch) { for (int j = 0; j < 8; ++j) { c[ch][j].b.assign((size_t)((cl[j] + ch * 23) * k), 0.f); c[ch][j].i = 0; c[ch][j].lp = 0; }
+      for (int j = 0; j < 4; ++j) { a[ch][j].b.assign((size_t)((al[j] + ch * 11) * k), 0.f); a[ch][j].i = 0; } }
+  }
+  // input mono, outputs wet L/R
+  void run(float in, float size, float& wl, float& wr) {
+    float fb = 0.70f + 0.27f * size, o[2];
+    for (int ch = 0; ch < 2; ++ch) { float s = 0; for (int j = 0; j < 8; ++j) s += c[ch][j].run(in * 0.15f, fb, 0.25f); for (int j = 0; j < 4; ++j) s = a[ch][j].run(s); o[ch] = s; }
+    wl = o[0]; wr = o[1];
+  }
+};
+struct Fx {
+  float sr = 48000.f; DelayLine chor, dl, dr; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0};
+  void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); lfo = 0.f; dlp[0] = dlp[1] = 0.f; }
+  void process(const Params& p, float& L, float& R) {
+    float m = 0.5f * (L + R);
+    if (p.chorusMix > 0.f) {  // side-only: the left and right wet signals are opposite, so they cancel in mono
+      lfo += p.chorusRate / sr; if (lfo >= 1.f) lfo -= 1.f;
+      chor.push(m); float d = (0.012f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * lfo)) * sr;
+      float d2 = (0.017f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * (lfo + 0.5f))) * sr;
+      float w = 0.5f * (chor.read(d) + chor.read(d2)) - m;
+      L += p.chorusMix * w; R -= p.chorusMix * w;
+    }
+    if (p.delayMix > 0.f) {  // ping-pong, darker on every repeat
+      float t = std::max(0.02f, std::min(1.9f, p.delayTime)) * sr;
+      float a = dl.read(t), b = dr.read(t);
+      dlp[0] += 0.35f * (a - dlp[0]); dlp[1] += 0.35f * (b - dlp[1]);
+      dl.push(m + dlp[1] * p.delayFb); dr.push(dlp[0] * p.delayFb);
+      L += p.delayMix * dlp[0]; R += p.delayMix * dlp[1];
+    }
+    if (p.reverbMix > 0.f) {  // mid and side are scaled separately: narrow centre, wide sides
+      float wl, wr; rev.run(m, p.reverbSize, wl, wr);
+      float wm = 0.5f * (wl + wr), ws = 0.5f * (wl - wr);
+      float outM = wm * 0.8f, outS = ws * (0.4f + 1.2f * p.reverbWidth);
+      L += p.reverbMix * (outM + outS) * 3.f; R += p.reverbMix * (outM - outS) * 3.f;
+    }
+  }
+};
+
 class Engine {
  public:
   Params p;
-  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; }
+  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; fx.prepare(sr); }
   void noteOn(int note, float vel) {
     Voice* v = nullptr;
     for (auto& c : voices) if (!c.active) { v = &c; break; }
@@ -175,6 +234,7 @@ class Engine {
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
     float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr);
     for (int i = 0; i < n; ++i) {
+      fx.process(p, outL[i], outR[i]);
       bl += a * (outL[i] - bl); bl2 += a * (bl - bl2);
       br += a * (outR[i] - br); br2 += a * (br - br2);
       float m = 0.5f * (bl2 + br2);
@@ -184,7 +244,7 @@ class Engine {
   }
 
  private:
-  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; uint64_t clock = 0;
+  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; uint64_t clock = 0;
   float bl = 0, br = 0, bl2 = 0, br2 = 0;
 
   void renderVoice(Voice& v, float* oL, float* oR, int n) {
