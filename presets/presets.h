@@ -1,6 +1,7 @@
 // Built-in SupurrSaw presets as plain C++ (the plugin will load the same values from files later).
 // Each function fills a Params. Written from the author's descriptions of how he builds these sounds; to be tuned by ear.
 #pragma once
+#include <string>
 #include "../core/supurrsaw_core.h"
 
 namespace supurr::presets {
@@ -16,7 +17,7 @@ inline void hoover(Params& p) {
   p.subLevel = 0.3f; p.subWave = Wave::Tri; p.subOctave = -1;
   p.detuneRange = 1.4f; p.lfoRate = 6.5f; p.lfoPwm = 0.7f; p.lfoDetune = 0.35f;
   p.pitchAmt = 12.f; p.pitchTime = 0.09f;
-  p.cutoff = 5500.f; p.reso = 0.3f; p.drive = 0.45f; p.dist = 0.5f; p.lowCutHz = 45.f;   // more drive into the filter and saturation after it
+  p.cutoff = 5500.f; p.reso = 0.3f; p.drive = 0.3f; p.dist = 0.28f; p.lowCutHz = 45.f;   // thick but not smashed
   p.master = 0.9f; p.amp = {0.002f, 0.5f, 0.85f, 0.25f}; p.spread = 0.85f; p.chorusMix = 0.4f; p.reverbMix = 0.03f; p.reverbSize = 0.5f;
 }
 
@@ -62,6 +63,32 @@ inline void talkingLead(Params& p) {
   p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 5; p.layer[1].detune = 0.3f; p.layer[1].level = 0.25f; p.layer[1].octave = -1;
   p.lfoRate = 4.5f; p.cutoff = 5000.f; p.reso = 0.2f; p.envAmt = 0.2f; p.fenv = {0.002f, 0.4f, 0.6f, 0.3f}; p.dist = 0.55f;
   p.master = 0.5f; p.amp = {0.003f, 0.6f, 0.85f, 0.25f}; p.spread = 0.5f; p.chorusMix = 0.15f; p.delayMix = 0.08f; p.reverbMix = 0.02f;
+}
+
+// Rolling trance bass: saw + sub, short and punchy, mono and centred, sits under offbeat patterns.
+inline void tranceBass(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.55f;
+  p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.45f; p.layer[1].level = 0.3f; p.layer[1].tune = 6.f;
+  p.subLevel = 0.5f; p.subWave = Wave::Sine; p.subOctave = -1;
+  p.cutoff = 380.f; p.reso = 0.25f; p.envAmt = 0.55f; p.fenv = {0.001f, 0.16f, 0.1f, 0.08f}; p.drive = 0.3f; p.dist = 0.15f; p.lowCutHz = 28.f;
+  p.amp = {0.002f, 0.2f, 0.55f, 0.07f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.master = 0.7f;
+}
+
+// Funky / groovy bass: square + saw, resonant filter with a quick envelope pluck, triangle sub, tracks the keyboard.
+inline void funkBass(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.35f; p.layer[0].level = 0.5f;
+  p.layer[1].wave = Wave::Saw; p.layer[1].level = 0.4f; p.layer[1].octave = -1;
+  p.subLevel = 0.35f; p.subWave = Wave::Tri; p.subOctave = -1;
+  p.filterMode = FilterMode::LP24; p.cutoff = 250.f; p.reso = 0.45f; p.envAmt = 0.75f; p.keyTrack = 0.4f; p.fenv = {0.001f, 0.2f, 0.05f, 0.1f}; p.drive = 0.35f; p.dist = 0.2f; p.lowCutHz = 30.f;
+  p.amp = {0.001f, 0.28f, 0.35f, 0.08f}; p.spread = 0.f; p.bassMonoHz = 220.f; p.master = 0.7f;
+}
+
+inline bool byName(const std::string& n, Params& p) {
+  if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
+  else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p); else return false;
+  return true;
 }
 
 }  // namespace supurr::presets

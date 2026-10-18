@@ -42,3 +42,11 @@ Not affiliated with or endorsed by Roland, Korg or any other brand mentioned. Na
 ## Docs
 - [Interactive mockups](docs/README.md)
 - [Roadmap](ROADMAP.md)
+
+## Demo MIDI
+`demo-midi/` holds MIDI files made by SpeakingColors for trying presets (A minor, 150 BPM). Play one through two presets:
+```
+g++ -O2 -std=c++17 -o midi_demo tools/midi_demo.cpp
+./midi_demo demo-midi/Amin_-_Sylenth1_-_JP8080_LEAD_2.mid out.wav 150 55 trance_bass trance_lead
+```
+Notes below the split note (55) use the first preset, the rest the second. Presets: hoover, pick, pluck, trance_lead, talking_lead, trance_bass, funk_bass.
