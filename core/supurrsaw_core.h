@@ -44,6 +44,8 @@ struct LayerParams {
   float syncSemis = 7.f;       // 0..36 semitones above the master
   float syncEnv = 0.f;         // semitones added by the filter envelope
   float syncLfo = 0.f;         // semitones added by the LFO
+  float cents = 0.f;           // > 0: super wave spread in cents (outer voices at +/- this), replaces the detune knob
+  float lfoPitchCents = 0.f;   // LFO vibrato on this layer only, in cents
   float syncKey = 0.f;         // semitones added per octave above/below middle C (the sync opens more or less by note)
   float syncWheel = 0.f;       // semitones added at full mod wheel (automate or play it live)
   std::shared_ptr<const Sample> sample;
@@ -58,6 +60,8 @@ struct Params {
   // filter
   FilterMode filterMode = FilterMode::LP24;
   float cutoff = 4000.f, reso = 0.2f, drive = 0.f, envAmt = 0.f, keyTrack = 0.f;
+  bool subPreFilter = false;   // true: the sub oscillator goes through the filter like the other oscillators
+  bool mono = false;           // one voice, last note wins, a new note restarts the envelopes without a click
   float lowCutHz = 20.f;       // removes low rumble before the sub is added
   float dist = 0.f;            // 0..1 distortion (acid, hoover, dirty reese, screech)
   bool distPre = false;        // true: distortion before the filter (the filter shapes the screech), false: after it
@@ -65,7 +69,7 @@ struct Params {
   float noiseHpHz = 3000.f;    // high-pass on the noise so it never muddies the low end
   Adsr amp, fenv;
   // pitch envelope (hoover dive): starts at +pitchAmt semitones, decays to 0
-  float pitchAmt = 0.f, pitchTime = 0.09f;
+  float pitchAmt = 0.f, pitchTime = 0.09f, pitchAttack = 0.f;   // attack > 0: the pitch rises to pitchAmt over that time first, then decays
   // pitch fall (slow hoover bend down): drops by pitchFall semitones, reaching about 63% of it after pitchFallTime
   float pitchFall = 0.f, pitchFallTime = 1.f;
   // LFO
@@ -80,7 +84,8 @@ struct Params {
   // effects, all built to stay mono compatible (side-only chorus, mid/side reverb)
   float chorusMix = 0.f, chorusDepth = 0.5f, chorusRate = 0.6f;
   float delayMix = 0.f, delayTime = 0.25f, delayFb = 0.4f;
-  float reverbMix = 0.f, reverbSize = 0.6f, reverbWidth = 0.8f;
+  float reverbMix = 0.f, reverbSize = 0.6f, reverbWidth = 0.8f;   // reverbMix is a real dry/wet crossfade (0.1 = 10% wet)
+  float reverbLowCutHz = 150.f;   // gentle 6 dB/oct high-pass on what goes into the reverb
   float master = 0.8f;
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
 };
@@ -198,8 +203,8 @@ struct Reverb {
   }
 };
 struct Fx {
-  float sr = 48000.f; DelayLine chor, dl, dr; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0};
-  void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); lfo = 0.f; dlp[0] = dlp[1] = 0.f; }
+  float sr = 48000.f; DelayLine chor, dl, dr; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0}, rhp = 0.f;
+  void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); lfo = 0.f; dlp[0] = dlp[1] = 0.f; rhp = 0.f; }
   void process(const Params& p, float& L, float& R) {
     float m = 0.5f * (L + R);
     if (p.chorusMix > 0.f) {  // side-only: the left and right wet signals are opposite, so they cancel in mono
@@ -218,10 +223,14 @@ struct Fx {
       L += p.delayMix * dlp[0]; R += p.delayMix * dlp[1];
     }
     if (p.reverbMix > 0.f) {  // mid and side are scaled separately: narrow centre, wide sides
-      float wl, wr; rev.run(m, p.reverbSize, wl, wr);
+      float ra = 1.f - std::exp(-2.f * kPi * std::max(20.f, p.reverbLowCutHz) / sr);
+      rhp += ra * (m - rhp); float rin = m - rhp;
+      float wl, wr; rev.run(rin, p.reverbSize, wl, wr);
       float wm = 0.5f * (wl + wr), ws = 0.5f * (wl - wr);
       float outM = wm * 0.8f, outS = ws * (0.4f + 1.2f * p.reverbWidth);
-      L += p.reverbMix * (outM + outS) * 3.f; R += p.reverbMix * (outM - outS) * 3.f;
+      const float k = 0.29f;   // wet level matches the dry level at mix = 1 (measured with noise), so the knob reads as % wet
+      float mx = std::min(1.f, p.reverbMix);
+      L = L * (1.f - mx) + mx * (outM + outS) * k; R = R * (1.f - mx) + mx * (outM - outS) * k;
     }
   }
 };
@@ -232,6 +241,10 @@ class Engine {
   void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; fx.prepare(sr); }
   void noteOn(int note, float vel) {
     Voice* v = nullptr;
+    if (p.mono) {  // reuse the one sounding voice so tails never pile up
+      for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
+      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
+    }
     for (auto& c : voices) if (!c.active) { v = &c; break; }
     if (!v) { v = &voices[0]; for (auto& c : voices) if (c.age < v->age) v = &c; }
     *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->age = ++clock;
@@ -262,6 +275,21 @@ class Engine {
   float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; uint64_t clock = 0;
   float bl = 0, br = 0, bl2 = 0, br2 = 0;
 
+  // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.
+  void addSub(Voice& v, float& L, float& R, float invSr) {
+    if (p.subLevel <= 0.f) return;
+    float sf = 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f);
+    float sdt = sf * invSr; float& sp = v.subPhase; float s;
+    switch (p.subWave) {
+      case Wave::Tri: s = 4.f * std::fabs(sp - 0.5f) - 1.f; break;
+      case Wave::Pulse: s = (sp < 0.5f ? 1.f : -1.f) + blep(sp, sdt) - blep(sp < 0.5f ? sp + 0.5f : sp - 0.5f, sdt); s *= 0.8f; break;
+      case Wave::Saw: s = (2.f * sp - 1.f) - blep(sp, sdt); break;
+      default: s = std::sin(2.f * kPi * sp); break;
+    }
+    sp += sdt; if (sp >= 1.f) sp -= 1.f;
+    L += p.subLevel * s * 0.7f; R += p.subLevel * s * 0.7f;
+  }
+
   void renderVoice(Voice& v, float* oL, float* oR, int n) {
     const float invSr = 1.f / sr;
     for (int i = 0; i < n; ++i) {
@@ -269,7 +297,8 @@ class Engine {
       if (v.amp.stage == 0) { v.active = false; return; }
       v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.f) v.lfoPhase -= 1.f;
       float lfo = std::sin(2.f * kPi * v.lfoPhase);
-      float pitchEnv = p.pitchAmt * std::exp(-v.t / std::max(0.001f, p.pitchTime)) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
+      float pAtt = p.pitchAttack > 0.f ? std::min(1.f, v.t / p.pitchAttack) : 1.f;
+      float pitchEnv = p.pitchAmt * pAtt * std::exp(-std::max(0.f, v.t - p.pitchAttack) / std::max(0.001f, p.pitchTime)) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
       v.t += invSr;
       if ((int)(v.t * sr) % 512 == 0)
         for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004f * (2.f * rng.next() - 1.f);
@@ -279,14 +308,14 @@ class Engine {
       for (int ly = 0; ly < kLayers; ++ly) {
         const LayerParams& lp = p.layer[ly];
         if (lp.wave == Wave::Off || lp.level <= 0.f) continue;
-        float semis = (float)(v.note - 69) + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f;
+        float semis = (float)(v.note - 69) + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo;
         float f = 440.f * std::exp2(semis / 12.f);
         float dt = std::min(0.45f, f * invSr);
         float lL = 0.f, lR = 0.f;
         if (lp.wave == Wave::SuperSaw || lp.wave == Wave::SuperSquare) {
           int nv = std::max(1, std::min(kMaxSaws, lp.voices));
-          float det = jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo)))) * kMaxDetune * p.detuneRange;
-          float sideFade = std::min(1.f, lp.detune * 20.f);  // detune 0 = one clean voice
+          float det = lp.cents > 0.f ? std::exp2(lp.cents / 1200.f) - 1.f : jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo)))) * kMaxDetune * p.detuneRange;
+          float sideFade = lp.cents > 0.f ? 1.f : std::min(1.f, lp.detune * 20.f);  // detune 0 = one clean voice
           float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f));
           float norm = 1.f / (1.f + (float)(nv - 1) * 0.62f * sideFade);
           for (int j = 0; j < nv; ++j) {
@@ -377,6 +406,7 @@ class Engine {
         if (p.dist <= 0.f) return;
         float k = 1.f + p.dist * 14.f, norm = 1.f / std::tanh(k * 0.6f);
         l = std::tanh(k * l + 0.15f * p.dist) * norm * 0.8f; r = std::tanh(k * r + 0.15f * p.dist) * norm * 0.8f; };
+      if (p.subPreFilter) addSub(v, L, R, invSr);
       if (p.distPre) distort(L, R);
       // filter
       float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f);
@@ -388,19 +418,7 @@ class Engine {
         v.hpL += a * (L - v.hpL); v.hpR += a * (R - v.hpR); L -= v.hpL; R -= v.hpR;
         if (!p.distPre) distort(L, R);
       }
-      // sub (mono, centred, after the filter so the low end stays solid)
-      if (p.subLevel > 0.f) {
-        float sf = 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f);
-        float sdt = sf * invSr; float& sp = v.subPhase; float s;
-        switch (p.subWave) {
-          case Wave::Tri: s = 4.f * std::fabs(sp - 0.5f) - 1.f; break;
-          case Wave::Pulse: s = (sp < 0.5f ? 1.f : -1.f) + blep(sp, sdt) - blep(sp < 0.5f ? sp + 0.5f : sp - 0.5f, sdt); s *= 0.8f; break;
-          case Wave::Saw: s = (2.f * sp - 1.f) - blep(sp, sdt); break;
-          default: s = std::sin(2.f * kPi * sp); break;
-        }
-        sp += sdt; if (sp >= 1.f) sp -= 1.f;
-        L += p.subLevel * s * 0.7f; R += p.subLevel * s * 0.7f;
-      }
+      if (!p.subPreFilter) addSub(v, L, R, invSr);
       float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f;
       oL[i] += L * g; oR[i] += R * g;
     }

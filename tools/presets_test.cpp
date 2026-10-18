@@ -29,7 +29,9 @@ int main(int argc, char** argv) {
   std::string dir = argc > 1 ? argv[1] : ".";
   struct P { const char* name; void (*fn)(Params&); int note; float hold, total; };
   P list[] = {{"hoover", presets::hoover, 57, 1.2f, 2.5f}, {"pick", presets::pick, 69, 0.15f, 1.0f}, {"pluck", presets::pluck, 69, 0.2f, 1.2f},
-              {"trance_lead", presets::tranceLead, 69, 1.5f, 3.0f}, {"talking_lead", presets::talkingLead, 64, 1.5f, 3.0f}};
+              {"trance_lead", presets::tranceLead, 69, 1.5f, 3.0f}, {"talking_lead", presets::talkingLead, 64, 1.5f, 3.0f},
+              {"daft_funk", presets::daftFunk, 64, 3.0f, 4.5f}, {"hoover_classic", presets::hooverClassic, 57, 1.5f, 3.5f}, {"hoover_prodigy", presets::hooverProdigy, 57, 1.5f, 2.5f},
+              {"better_off_alone", presets::betterOffAlone, 69, 1.5f, 3.0f}, {"gimme_lead", presets::gimmeLead, 69, 1.0f, 2.5f}, {"levels_lead", presets::levelsLead, 69, 1.0f, 2.5f}, {"sandstorm_lead", presets::sandstormLead, 69, 2.0f, 3.5f}};
   for (auto& pr : list) {
     Engine e; pr.fn(e.p); Result r = render(e, pr.note, pr.hold, pr.total);
     double sl = 0, sr = 0, sm = 0; for (size_t i = 0; i < r.l.size(); ++i) { sl += r.l[i]*r.l[i]; sr += r.r[i]*r.r[i]; sm += 0.25*(r.l[i]+r.r[i])*(r.l[i]+r.r[i]); }
@@ -37,6 +39,38 @@ int main(int argc, char** argv) {
     std::printf("%-13s peak %.2f rms %.3f mono-sum %+.1f dB\n", pr.name, r.peak, r.rms, monoDb);
     CHECK(!r.nan); CHECK(r.peak < 1.0 && r.peak > 0.05); CHECK(r.rms > 0.01); CHECK(monoDb > -6.0);
     writeWav(dir + "/preset_" + pr.name + ".wav", r.l, r.r);
+  }
+  { // reverb mix is a true crossfade: at 0.1 the wet level is far below the dry level; the reverb low cut removes low end from the wet only
+    double lowWet[2];
+    for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 18000; e.p.reverbMix = 1.f; e.p.reverbLowCutHz = k ? 400.f : 20.f; Result r = render(e, 33, 0.3f, 1.5f);
+      float lp = 0; double en = 0; for (size_t i = 24000; i < r.l.size(); ++i) { lp += 0.02f * (r.l[i] - lp); en += lp * lp; } lowWet[k] = en; }
+    CHECK(lowWet[1] < lowWet[0] * 0.7);
+    Engine a, b; a.p.layer[0].wave = b.p.layer[0].wave = Wave::Saw; a.p.reverbMix = 0.1f; b.p.reverbMix = 0.5f; Result ra = render(a, 57, 0.2f, 1.0f), rb = render(b, 57, 0.2f, 1.0f);
+    double ea = 0, eb = 0, da = 0; for (size_t i = 30000; i < ra.l.size(); ++i) { ea += ra.l[i] * ra.l[i]; eb += rb.l[i] * rb.l[i]; } (void)da; CHECK(eb > ea * 2.0);   // tail after the note: more wet = more reverb tail
+  }
+  { // pitch envelope with an attack: starts at the played pitch, rises, then falls back (hoover recipe)
+    Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 18000; e.p.pitchAmt = 12.f; e.p.pitchAttack = 0.2f; e.p.pitchTime = 0.3f; e.p.mono = true;
+    Result r = render(e, 45, 2.0f, 2.0f);
+    auto zc = [&](size_t a, size_t b) { int z = 0; for (size_t i = a + 1; i < b; ++i) if ((r.l[i-1] < 0) != (r.l[i] < 0)) ++z; return z; };
+    int start = zc(100, 2100), peak = zc(8800, 10800), late = zc(80000, 82000);
+    CHECK(peak > start * 1.4); CHECK(peak > late * 1.4);
+  }
+  { // unison cents: 4 voices at 36 cents beat harder than 4 voices at 3 cents (more amplitude movement over a short window)
+    double var[2];
+    for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::SuperSaw; e.p.layer[0].voices = 4; e.p.layer[0].cents = k ? 36.f : 3.f; e.p.cutoff = 600; e.p.spread = 0;
+      Result r = render(e, 40, 1.5f, 1.6f); double m = 0, v = 0; int n = 0; std::vector<double> env; for (size_t i = 12000; i + 480 < r.l.size(); i += 480) { double a = 0; for (int j = 0; j < 480; ++j) a += std::fabs(r.l[i+j]); env.push_back(a); }
+      for (double x : env) { m += x; ++n; } m /= n; for (double x : env) v += (x - m) * (x - m); var[k] = v / n / (m * m + 1e-12); }
+    CHECK(var[1] > var[0]);
+  }
+  { // mono mode: two overlapping notes never produce more than one voice of level (no pile-up of long releases)
+    Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 18000; e.p.mono = true; e.p.amp = {0.001f, 0.1f, 1.f, 3.f}; e.prepare(48000);
+    float lb[64], rb[64]; double e1 = 0, e2 = 0;
+    e.noteOn(48, 0.9f); for (int k = 0; k < 200; ++k) e.render(lb, rb, 64);
+    e.noteOff(48); e.noteOn(55, 0.9f); for (int k = 0; k < 400; ++k) { e.render(lb, rb, 64); for (int i = 0; i < 64; ++i) e1 += lb[i] * lb[i]; }
+    Engine f; f.p.layer[0].wave = Wave::Saw; f.p.cutoff = 18000; f.p.amp = {0.001f, 0.1f, 1.f, 3.f}; f.prepare(48000);
+    f.noteOn(48, 0.9f); for (int k = 0; k < 200; ++k) f.render(lb, rb, 64);
+    f.noteOff(48); f.noteOn(55, 0.9f); for (int k = 0; k < 400; ++k) { f.render(lb, rb, 64); for (int i = 0; i < 64; ++i) e2 += lb[i] * lb[i]; }
+    CHECK(e1 < e2 * 0.8);
   }
   { // pick: pitch rises into the note like a bubble (negative pitch envelope)
     Engine e; presets::pick(e.p); e.p.chorusMix = e.p.delayMix = e.p.reverbMix = 0; e.p.dist = 0; e.p.filterMode = FilterMode::LP24; e.p.cutoff = 18000;
