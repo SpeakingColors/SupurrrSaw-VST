@@ -206,7 +206,8 @@ struct Fx {
       lfo += p.chorusRate / sr; if (lfo >= 1.f) lfo -= 1.f;
       chor.push(m); float d = (0.012f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * lfo)) * sr;
       float d2 = (0.017f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * (lfo + 0.5f))) * sr;
-      float w = 0.5f * (chor.read(d) + chor.read(d2)) - m;
+      // side = difference of two differently delayed copies: adds width without shifting the left/right balance
+      float w = chor.read(d) - chor.read(d2);
       L += p.chorusMix * w; R -= p.chorusMix * w;
     }
     if (p.delayMix > 0.f) {  // ping-pong, darker on every repeat
