@@ -125,6 +125,12 @@ int main(int argc, char** argv) {
       CHECK(pk <= 1.f); std::printf("%-14s master 2, four notes: peak %.3f\n", n, pk);
     }
   }
+  { // polyphony: twelve held notes all sound with the default, and a cap of 4 steals the oldest releasing or oldest voice
+    Params q; presets::byName("trance_lead", q);
+    for (int cap : {12, 4}) { q.polyphony = cap; Engine e; e.prepare(48000); e.p = q; float L[256], R[256];
+      for (int k = 0; k < 12; ++k) { e.noteOn(48 + k, 0.8f); e.render(L, R, 256); }
+      int act = e.activeVoices(); std::printf("polyphony %d: %d voices sounding after 12 notes\n", cap, act); CHECK(act == (cap == 12 ? 12 : 4)); }
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }

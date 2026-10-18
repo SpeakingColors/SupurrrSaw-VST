@@ -9,7 +9,7 @@
 
 namespace supurr {
 
-constexpr int kMaxVoices = 8;   // polyphony
+constexpr int kMaxVoices = 32;  // hard limit; Params::polyphony sets how many are used
 constexpr int kMaxSaws   = 15;  // unison voices per layer
 constexpr int kLayers    = 3;
 constexpr float kPi      = 3.14159265358979f;
@@ -94,6 +94,7 @@ struct Params {
   // output stage: master is a clean linear gain; a soft limiter and a smooth knee clipper keep peaks under 0 dBFS without harshness
   float master = 1.f;
   float clipKnee = 0.72f;      // level where the soft clipper starts to bend (linear below it)
+  int polyphony = 12;          // voices available (1..kMaxVoices); oldest releasing voice is stolen first
   bool limiter = true;         // slow, smooth peak limiter in front of the clipper
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
 };
@@ -260,8 +261,12 @@ class Engine {
       for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
       if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
     }
-    for (auto& c : voices) if (!c.active) { v = &c; break; }
-    if (!v) { v = &voices[0]; for (auto& c : voices) if (c.age < v->age) v = &c; }
+    const int np = std::max(1, std::min(p.polyphony, kMaxVoices));
+    for (int i = 0; i < np; ++i) if (!voices[i].active) { v = &voices[i]; break; }
+    if (!v) {   // steal: the oldest voice that is already releasing, else the oldest of all
+      for (int i = 0; i < np; ++i) if (voices[i].amp.stage == 3 && (!v || voices[i].age < v->age)) v = &voices[i];
+      if (!v) { v = &voices[0]; for (int i = 0; i < np; ++i) if (voices[i].age < v->age) v = &voices[i]; }
+    }
     *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->age = ++clock;
     for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.f : rng.next();
     v->amp.on(); v->fenv.on();
@@ -269,6 +274,7 @@ class Engine {
   }
   void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) { v.amp.off(); v.fenv.off(); } }
   void allOff() { for (auto& v : voices) v.active = false; }
+  int activeVoices() const { int n = 0; for (const auto& v : voices) if (v.active) ++n; return n; }
 
   // adds nothing, overwrites outL/outR
   void render(float* outL, float* outR, int n) {
