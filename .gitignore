@@ -1,6 +1,6 @@
 build/
 *.o
-# Third-party sample packs must never be committed (copyright). Keep them in your local waveform library.
+# Only samples the author owns are committed (assets/samples). Never commit third-party packs.
 *.wav
-!assets/**/*.wav
+!assets/samples/choir_stab_classic.wav
 /samples/

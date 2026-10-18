@@ -26,7 +26,7 @@ g++ -O2 -std=c++17 -o demo tools/demo.cpp
 
 ## Samples and copyright
 
-Commercial sample packs are not included and must not be committed. Put your own samples in your local waveform library.
+The built-in `assets/samples/choir_stab_classic.wav` was made by SpeakingColors and ships with the synth. Third-party sample packs must never be committed; put those in your local waveform library.
 
 ## Licence
 

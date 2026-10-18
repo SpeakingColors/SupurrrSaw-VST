@@ -55,6 +55,8 @@ struct Params {
   Adsr amp, fenv;
   // pitch envelope (hoover dive): starts at +pitchAmt semitones, decays to 0
   float pitchAmt = 0.f, pitchTime = 0.09f;
+  // pitch fall (slow hoover bend down): drops by pitchFall semitones, reaching about 63% of it after pitchFallTime
+  float pitchFall = 0.f, pitchFallTime = 1.f;
   // LFO
   float lfoRate = 6.f, lfoPwm = 0.f, lfoPitch = 0.f, lfoCutoff = 0.f;
   // analog feel and range
@@ -192,7 +194,7 @@ class Engine {
       if (v.amp.stage == 0) { v.active = false; return; }
       v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.f) v.lfoPhase -= 1.f;
       float lfo = std::sin(2.f * kPi * v.lfoPhase);
-      float pitchEnv = p.pitchAmt * std::exp(-v.t / std::max(0.001f, p.pitchTime));
+      float pitchEnv = p.pitchAmt * std::exp(-v.t / std::max(0.001f, p.pitchTime)) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
       v.t += invSr;
       if ((int)(v.t * sr) % 512 == 0)
         for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004f * (2.f * rng.next() - 1.f);
