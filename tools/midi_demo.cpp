@@ -1,5 +1,5 @@
 // Plays a .mid file through two presets (split by note) and writes a WAV.
-// Usage: midi_demo in.mid out.wav bpm splitNote lowPreset highPreset [transpose]
+// Usage: midi_demo in.mid out.wav bpm splitNote lowPreset highPreset [transposeHigh [transposeLow]]
 //   notes below splitNote use lowPreset, the rest use highPreset ("none" silences a part).
 #include "../presets/presets.h"
 #include <cstdio>
@@ -28,15 +28,15 @@ static bool readMidi(const char* fn, std::vector<Ev>& out) {
   std::stable_sort(out.begin(), out.end(), [](const Ev& a, const Ev& c) { return a.beat < c.beat; }); return true;
 }
 int main(int argc, char** argv) {
-  if (argc < 7) { std::puts("usage: midi_demo in.mid out.wav bpm splitNote lowPreset highPreset [transpose]"); return 1; }
+  if (argc < 7) { std::puts("usage: midi_demo in.mid out.wav bpm splitNote lowPreset highPreset [transposeHigh [transposeLow]]"); return 1; }
   std::vector<Ev> ev; if (!readMidi(argv[1], ev) || ev.empty()) { std::puts("no notes in the file"); return 2; }
-  double bpm = atof(argv[3]); int split = atoi(argv[4]); int tr = argc > 7 ? atoi(argv[7]) : 0; const int sr = 48000;
+  double bpm = atof(argv[3]); int split = atoi(argv[4]); int trH = argc > 7 ? atoi(argv[7]) : 0, trL = argc > 8 ? atoi(argv[8]) : 0; const int sr = 48000;
   Engine eng[2]; bool use[2] = {true, true}; for (int k = 0; k < 2; ++k) { std::string n = argv[5 + k]; if (n == "none") use[k] = false; else if (!presets::byName(n, eng[k].p)) { std::printf("unknown preset %s\n", n.c_str()); return 3; } eng[k].prepare(sr); }
   double endBeat = ev.back().beat + 2.0; size_t N = (size_t)(endBeat * 60.0 / bpm * sr), si = 0; std::vector<float> L, R; L.reserve(N); R.reserve(N);
   float lb[2][64], rb[2][64];
   for (size_t pos = 0; pos < N; pos += 64) {
     double beat = (double)pos / sr * bpm / 60.0;
-    while (si < ev.size() && ev[si].beat <= beat) { int k = ev[si].note < split ? 0 : 1; if (use[k]) { if (ev[si].on) eng[k].noteOn(ev[si].note + tr, ev[si].vel / 127.f); else eng[k].noteOff(ev[si].note + tr); } ++si; }
+    while (si < ev.size() && ev[si].beat <= beat) { int k = ev[si].note < split ? 0 : 1; if (use[k]) { int tr = k ? trH : trL; if (ev[si].on) eng[k].noteOn(ev[si].note + tr, ev[si].vel / 127.f); else eng[k].noteOff(ev[si].note + tr); } ++si; }
     for (int k = 0; k < 2; ++k) { if (use[k]) eng[k].render(lb[k], rb[k], 64); else for (int i = 0; i < 64; ++i) lb[k][i] = rb[k][i] = 0; }
     for (int i = 0; i < 64; ++i) { L.push_back(lb[0][i] + lb[1][i]); R.push_back(rb[0][i] + rb[1][i]); }
   }
