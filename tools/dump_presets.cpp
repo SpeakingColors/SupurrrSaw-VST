@@ -20,7 +20,7 @@ int main() {
     std::printf("\"ampA\":%g,\"ampD\":%g,\"ampS\":%g,\"ampR\":%g,\"fenvA\":%g,\"fenvD\":%g,\"fenvS\":%g,\"fenvR\":%g,", p.amp.a, p.amp.d, p.amp.s, p.amp.r, p.fenv.a, p.fenv.d, p.fenv.s, p.fenv.r);
     std::printf("\"pitchAmt\":%g,\"pitchTime\":%g,\"pitchAttack\":%g,\"pitchFall\":%g,\"pitchFallTime\":%g,\"lfoRate\":%g,\"lfoPwm\":%g,\"lfoPitch\":%g,\"lfoCutoff\":%g,\"lfoDetune\":%g,\"lfoShape\":%d,\"lfoPan\":%g,\"lfoAmp\":%g,\"wheelCutoff\":%g,\"phaseReset\":%s,\"drift\":%g,\"detuneRange\":%g,\"spread\":%g,\"bassMonoHz\":%g,",
       p.pitchAmt, p.pitchTime, p.pitchAttack, p.pitchFall, p.pitchFallTime, p.lfoRate, p.lfoPwm, p.lfoPitch, p.lfoCutoff, p.lfoDetune, p.lfoShape, p.lfoPan, p.lfoAmp, p.wheelCutoff, p.phaseReset ? "true" : "false", p.drift, p.detuneRange, p.spread, p.bassMonoHz);
-    std::printf("\"chorusMix\":%g,\"chorusDepth\":%g,\"chorusRate\":%g,\"delayMix\":%g,\"delayTime\":%g,\"delayFb\":%g,\"reverbMix\":%g,\"reverbSize\":%g,\"reverbWidth\":%g,\"reverbLowCutHz\":%g,\"master\":%g,\"modWheel\":%g}}",
-      p.chorusMix, p.chorusDepth, p.chorusRate, p.delayMix, p.delayTime, p.delayFb, p.reverbMix, p.reverbSize, p.reverbWidth, p.reverbLowCutHz, p.master, p.modWheel);
+    std::printf("\"chorusMix\":%g,\"chorusDepth\":%g,\"chorusRate\":%g,\"delayMix\":%g,\"delayTime\":%g,\"delayFb\":%g,\"reverbMix\":%g,\"reverbSize\":%g,\"reverbWidth\":%g,\"reverbLowCutHz\":%g,\"master\":%g,\"clipKnee\":%g,\"limiter\":%s,\"modWheel\":%g}}",
+      p.chorusMix, p.chorusDepth, p.chorusRate, p.delayMix, p.delayTime, p.delayFb, p.reverbMix, p.reverbSize, p.reverbWidth, p.reverbLowCutHz, p.master, p.clipKnee, p.limiter ? "true" : "false", p.modWheel);
   }
   std::printf("\n}\n"); return 0; }

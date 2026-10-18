@@ -91,9 +91,18 @@ struct Params {
   float delayMix = 0.f, delayTime = 0.25f, delayFb = 0.4f;
   float reverbMix = 0.f, reverbSize = 0.6f, reverbWidth = 0.8f;   // reverbMix is a real dry/wet crossfade (0.1 = 10% wet)
   float reverbLowCutHz = 150.f;   // gentle 6 dB/oct high-pass on what goes into the reverb
-  float master = 0.8f;
+  // output stage: master is a clean linear gain; a soft limiter and a smooth knee clipper keep peaks under 0 dBFS without harshness
+  float master = 1.f;
+  float clipKnee = 0.72f;      // level where the soft clipper starts to bend (linear below it)
+  bool limiter = true;         // slow, smooth peak limiter in front of the clipper
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
 };
+
+// smooth knee clipper: identity below T, then T + w*tanh((|x|-T)/w); C2-continuous at T, tops out at exactly 1
+inline float softClip(float x, float T) {
+  float a = std::fabs(x); if (a <= T) return x;
+  float w = 1.f - T, y = T + w * std::tanh((a - T) / w); return x < 0.f ? -y : y;
+}
 
 inline float midiToHz(float n) { return 440.f * std::exp2((n - 69.f) / 12.f); }
 
@@ -154,7 +163,8 @@ struct Filter {
       float G = g / (1.f + g), G2 = G * G, G4 = G2 * G2;
       float k = 3.95f * reso;
       float S = G2 * G * s[0] / (1.f + g) + G2 * s[1] / (1.f + g) + G * s[2] / (1.f + g) + s[3] / (1.f + g);
-      float in = std::tanh(x * (1.f + 3.f * drive));
+      const float dg = 0.5f + 3.f * drive;   // soft input stage: unity small-signal gain, drive only adds curvature
+      float in = std::tanh(x * dg) / dg;
       float y4 = (G4 * in + S) / (1.f + k * G4);
       float u = in - k * y4;
       float y[4]; float xi = u;
@@ -243,7 +253,7 @@ struct Fx {
 class Engine {
  public:
   Params p;
-  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; fx.prepare(sr); }
+  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); }
   void noteOn(int note, float vel) {
     Voice* v = nullptr;
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
@@ -272,13 +282,19 @@ class Engine {
       br += a * (outR[i] - br); br2 += a * (br - br2);
       float m = 0.5f * (bl2 + br2);
       float l = outL[i] - bl2 + m, r = outR[i] - br2 + m;
-      outL[i] = std::tanh(l * p.master); outR[i] = std::tanh(r * p.master);
+      float xl = l * p.master, xr = r * p.master;
+      if (p.limiter) {   // feed-forward peak limiter, 0.4 ms attack, 120 ms release; overshoots are caught by the smooth clipper
+        float pk = std::max(std::fabs(xl), std::fabs(xr));
+        limEnv += (pk > limEnv ? limAtk : limRel) * (pk - limEnv);
+        if (limEnv > 0.9f) { float g = 0.9f / limEnv; xl *= g; xr *= g; }
+      }
+      outL[i] = softClip(xl, p.clipKnee); outR[i] = softClip(xr, p.clipKnee);
     }
   }
 
  private:
   float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; uint64_t clock = 0;
-  float bl = 0, br = 0, bl2 = 0, br2 = 0;
+  float bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05f, limRel = 0.0002f;
 
   // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.
   void addSub(Voice& v, float& L, float& R, float invSr) {

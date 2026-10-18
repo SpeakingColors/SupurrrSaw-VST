@@ -114,6 +114,17 @@ int main(int argc, char** argv) {
     for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 900; e.p.reso = 0.5f; e.p.dist = 0.8f; e.p.distPre = k == 1; Result r = render(e, 57, 0.4f, 0.5f); (k ? b : a) = r; }
     for (size_t i = 0; i < a.l.size(); ++i) d += std::fabs(a.l[i] - b.l[i]); CHECK(d > 1.0);
   }
+  { // output stage: linear under the knee, smooth above it, never above 1, even at master 2 with everything stacked
+    for (float x = -0.72f; x <= 0.72f; x += 0.01f) CHECK(softClip(x, 0.72f) == x);
+    CHECK(std::fabs(softClip(1000.f, 0.72f)) <= 1.f && std::fabs(softClip(-1000.f, 0.72f)) <= 1.f);
+    float d = (softClip(0.7201f, 0.72f) - softClip(0.7199f, 0.72f)) / 0.0002f; CHECK(std::fabs(d - 1.f) < 0.01f);
+    for (const char* n : {"hoover", "levels_lead", "access_bass", "talking_lead"}) {
+      Params q; presets::byName(n, q); q.master = 2.f; Engine e; e.prepare(48000); e.p = q; float pk = 0, L[512], R[512];
+      for (int k : {48, 55, 60, 64}) e.noteOn(k, 1.f);
+      for (int b = 0; b < 60; ++b) { e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::max(std::fabs(L[i]), std::fabs(R[i]))); } }
+      CHECK(pk <= 1.f); std::printf("%-14s master 2, four notes: peak %.3f\n", n, pk);
+    }
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }
