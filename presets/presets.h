@@ -227,12 +227,27 @@ inline void funkBass(Params& p) {
 // Filter knob positions are mapped on a 20 Hz to 20 kHz log scale: 35% = 224 Hz, 55% = 894 Hz, 65% = 1.8 kHz, 70% = 2.5 kHz, 75% = 3.6 kHz, 85% = 7.1 kHz.
 
 // Daft Punk "Da Funk" lead: one pulse, band-pass filter with resonance, long filter envelope that opens then closes (the "wah"), drive.
+// Recipe values from the Syntorial recipe, plus the extra pre-filter drive and multiband squash the user found closer by ear.
 inline void daftFunk(Params& p) {
   p = Params();
   p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.5f; p.layer[0].level = 1.0f;
-  p.filterMode = FilterMode::BP; p.cutoff = 224.f; p.reso = 0.65f; p.keyTrack = 0.5f;
+  p.filterMode = FilterMode::BP; p.cutoff = 224.f; p.reso = 0.65f; p.keyTrack = 0.5f; p.drive = 1.34f;
   p.envAmt = 0.6f; p.fenv = {0.09f, 4.0f, 0.f, 0.11f};            // 30% of the filter range = about 3 octaves
-  p.dist = 0.6f; p.amp = {0.001f, 1.f, 1.f, 0.05f}; p.spread = 0.f; p.master = 0.66f;
+  p.dist = 0.7f; p.amp = {0.001f, 1.f, 1.f, 0.05f}; p.spread = 0.f; p.drift = 0.21f; p.master = 0.66f;
+  p.dmMix = 0.84f; p.dmDrive = 0.74f; p.dmClip = 0.71f; p.dmLow = 0.22f; p.dmHigh = 0.5f;
+}
+
+// Da Funk, fatter: same lead plus a quiet second pulse a hair out of tune and an octave-up edge for bite, high-passed
+// at 140 Hz so the low mud is gone, a side-only chorus for width (the centre stays the same, so it sums to mono cleanly)
+// and a short side-only reverb.
+inline void daftFunkFat(Params& p) {
+  daftFunk(p);
+  p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.42f; p.layer[1].level = 0.45f; p.layer[1].cents = 0.f; p.layer[1].tune = 7.f;
+  p.layer[2].wave = Wave::Saw; p.layer[2].octave = 1; p.layer[2].level = 0.18f;
+  p.reso = 0.7f; p.lowCutHz = 140.f;
+  p.chorusMix = 0.22f; p.chorusDepth = 0.35f; p.chorusRate = 0.35f; p.chorusWidth = 1.f;
+  p.reverbMix = 0.08f; p.reverbSize = 0.35f; p.reverbWidth = 0.9f; p.reverbLowCutHz = 300.f;
+  p.master = 0.6f;
 }
 
 // Classic hoover (recipe 1): two saws (second +2 octaves), triangle sub, 4-voice unison 36 cents, pitch envelope that rises 8 semitones then falls, long release.
@@ -439,7 +454,7 @@ inline bool byName(const std::string& n, Params& p) {
   else if (n == "organ") organ(p); else if (n == "clav") clav(p); else if (n == "strings") strings(p); else if (n == "warm_pad") warmPad(p); else if (n == "glass_pad") glassPad(p);
   else if (n == "choir") choir(p); else if (n == "bell") bell(p); else if (n == "brass") brass(p);
   else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p);
-  else if (n == "daft_funk") daftFunk(p); else if (n == "hoover_classic") hooverClassic(p); else if (n == "hoover_prodigy") hooverProdigy(p);
+  else if (n == "daft_funk") daftFunk(p); else if (n == "daft_funk_fat") daftFunkFat(p); else if (n == "hoover_classic") hooverClassic(p); else if (n == "hoover_prodigy") hooverProdigy(p);
   else if (n == "better_off_alone") betterOffAlone(p); else if (n == "gimme_lead") gimmeLead(p); else if (n == "levels_lead") levelsLead(p); else if (n == "sandstorm_lead") sandstormLead(p);
   else if (n == "gigi_lead") gigiLead(p); else if (n == "alexf_lead") alexFLead(p); else if (n == "mgmt_lead") mgmtLead(p); else if (n == "pendulum_lead") pendulumLead(p);
   else if (n == "nightcall_keys") nightCallKeys(p); else if (n == "freeway_bass") freewayBass(p);

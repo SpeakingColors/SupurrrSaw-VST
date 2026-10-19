@@ -9,7 +9,7 @@ using namespace supurr;
 static const char* W[] = {"Off", "SuperSaw", "SuperSquare", "Saw", "Pulse", "Tri", "Sine", "Sample", "Custom"};
 static const char* FM[] = {"LP24", "LP18", "HP", "BP", "LP12", "LP6"};
 int main() {
-  const char* names[] = {"hoover", "hoover_classic", "hoover_prodigy", "pick", "pluck", "trance_lead", "trance_hybrid", "trance_90s", "talking_lead", "daft_funk", "trance_bass", "funk_bass", "freeway_bass",
+  const char* names[] = {"hoover", "hoover_classic", "hoover_prodigy", "pick", "pluck", "trance_lead", "trance_hybrid", "trance_90s", "talking_lead", "daft_funk", "daft_funk_fat", "trance_bass", "funk_bass", "freeway_bass",
                          "better_off_alone", "gimme_lead", "levels_lead", "sandstorm_lead", "gigi_lead", "alexf_lead", "mgmt_lead", "pendulum_lead", "nightcall_keys", "brejcha_bass", "feellove_bass", "nboy_303", "spaghetti_bass", "access_bass", "epiano_dx", "epiano_wurly", "piano", "felt_piano", "organ", "clav", "strings", "warm_pad", "glass_pad", "choir", "bell", "brass", "kick", "snare", "closed_hat", "open_hat", "crash"};
   std::printf("{\n"); bool first = true;
   std::vector<std::string> all(std::begin(names), std::end(names)); { int rn; const presets::RaveEntry* RL = presets::raveList(rn); for (int i = 0; i < rn; ++i) all.push_back(RL[i].name); }
