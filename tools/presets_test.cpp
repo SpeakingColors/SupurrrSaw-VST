@@ -218,6 +218,12 @@ int main(int argc, char** argv) {
       for (int i = 0; i < 9600; ++i) { float x = 0.5f * std::sin(2.f * 3.14159265f * 440.f * i / 48000.f); d2.process(w, x, x, 0.f, 0.f); CHECK(d2.oL == d2.oL); if (i > 4800) { a += (double)x * x; b += (double)d2.oL * d2.oL; dc += d2.oL; ++cnt; } }
       double db = 10.0 * std::log10(b / a); std::printf("drive stack mode %d at 0.9: %+.1f dB, dc %.4f\n", mode, db, dc / cnt); CHECK(std::fabs(db) < 1.5); CHECK(std::fabs(dc / cnt) < 0.02); }
   }
+  { // EQ: flat is a bit exact bypass, a -8 dB bell at 1 kHz and a +6 dB low shelf measure what they say, low cut removes 40 Hz
+    EqStage flat; Params q0; flat.prepare(48000); flat.update(q0); flat.process(0.3f, -0.2f); CHECK(flat.oL == 0.3f && flat.oR == -0.2f);
+    auto gainAt = [&](Params q, double f) { EqStage e; e.prepare(48000); e.update(q); double a = 0; int n = 0; for (int i = 0; i < 48000; ++i) { float x = 0.3f * (float)std::sin(2 * 3.14159265358979 * f * i / 48000.0); e.process(x, x); if (i > 24000) { a += (double)e.oL * e.oL; ++n; } } return 20.0 * std::log10(std::sqrt(a / n) / (0.3 / std::sqrt(2.0))); };
+    Params q; q.eq3G = -8.f; q.eq3F = 1000.f; q.eq3Q = 2.f; double g1 = gainAt(q, 1000.0); Params q2; q2.eq2G = 6.f; q2.eq2F = 120.f; double g2 = gainAt(q2, 25.0); Params q3; q3.eq1On = true; q3.eq1F = 100.f; double g3 = gainAt(q3, 40.0);
+    std::printf("eq: bell %.2f dB (-8), low shelf at 25 Hz %.2f dB (about +6), low cut 100 Hz at 40 Hz %.1f dB\n", g1, g2, g3); CHECK(std::fabs(g1 + 8.0) < 0.1); CHECK(g2 > 5.0 && g2 < 6.2); CHECK(g3 < -10.0);
+  }
   { // drums: each one is finite, stays under the ceiling and dies away
     for (const char* nm : {"kick", "snare", "closed_hat", "open_hat", "crash"}) { Params q; CHECK(presets::byName(nm, q)); Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0, tail = 0;
       e.noteOn(48, 1.f); for (int b = 0; b < 190; ++b) { if (b == 47) e.noteOff(48); e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); if (b > 180) tail = std::max(tail, std::fabs(L[i])); } }

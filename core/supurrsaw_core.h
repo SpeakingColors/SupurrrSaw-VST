@@ -175,6 +175,9 @@ struct Params {
   float optoGain = 0.f, optoRel = 1.f;                       // dB, release scale
   float ottLow = 0.f, ottMid = 0.f, ottHigh = 0.f, ottTime = 1.f;   // band trims in dB, speed scale
   float sqzAtk = 4.f, sqzRel = 90.f, sqzMakeup = 0.f;        // ms, ms, dB
+  // 6 band EQ at the end of the chain (before the output gain): low cut, low shelf, two bells, high shelf, high cut
+  bool eq1On = false, eq2On = true, eq3On = true, eq4On = true, eq5On = true, eq6On = false;
+  float eq1F = 30.f, eq2F = 120.f, eq2G = 0.f, eq3F = 500.f, eq3G = 0.f, eq3Q = 1.f, eq4F = 3000.f, eq4G = 0.f, eq4Q = 1.f, eq5F = 9000.f, eq5G = 0.f, eq6F = 18000.f;
   float drvDrive = 0.f, drvXs = 0.f, drvFuzz = 0.f, drvMix = 1.f;   // colour stack on the voice sum, before the effects (Drive, Transistor, Fuzz)
   float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmHigh = 0.f;
   // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random, drawn mod envelope.
@@ -350,6 +353,36 @@ struct DriveStage {
     if (on && (d != kd || xs != kx || fz != kf)) { kd = d; kx = xs; kf = fz; mk = purrMakeup(d, xs, fz, 0.75f); }
     oL = c[0].run(L, on, d, xs, fz, mk, p.drvMix); oR = c[1].run(R, on, d, xs, fz, mk, p.drvMix);
     sL = sl[si]; sR = sr[si]; sl[si] = sbl; sr[si] = sbr; si = (si + 1) & 15; } };
+// ---- 6 band EQ: low cut, low shelf, 2 bells, high shelf, high cut (RBJ biquads, double precision) ----
+enum class EqType { HP, LS, PK, HS, LP };
+inline void eqCoef(EqType type, double f, double g, double q, double sr, double* o) {
+  const double w = 2.0 * 3.14159265358979323846 * std::min(std::max(f, 10.0), 0.45 * sr) / sr, c = std::cos(w), sn = std::sin(w), al = sn / (2.0 * std::max(0.1, q));
+  double b0, b1, b2, a0, a1, a2;
+  if (type == EqType::HP) { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = b0; a0 = 1 + al; a1 = -2 * c; a2 = 1 - al; }
+  else if (type == EqType::LP) { b0 = (1 - c) / 2; b1 = 1 - c; b2 = b0; a0 = 1 + al; a1 = -2 * c; a2 = 1 - al; }
+  else { const double A = std::pow(10.0, g / 40.0);
+    if (type == EqType::PK) { b0 = 1 + al * A; b1 = -2 * c; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * c; a2 = 1 - al / A; }
+    else { const double be = 2 * std::sqrt(A) * al;
+      if (type == EqType::LS) { b0 = A * ((A + 1) - (A - 1) * c + be); b1 = 2 * A * ((A - 1) - (A + 1) * c); b2 = A * ((A + 1) - (A - 1) * c - be); a0 = (A + 1) + (A - 1) * c + be; a1 = -2 * ((A - 1) + (A + 1) * c); a2 = (A + 1) + (A - 1) * c - be; }
+      else { b0 = A * ((A + 1) + (A - 1) * c + be); b1 = -2 * A * ((A - 1) + (A + 1) * c); b2 = A * ((A + 1) + (A - 1) * c - be); a0 = (A + 1) - (A - 1) * c + be; a1 = 2 * ((A - 1) - (A + 1) * c); a2 = (A + 1) - (A - 1) * c - be; } } }
+  o[0] = b0 / a0; o[1] = b1 / a0; o[2] = b2 / a0; o[3] = a1 / a0; o[4] = a2 / a0;
+}
+struct EqStage {
+  double sr = 48000.0, z[24] = {}, co[30] = {}; bool act[6] = {}, any = false; float key[18] = {-1e9f}; float oL = 0.f, oR = 0.f;
+  void prepare(double s) { sr = s; for (double& v : z) v = 0; for (float& k : key) k = -1e9f; any = false; }
+  void update(const Params& p) {
+    const float k[18] = {(float)p.eq1On, p.eq1F, (float)p.eq2On, p.eq2F, p.eq2G, (float)p.eq3On, p.eq3F, p.eq3G, p.eq3Q, (float)p.eq4On, p.eq4F, p.eq4G, p.eq4Q, (float)p.eq5On, p.eq5F, p.eq5G, (float)p.eq6On, p.eq6F};
+    bool same = true; for (int i = 0; i < 18; ++i) if (k[i] != key[i]) same = false; if (same) return; for (int i = 0; i < 18; ++i) key[i] = k[i];
+    const bool on[6] = {p.eq1On, p.eq2On, p.eq3On, p.eq4On, p.eq5On, p.eq6On}; const double f[6] = {p.eq1F, p.eq2F, p.eq3F, p.eq4F, p.eq5F, p.eq6F}, g[6] = {0, p.eq2G, p.eq3G, p.eq4G, p.eq5G, 0}, q[6] = {0.7071, 0.7071, p.eq3Q, p.eq4Q, 0.7071, 0.7071};
+    const EqType t[6] = {EqType::HP, EqType::LS, EqType::PK, EqType::PK, EqType::HS, EqType::LP}; any = false;
+    for (int b = 0; b < 6; ++b) { const bool gainBand = b >= 1 && b <= 4; act[b] = on[b] && !(gainBand && std::fabs(g[b]) < 0.01); if (act[b]) { any = true; eqCoef(t[b], f[b], g[b], q[b], sr, &co[b * 5]); } } }
+  void process(float L, float R) {
+    if (!any) { oL = L; oR = R; return; }
+    double l = L, r = R;
+    for (int b = 0; b < 6; ++b) { if (!act[b]) continue; const double* c = &co[b * 5]; double* zz = &z[b * 4];
+      double y = c[0] * l + zz[0]; zz[0] = c[1] * l - c[3] * y + zz[1]; zz[1] = c[2] * l - c[4] * y; l = y;
+      y = c[0] * r + zz[2]; zz[2] = c[1] * r - c[3] * y + zz[3]; zz[3] = c[2] * r - c[4] * y; r = y; }
+    oL = (float)l; oR = (float)r; } };
 struct Fx {
   float sr = 48000.f; DelayLine chor, dl, dr, pre; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0}, rhp = 0.f, dtSm = -1.f;
   void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); pre.init((size_t)(0.26f * s)); lfo = 0.f; dlp[0] = dlp[1] = 0.f; rhp = 0.f; dtSm = -1.f; }
@@ -506,7 +539,7 @@ struct Master {
 class Engine {
  public:
   Params p;
-  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); drv = DriveStage(); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); }
+  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); drv = DriveStage(); eq.prepare(sr); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); }
   void noteOn(int note, float vel) {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;
@@ -538,7 +571,7 @@ class Engine {
     for (auto& v : voices) if (v.active) renderVoice(v, outL, outR, n);
     mtr.active = activeVoices();
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
-    float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr); bool bad = false;
+    eq.update(p); float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr); bool bad = false;
     for (int i = 0; i < n; ++i) {
       drv.process(p, outL[i], outR[i], sbL[i], sbR[i]); outL[i] = drv.oL; outR[i] = drv.oR; const float sbl = drv.sL, sbr = drv.sR;
       fx.process(p, outL[i], outR[i]);
@@ -549,7 +582,7 @@ class Engine {
       br += a * (dr - br); br2 += a * (br - br2);
       float m = 0.5f * (bl2 + br2);
       dm.process(p, dl - bl2 + m, dr - br2 + m);
-      float xl = (dm.outL + sbl) * p.master, xr = (dm.outR + sbr) * p.master;
+      eq.process(dm.outL + sbl, dm.outR + sbr); float xl = eq.oL * p.master, xr = eq.oR * p.master;
       if (p.limiter) {   // feed-forward peak limiter, 0.4 ms attack, 120 ms release; overshoots are caught by the smooth clipper
         float pk = std::max(std::fabs(xl), std::fabs(xr));
         limEnv += (pk > limEnv ? limAtk : limRel) * (pk - limEnv);
@@ -559,7 +592,7 @@ class Engine {
       if (!std::isfinite(outL[i] + outR[i])) bad = true;
     }
     if (bad) {   // safety guard: a bad value anywhere resets the engine instead of blasting or hanging the host
-      ++trips; for (auto& v : voices) v = Voice(); drv = DriveStage(); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
+      ++trips; for (auto& v : voices) v = Voice(); drv = DriveStage(); eq.prepare(sr); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
       for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
     }
     { float pl = 0.f, pr = 0.f; for (int i = 0; i < n; ++i) { pl = std::max(pl, std::fabs(outL[i])); pr = std::max(pr, std::fabs(outR[i])); } mtr.l = pl; mtr.r = pr; }
@@ -575,7 +608,7 @@ class Engine {
     }
     return v;
   }
-  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; DriveStage drv; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
+  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; DriveStage drv; EqStage eq; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
   int trips = 0;   // how many times the safety guard reset the engine
   Meters mtr;
   std::vector<float> subBusL, subBusR; float* sbL = nullptr; float* sbR = nullptr;
