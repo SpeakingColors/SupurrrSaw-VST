@@ -59,6 +59,31 @@ inline void tranceLead(Params& p) {
   p.master = 0.96f; p.amp = {0.004f, 0.8f, 0.85f, 0.45f}; p.spread = 1.f; p.chorusMix = 0.3f; p.delayMix = 0.08f; p.delayTime = 0.28f; p.delayFb = 0.3f; p.reverbMix = 0.07f; p.reverbSize = 0.6f;
 }
 
+// Hybrid trance supersaw: a tight centre stack for the fundamental, two wide stacks detuned a few cents down and up,
+// a high pitched filtered noise for air, low cut near 270 Hz so the kick and sub keep their room, a touch of tube saturation
+// before the time effects, a ping-pong delay and a reverb that skips the low end.
+inline void tranceHybrid(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 3; p.layer[0].detune = 0.15f; p.layer[0].level = 0.5f;                                      // core, stays clear
+  p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 9; p.layer[1].cents = 22.f; p.layer[1].tune = -6.f; p.layer[1].level = 0.55f; p.layer[1].pan = -0.2f;
+  p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 9; p.layer[2].cents = 22.f; p.layer[2].tune = 6.f;  p.layer[2].level = 0.55f; p.layer[2].pan = 0.2f;
+  p.subLevel = 0.1f; p.subWave = Wave::Sine; p.subOctave = -1;
+  p.noiseLevel = 0.05f; p.noiseHpHz = 8000.f;
+  p.cutoff = 11000.f; p.reso = 0.08f; p.drive = 0.2f; p.dist = 0.06f; p.envAmt = 0.1f; p.fenv = {0.003f, 0.5f, 0.7f, 0.3f}; p.lowCutHz = 270.f;
+  p.master = 0.9f; p.amp = {0.003f, 0.35f, 0.6f, 0.2f}; p.spread = 1.f;
+  p.chorusMix = 0.25f; p.delayMix = 0.12f; p.delayTime = 0.214f; p.delayFb = 0.35f; p.delayPing = 1.f; p.reverbMix = 0.12f; p.reverbSize = 0.7f; p.reverbLowCutHz = 500.f;
+}
+
+// 90s hard trance saw: rawer and warmer, wide analog style detune, more drive, a slightly open filter.
+inline void trance90s(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 7; p.layer[0].detune = 0.85f; p.layer[0].level = 0.6f;
+  p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 9; p.layer[1].detune = 0.9f; p.layer[1].octave = -1; p.layer[1].tune = -5.f; p.layer[1].level = 0.35f;
+  p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 9; p.layer[2].detune = 0.7f; p.layer[2].tune = 7.f; p.layer[2].level = 0.5f;
+  p.cutoff = 6500.f; p.reso = 0.2f; p.drive = 0.4f; p.dist = 0.12f; p.envAmt = 0.3f; p.fenv = {0.003f, 0.5f, 0.5f, 0.3f}; p.lowCutHz = 200.f; p.drift = 0.3f;
+  p.master = 0.9f; p.amp = {0.002f, 0.5f, 0.7f, 0.3f}; p.spread = 0.9f; p.chorusMix = 0.2f; p.delayMix = 0.1f; p.delayTime = 0.214f; p.delayFb = 0.3f; p.reverbMix = 0.1f; p.reverbSize = 0.65f; p.reverbLowCutHz = 400.f;
+}
+
 // Talking lead (Daft Punk style): a sync oscillator whose slave pitch is swept by an LFO and the envelope, follows the
 // note played (higher notes open the sync more) and the mod wheel, so it "talks". Saturated, almost dry.
 inline void talkingLead(Params& p) {
@@ -299,6 +324,7 @@ inline void crash(Params& p) {
 
 inline bool byName(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
+  else if (n == "trance_hybrid") tranceHybrid(p); else if (n == "trance_90s") trance90s(p);
   else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p);
   else if (n == "daft_funk") daftFunk(p); else if (n == "hoover_classic") hooverClassic(p); else if (n == "hoover_prodigy") hooverProdigy(p);
   else if (n == "better_off_alone") betterOffAlone(p); else if (n == "gimme_lead") gimmeLead(p); else if (n == "levels_lead") levelsLead(p); else if (n == "sandstorm_lead") sandstormLead(p);

@@ -12,6 +12,12 @@ Supersaw, hoover and acid synth.
 - [x] Engine: hard sync with swept slave, high-passed noise, distortion before or after the filter, LFO on detune
 - [x] Hard sync follows the note played (syncKey) and the mod wheel (syncWheel)
 - [x] Built-in presets (code): Hoover, Pick, Pluck, Trance Lead, Talking Lead (`presets/presets.h`, checked by `tools/presets_test.cpp`)
+- [x] Engine: 9 x 14 modulation matrix, drawn modulation envelope (points or free draw, curved option, sidechain shape), dance master output stage with dry/wet, drum presets (kick, snare, hats, crash), LP6 and LP12 filter modes, extra FX controls, safety guard that resets the engine if it ever produces non-finite output
+- [x] Presets: Hoover Classic is the default, then Trance Super Saw, Trance Hybrid and Trance 90s
+- [ ] Plugin only: **Open folder** button next to the preset and wave lists, opens the user data folder (presets, waves, logs) in the file manager so people can tailor them
+- [ ] Plugin only: **drag a note out as a .wav** to the DAW arranger (render the held note offline with the current patch, then start a native drag of the temporary file). The playground already exports a note as a .wav inside a .zip, with the same offline render
+- [ ] Plugin only: **diagnostics log**. Rolling text log (plugin version, sample rate, buffer size, host, voice and CPU peaks, safety guard resets, errors) capped at 1 MB, oldest lines dropped. Stored in the per-user data folder (the install folder is often read only, so it is not used), with **Open log folder** and **Copy diagnostics** buttons to paste into a GitHub issue. No audio, no personal data and nothing is sent automatically
+- [ ] Plugin only: **Audio on** kill switch as in the playground (silences the engine, keeps the UI alive, restart with one click)
 - [ ] Screech tools from the Airwave manual: feedback oscillator, X-Mod, ring mod
 - [ ] Shared FX rack (catfx from cat-ui) once the plugin shell exists
 - [ ] Presets to be tuned by ear; sync aliasing is only first-order band limited, add oversampling
