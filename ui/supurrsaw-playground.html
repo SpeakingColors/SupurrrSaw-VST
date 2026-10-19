@@ -219,7 +219,9 @@ canvas{display:block;max-width:100%}
     <button class="btn sm" id="help" data-tip="">?</button>
     <label class="row pill" data-tip="Window size. Fit fills the window, the others cap the size. It always keeps its shape."><select id="sizeSel" style="padding:2px 4px"><option value="fit">Fit</option><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select></label>
     <span class="lbl">Demo</span>
+    <button class="btn sm" id="demoPrev" data-tip="Previous demo. If a demo is playing, the new one starts right away.">◀</button>
     <select id="demo" data-tip="Original demo lines in many styles. Picking one sets the BPM. The last entry loads your own MIDI file."></select>
+    <button class="btn sm" id="demoNext" data-tip="Next demo. If a demo is playing, the new one starts right away.">▶</button>
     <label class="row pill" data-tip="Tempo of the demo loop and of the synced delay.">BPM <input type="number" id="bpm" value="140" min="40" max="240" style="width:60px"></label>
     <label class="row pill">Trans <input type="number" id="trs" value="0" min="-36" max="36" style="width:56px"></label>
     <button class="btn sm" id="demoPlay" data-tip="Loops your MIDI melody through the current patch. Keep moving the knobs while it plays.">Play</button>
@@ -2060,6 +2062,9 @@ function parseMidi(u){ // standard MIDI file: notes as [beat,length,note]
   ev.sort((a,b)=>a[0]-b[0]);const t0=ev.length?Math.floor(ev[0][0]/4)*4:0;ev.forEach(e=>{e[0]=+(e[0]-t0).toFixed(3);e[1]=+e[1].toFixed(3);});
   return {ev:ev.slice(0,4000),bpm:bpm||120};}
 let demoT=null,demoOffs=[],demoIdx=0,demoLap=0,demoStart=0,demoLoopLen=16,demoEv=null;
+function demoStep(d){const sel=$("#demo"),opts=[...sel.options].filter(o=>o.value!=="__file");if(!opts.length)return;let i=opts.findIndex(o=>o.value===sel.value);i=i<0?0:(i+d+opts.length)%opts.length;
+  const was=!!demoT;sel.value=opts[i].value;sel.onchange();if(was)setTimeout(()=>$("#demoPlay").click(),60);}
+$("#demoPrev").onclick=()=>demoStep(-1);$("#demoNext").onclick=()=>demoStep(1);
 function stopDemo(){if(demoT){clearInterval(demoT);demoT=null;}demoOffs.forEach(o=>send({t:"off",n:o.n}));demoOffs=[];$("#demoPlay").textContent="Play";$("#demoPlay").classList.remove("on");}
 $("#demoPlay").onclick=async()=>{
   if(demoT){stopDemo();return;}
