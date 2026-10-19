@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <map>
 #include <vector>
 
 namespace supurr {
@@ -13,9 +15,28 @@ constexpr int kMaxVoices = 32;  // hard limit; Params::polyphony sets how many a
 constexpr int kMaxSaws   = 15;  // unison voices per layer
 constexpr int kLayers    = 3;
 constexpr float kPi      = 3.14159265358979f;
+constexpr double kPiD    = 3.14159265358979323846;
 
 enum class Wave { Off, SuperSaw, SuperSquare, Saw, Pulse, Tri, Sine, Sample, Custom };
-enum class FilterMode { LP24, LP18, HP, BP, LP12, LP6 };   // LP12 and LP6 take the earlier taps of the same four pole ladder
+// The first six keep their old order (LP12 and LP6 take the earlier taps of the same four pole ladder); the rest are the newer types. Off lets a filter slot pass the signal untouched.
+enum class FilterMode { LP24, LP18, HP, BP, LP12, LP6, Off, Moog, Jupiter, MS20, SEM, Acid, HP24, BP24, Notch, CombP, CombM, Formant };
+constexpr int kFilterModes = 18;
+static const char* const kFilterNames[kFilterModes] = {"LP24", "LP18", "HP", "BP", "LP12", "LP6", "Off", "Moog", "Jupiter", "MS-20", "SEM", "Acid", "HP24", "BP24", "Notch", "Comb+", "Comb-", "Formant"};   // indexed by FilterMode
+// the order of the page's filter list (FILTER_MODES in the playground engine)
+static const FilterMode kFilterList[kFilterModes] = {FilterMode::Off, FilterMode::LP6, FilterMode::LP12, FilterMode::LP18, FilterMode::LP24, FilterMode::Moog, FilterMode::Jupiter, FilterMode::MS20, FilterMode::SEM, FilterMode::Acid,
+  FilterMode::HP, FilterMode::HP24, FilterMode::BP, FilterMode::BP24, FilterMode::Notch, FilterMode::CombP, FilterMode::CombM, FilterMode::Formant};
+inline FilterMode filterModeFromName(const char* n) { for (int i = 0; i < kFilterModes; ++i) { const char* a = kFilterNames[i]; const char* b = n; while (*a && *a == *b) { ++a; ++b; } if (!*a && !*b) return (FilterMode)i; } return FilterMode::LP24; }
+
+// Mod matrix: 15 sources x 23 destinations (same order as MX_SRC / MX_DST in the playground engine). Destinations 16 and up are global (effects, clipper, high pass, low pass, width).
+constexpr int kMxSrc = 15, kMxDst = 23;
+static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3"};
+static const char* const kMxDstNames[kMxDst] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
+
+// Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
+constexpr int kSmpCount = 20;
+static const char* const kSmpIds[kSmpCount] = {"Off", "click_soft", "click_hard", "click_tok", "kick_punch", "kick_hard", "sub_thump", "snare_crack", "snare_tight", "clap", "rim", "hat_closed", "hat_open", "pluck_soft", "pluck_hard", "pluck_pizz", "pluck_glass", "chime", "zap", "air_puff"};
+inline bool smpKeyed(int i) { return i >= 13 && i <= 17; }   // the plucks and the chime follow the key
+inline int smpFromId(const char* n) { for (int i = 0; i < kSmpCount; ++i) { const char* a = kSmpIds[i]; const char* b = n; while (*a && *a == *b) { ++a; ++b; } if (!*a && !*b) return i; } return 0; }
 
 // A loaded sample (WAV data already decoded). Shared between layers and voices, read only while playing.
 struct Sample {
@@ -73,10 +94,11 @@ struct WaveTable {
 // -1 bends inward (under the line, fast then slow). The decay and release defaults reproduce the earlier exponential feel.
 struct Adsr { float a = 0.002f, d = 0.3f, s = 0.8f, r = 0.3f, ca = 0.f, cd = -0.4f, cr = -0.4f; };
 // fraction of a move done after fraction f of its time; rising: outward = fast start, falling: outward = stays high longer
-inline float envShape(float f, float c, bool rising) {
-  float p = 1.f + 4.f * std::fabs(c);
-  bool fastStart = rising ? (c >= 0.f) : (c < 0.f);
-  return fastStart ? 1.f - std::pow(1.f - f, p) : std::pow(f, p);
+inline double envShape(double f, double c, bool rising) {
+  if (c == 0.0) return f;
+  const double p = 1.0 + 4.0 * std::fabs(c);
+  const bool fastStart = rising ? (c >= 0.0) : (c < 0.0);
+  return fastStart ? 1.0 - std::pow(1.0 - f, p) : std::pow(f, p);
 }
 
 struct LayerParams {
@@ -102,6 +124,8 @@ struct LayerParams {
   float fmAmt = 0.f;           // 0..1 depth (frequency deviation up to 3x the layer's own frequency)
   int amSrc = 0;               // amplitude modulation source, same list
   float amAmt = 0.f;           // 0..1; 1 is ring modulation, lower keeps some of the carrier
+  int smp = 0;                 // built-in sample played with this layer (index into kSmpIds, 0 = off), pitch in semitones, volume
+  float smpPitch = 0.f, smpVol = 1.f;
   std::shared_ptr<const Sample> sample;
   std::shared_ptr<const WaveTable> table;   // used by Wave::Custom (an imported or drawn cycle, played as a super stack)
 };
@@ -120,12 +144,16 @@ struct Params {
   bool mono = false;           // one voice, last note wins, a new note restarts the envelopes without a click
   int stackCount = 1;          // Stack mode (mono off): every key plays this many voices (1..4) spread by stackCents; 1 = plain poly
   float stackCents = 14.f;     // pitch spread of the stacked copies
-  float lowCutHz = 20.f;       // removes low rumble before the sub is added
+  float lowCutHz = 20.f;       // high pass on the whole voice after the filters (20 Hz .. 20 kHz); with the filters on HP or HP24 the page shows highCutHz here instead
+  float highCutHz = 20000.f;   // low pass on the whole voice after the filters; only active when the first filter is HP or HP24 (so the two make a band), 20 kHz = off
+  int auxSlope = 0;            // steepness of lowCutHz / highCutHz: 0 = 6 dB, 1 = 12, 2 = 18, 3 = 24 dB per octave
   float dist = 0.f;            // 0..1 distortion (acid, hoover, dirty reese, screech)
   bool distPre = false;        // true: distortion before the filter (the filter shapes the screech), false: after it
   float noiseLevel = 0.f;      // 0..1 white noise added before the filter
   float noiseHpHz = 3000.f;    // high-pass on the noise so it never muddies the low end
   Adsr amp, fenv;
+  Adsr amp2, amp3, fenv2, fenv3;   // amp2 / amp3 are the volume envelopes of layers 2 and 3 when ampLink is off; fenv2 / fenv3 drive filters 2 and 3 and the mod matrix
+  bool ampLink = true;             // true: the one amp envelope shapes the whole voice (the old behaviour); false: every layer has its own
   // pitch envelope (hoover dive): starts at +pitchAmt semitones, decays to 0
   float pitchAmt = 0.f, pitchTime = 0.09f, pitchAttack = 0.f;   // attack > 0: the pitch rises to pitchAmt over that time first, then decays
   // pitch fall (slow hoover bend down): drops by pitchFall semitones, reaching about 63% of it after pitchFallTime
@@ -179,187 +207,262 @@ struct Params {
   bool eq1On = false, eq2On = true, eq3On = true, eq4On = true, eq5On = true, eq6On = false;
   float eq1F = 30.f, eq2F = 120.f, eq2G = 0.f, eq3F = 500.f, eq3G = 0.f, eq3Q = 1.f, eq4F = 3000.f, eq4G = 0.f, eq4Q = 1.f, eq5F = 9000.f, eq5G = 0.f, eq6F = 18000.f;
   float drvDrive = 0.f, drvXs = 0.f, drvFuzz = 0.f, drvMix = 1.f;   // colour stack on the voice sum, before the effects (Drive, Transistor, Fuzz)
-  float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmHigh = 0.f;
+  float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmMid = 0.f, dmHigh = 0.f;
   // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random, drawn mod envelope.
   // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
-  float mx[9][14] = {};   // row 8 is the drawn mod envelope
+  float mx[kMxSrc][kMxDst] = {};   // rows 8, 13 and 14 are the drawn mod envelopes 1 to 3
   float menv[64]; float menvTime = 0.5f; bool menvLoop = false, menvInv = false;   // drawn modulation envelope (0..1 over menvTime seconds, one shot or loop)
-  Params() { for (int i = 0; i < 64; ++i) menv[i] = std::exp(-4.f * (float)i / 63.f); }
+  float menv2[64], menv3[64]; float menv2Time = 0.5f, menv3Time = 0.5f; bool menvSync = false, menv2Sync = false, menv3Sync = false; int menvDiv = 6, menv2Div = 6, menv3Div = 6; bool menv2Loop = false, menv3Loop = false, menv2Inv = false, menv3Inv = false;
+  // filters 2 and 3 (the first filter is filterMode / cutoff / reso / drive / envAmt / keyTrack). Off by default. fRoute 0 = in series, 1 = in parallel. Their envelope is fenv2 / fenv3.
+  FilterMode f2Mode = FilterMode::Off, f3Mode = FilterMode::Off; int fRoute = 0;
+  float f2Cut = 4000.f, f2Res = 0.2f, f2Drv = 0.f, f2Env = 0.f, f2Key = 0.f, f3Cut = 4000.f, f3Res = 0.2f, f3Drv = 0.f, f3Env = 0.f, f3Key = 0.f;
+  // LFO 2 and 3: rate, shape (0 sine, 1 tri, 2 square, 3 saw, 4 random square, 5 random round, 6 ramp down), depth, fade-in and start phase. They feed the mod matrix only.
+  float lfo2Rate = 6.f, lfo3Rate = 6.f, lfo2Depth = 1.f, lfo3Depth = 1.f, lfo2Fade = 0.f, lfo3Fade = 0.f, lfo2Start = 0.f, lfo3Start = 0.f; int lfo2Shape = 0, lfo3Shape = 0;
+  // procedural sample on the noise section, and where the samples are mixed in (false: before the filters, true: after them)
+  int nzSmp = 0; float nzSmpPitch = 0.f, nzSmpVol = 1.f; bool smpPost = false;
+  // build-up macro (0..1): high pass up to about 2.5 kHz, more reverb and delay, harder clipper, narrower highs, a little quieter
+  float build = 0.f;
+  // mod effect in the chorus slot: 0 chorus, 1 flanger, 2 phaser (chorusMix is the amount); chorusFb is the feedback of the flanger and phaser
+  int modFxType = 0; float chorusFb = 0.5f;
+  // crusher (bit depth and sample rate reduction) after the colour stack; crushMix 0 = off
+  float crushBits = 16.f, crushRate = 1.f, crushMix = 0.f;
+  // width: mid/side with separate width below and above 2 kHz, plus mid and side saturation (side only above 2 kHz)
+  float widMid = 1.f, widHi = 1.f, msMid = 0.f, msSide = 0.f;
+  // EQ bands 2 to 5: Dyn is the dynamic gain range in dB (0 = static), Thr threshold dB, Atk / Rel ms, Below = act when the band is quiet, Sat amount and SatT type (0 warm, 1 soft, 2 hard) of a saturator that only touches that band
+  float eq2Dyn = 0.f, eq2Thr = -24.f, eq2Atk = 10.f, eq2Rel = 120.f, eq2Sat = 0.f; bool eq2Below = false; int eq2SatT = 0;
+  float eq3Dyn = 0.f, eq3Thr = -24.f, eq3Atk = 10.f, eq3Rel = 120.f, eq3Sat = 0.f; bool eq3Below = false; int eq3SatT = 0;
+  float eq4Dyn = 0.f, eq4Thr = -24.f, eq4Atk = 10.f, eq4Rel = 120.f, eq4Sat = 0.f; bool eq4Below = false; int eq4SatT = 0;
+  float eq5Dyn = 0.f, eq5Thr = -24.f, eq5Atk = 10.f, eq5Rel = 120.f, eq5Sat = 0.f; bool eq5Below = false; int eq5SatT = 0;
+  Params() { for (int i = 0; i < 64; ++i) menv[i] = menv2[i] = menv3[i] = (float)std::exp(-4.0 * i / 63.0); }
 };
 
 // smooth knee clipper: identity below T, then T + w*tanh((|x|-T)/w); C2-continuous at T, tops out at exactly 1
-inline float softClip(float x, float T) {
-  float a = std::fabs(x); if (a <= T) return x;
-  float w = 1.f - T, y = T + w * std::tanh((a - T) / w); return x < 0.f ? -y : y;
+inline double softClip(double x, double T) {
+  double a = std::fabs(x); if (a <= T) return x;
+  double w = 1. - T, y = T + w * std::tanh((a - T) / w); return x < 0. ? -y : y;
 }
 
 // delay lengths in beats: 1/1, 1/2, 1/2 dotted, 1/2 triplet, 1/4, 1/4 dotted, 1/4 triplet, 1/8, 1/8 dotted, 1/8 triplet, 1/16, 1/16 dotted, 1/16 triplet, 1/32
-static const float kDelayBeats[14] = {4.f, 2.f, 3.f, 4.f / 3.f, 1.f, 1.5f, 2.f / 3.f, 0.5f, 0.75f, 1.f / 3.f, 0.25f, 0.375f, 1.f / 6.f, 0.125f};
-inline float delaySeconds(const Params& p) {
-  float t = p.delaySync ? kDelayBeats[std::max(0, std::min(13, p.delayDiv))] * 60.f / std::max(20.f, std::min(400.f, p.bpm)) : p.delayTime;
-  return std::max(0.02f, std::min(1.9f, t));
+static const double kDelayBeats[14] = {4., 2., 3., 4. / 3., 1., 1.5, 2. / 3., 0.5, 0.75, 1. / 3., 0.25, 0.375, 1. / 6., 0.125};
+inline double delaySeconds(const Params& p) {
+  double t = p.delaySync ? kDelayBeats[std::max(0, std::min(13, p.delayDiv))] * 60. / std::max(20., std::min(400., (double)p.bpm)) : (double)p.delayTime;
+  return std::max(0.02, std::min(1.9, t));
 }
 
-inline float midiToHz(float n) { return 440.f * std::exp2((n - 69.f) / 12.f); }
+inline double midiToHz(double n) { return 440. * std::exp2((n - 69.) / 12.); }
 
 // JP-8000 detune knob response (Adam Szabo, 2010), same curve as HyperSaw
-inline float jpDetune(float x) {
-  float y = 10028.7312891634f;
-  y = y * x - 50818.8652045924f;  y = y * x + 111363.4808729368f;
-  y = y * x - 138150.6761080548f; y = y * x + 106649.6679158292f;
-  y = y * x - 53046.9642751875f;  y = y * x + 17019.9518580080f;
-  y = y * x - 3425.0836591318f;   y = y * x + 404.2703938388f;
-  y = y * x - 24.1878824391f;     y = y * x + 0.6717417634f;
-  y = y * x + 0.0030115596f;
-  return std::min(1.f, std::max(0.f, y));
+inline double jpDetune(double x) {
+  double y = 10028.7312891634;
+  y = y * x - 50818.8652045924;  y = y * x + 111363.4808729368;
+  y = y * x - 138150.6761080548; y = y * x + 106649.6679158292;
+  y = y * x - 53046.9642751875;  y = y * x + 17019.9518580080;
+  y = y * x - 3425.0836591318;   y = y * x + 404.2703938388;
+  y = y * x - 24.1878824391;     y = y * x + 0.6717417634;
+  y = y * x + 0.0030115596;
+  return std::min(1., std::max(0., y));
 }
-constexpr float kMaxDetune = 0.11f;  // outer voice at full detune
-static const float kSpread15[15] = {-1.f, -.78f, -.58f, -.41f, -.26f, -.14f, -.05f, 0.f,
-                                    .052f, .143f, .262f, .413f, .583f, .782f, 1.f};
+constexpr double kMaxDetune = 0.11;  // outer voice at full detune
+static const double kSpread15[15] = {-1., -.78, -.58, -.41, -.26, -.14, -.05, 0.,
+                                    .052, .143, .262, .413, .583, .782, 1.};
 // spread position of unison voice j of n (n voices, centre voice included when n is odd)
-inline float sawSpread(int j, int n) {
-  if (n <= 1) return 0.f;
-  float t = (float)j * 14.f / (float)(n - 1);
+inline double sawSpread(int j, int n) {
+  if (n <= 1) return 0.;
+  double t = (double)j * 14. / (double)(n - 1);
   int i = std::min(13, (int)t);
-  float f = t - (float)i;
-  return kSpread15[i] * (1.f - f) + kSpread15[i + 1] * f;
+  double f = t - (double)i;
+  return kSpread15[i] * (1. - f) + kSpread15[i + 1] * f;
 }
 
-inline float blep(float t, float dt) {
-  if (t < dt) { t /= dt; return t + t - t * t - 1.f; }
-  if (t > 1.f - dt) { t = (t - 1.f) / dt; return t * t + t + t + 1.f; }
-  return 0.f;
+inline double blep(double t, double dt) {
+  if (t < dt) { t /= dt; return t + t - t * t - 1.; }
+  if (t > 1. - dt) { t = (t - 1.) / dt; return t * t + t + t + 1.; }
+  return 0.;
 }
 
-struct Rng { uint32_t s = 12345u; float next() { s = s * 1664525u + 1013904223u; return (float)(s >> 8) * (1.f / 16777216.f); } };
+struct Rng { uint32_t s = 12345u; double next() { s = s * 1664525u + 1013904223u; return (double)(s >> 8) / 16777216.0; } };   // same stream as the playground engine
 
+// The voice path runs in double precision (like the playground engine), so the two stay sample close.
 struct EnvState {
-  float v = 0.f, v0 = 0.f; int stage = 0; float n = 0.f;  // 0 idle 1 attack 2 decay/sustain 3 release; n counts samples in the stage
-  void on() { stage = 1; n = 0.f; v0 = v; }
-  void off() { if (stage && stage != 3) { stage = 3; n = 0.f; v0 = v; } }
-  float tick(const Adsr& e, float sr) {
+  double v = 0.0, v0 = 0.0, n = 0.0; int stage = 0;  // 0 idle 1 attack 2 decay/sustain 3 release; n counts samples in the stage
+  void on() { stage = 1; n = 0.0; v0 = v; }
+  void off() { if (stage && stage != 3) { stage = 3; n = 0.0; v0 = v; } }
+  double tick(const Adsr& e, double sr) {
     switch (stage) {
-      case 1: { n += 1.f; float len = std::max(1.f, e.a * sr * (1.f - v0)); float f = n / len;
-        if (f >= 1.f) { v = 1.f; stage = 2; n = 0.f; v0 = 1.f; } else v = v0 + (1.f - v0) * envShape(f, e.ca, true); break; }
-      case 2: { n += 1.f; float f = n / std::max(1.f, e.d * sr); v = f >= 1.f ? e.s : v0 + (e.s - v0) * envShape(f, e.cd, false); break; }
-      case 3: { n += 1.f; float f = n / std::max(1.f, e.r * sr); if (f >= 1.f) { v = 0.f; stage = 0; } else v = v0 * (1.f - envShape(f, e.cr, false)); break; }
+      case 1: { n += 1.0; double f = n / std::max(1.0, (double)e.a * sr * (1.0 - v0));
+        if (f >= 1.0) { v = 1.0; stage = 2; n = 0.0; v0 = 1.0; } else v = v0 + (1.0 - v0) * envShape(f, e.ca, true); break; }
+      case 2: { n += 1.0; double f = n / std::max(1.0, (double)e.d * sr); v = f >= 1.0 ? (double)e.s : v0 + ((double)e.s - v0) * envShape(f, e.cd, false); break; }
+      case 3: { n += 1.0; double f = n / std::max(1.0, (double)e.r * sr); if (f >= 1.0) { v = 0.0; stage = 0; } else v = v0 * (1.0 - envShape(f, e.cr, false)); break; }
       default: break;
     }
     return v;
   }
 };
 
-// 4-pole ladder (zero delay feedback) with LP24 and LP18 taps, plus a 12 dB state variable filter for HP and BP.
+// Filters. LP24 / LP18 / LP12 / LP6 / Jupiter: four pole ladder (zero delay feedback) with the taps. Moog and Acid: nonlinear four stage ladders, 2x oversampled. MS-20: two pole with hot resonance and clipped state.
+// SEM: clean two pole. HP, BP, Notch, HP24, BP24: state variable filters. Comb+ and Comb-: feedback comb tuned by the cutoff. Formant: three vowel resonators, the cutoff sweeps A E I O U.
+static const double kFormants[5][3] = {{730, 1090, 2440}, {530, 1840, 2480}, {270, 2290, 3010}, {570, 840, 2410}, {300, 870, 2240}};
 struct Filter {
-  float s[4] = {0, 0, 0, 0}, z1 = 0, z2 = 0, inE = 0, outE = 0;   // inE/outE follow the level before and after the drive curve
-  void reset() { s[0] = s[1] = s[2] = s[3] = z1 = z2 = inE = outE = 0; }
-  float process(float x, FilterMode m, float cutoffHz, float reso, float drive, float sr) {
-    float fc = std::min(cutoffHz, 0.45f * sr);
-    float g = std::tan(kPi * fc / sr);
-    if (m == FilterMode::LP24 || m == FilterMode::LP18 || m == FilterMode::LP12 || m == FilterMode::LP6) {
-      float G = g / (1.f + g), G2 = G * G, G4 = G2 * G2;
-      float k = 3.95f * reso;
-      float S = G2 * G * s[0] / (1.f + g) + G2 * s[1] / (1.f + g) + G * s[2] / (1.f + g) + s[3] / (1.f + g);
-      const float dg = 0.5f + 3.f * drive;   // soft input stage: unity small-signal gain, drive only adds curvature
-      float in = std::tanh(x * dg) / dg;
-      // drive adds harmonics, not quietness: follow the level lost in the curve (30 ms) and give it back
-      const float fa = 1.f - std::exp(-1.f / (0.03f * sr));
-      inE += fa * (std::fabs(x) - inE); outE += fa * (std::fabs(in) - outE);
-      if (outE > 1e-5f && drive > 0.f) in *= std::min(4.f, std::max(1.f, inE / outE));
-      float y4 = (G4 * in + S) / (1.f + k * G4);
-      float u = in - k * y4;
-      float y[4]; float xi = u;
-      for (int i = 0; i < 4; ++i) { float v = G * (xi - s[i]); y[i] = v + s[i]; s[i] = y[i] + v; xi = y[i]; }
-      return (m == FilterMode::LP24) ? y[3] : (m == FilterMode::LP18 ? y[2] : (m == FilterMode::LP12 ? y[1] : y[0]));
+  double s[4] = {0, 0, 0, 0}, z1 = 0, z2 = 0, z3 = 0, z4 = 0, y[4] = {0, 0, 0, 0}, inE = 0, outE = 0, t[4] = {0, 0, 0, 0}, yy[4] = {0, 0, 0, 0}, fbl = 0, cd = 0, fz[6] = {0, 0, 0, 0, 0, 0}, hp_ = 0, bp_ = 0, lp_ = 0;
+  double lc = -1, lsr = -1, lg = 0; int ci = 0; float* cb = nullptr; bool cbInit = false;   // cb: 4096 floats for the comb modes, lent by the engine
+  void svf(double x, double g, double R, bool st) {
+    const double a1 = st ? z3 : z1, a2 = st ? z4 : z2;
+    const double hp = (x - (2 * R + g) * a1 - a2) / (1 + 2 * R * g + g * g), bp = g * hp + a1, lp = g * bp + a2;
+    if (st) { z3 = g * hp + bp; z4 = g * bp + lp; } else { z1 = g * hp + bp; z2 = g * bp + lp; }
+    hp_ = hp; bp_ = bp; lp_ = lp;
+  }
+  double process(double x, FilterMode m, double cutoffHz, double reso, double drive, double sr) {
+    if (m == FilterMode::Off) return x;
+    double g; if (cutoffHz == lc && sr == lsr) g = lg; else { const double fc = std::min(cutoffHz, 0.45 * sr); g = std::tan(kPiD * fc / sr); lc = cutoffHz; lsr = sr; lg = g; }
+    switch (m) {
+      case FilterMode::LP24: case FilterMode::LP18: case FilterMode::LP12: case FilterMode::LP6: case FilterMode::Jupiter: {
+        const double G = g / (1 + g), G2 = G * G, G4 = G2 * G2, k = 3.95 * reso, ig = 1 / (1 + g);
+        const double S = G2 * G * s[0] * ig + G2 * s[1] * ig + G * s[2] * ig + s[3] * ig;
+        const double dg = 0.5 + 3 * drive; double inp = std::tanh(x * dg) / dg; if (m == FilterMode::Jupiter) inp *= 1 + 0.2 * k;
+        const double fa = 1 - std::exp(-1 / (0.03 * sr)); inE += fa * (std::fabs(x) - inE); outE += fa * (std::fabs(inp) - outE);
+        if (outE > 1e-5 && drive > 0) inp *= std::min(4.0, std::max(1.0, inE / outE));
+        const double y4 = (G4 * inp + S) / (1 + k * G4), u = inp - k * y4; double xi = u;
+        for (int i = 0; i < 4; ++i) { const double v = G * (xi - s[i]); y[i] = v + s[i]; s[i] = y[i] + v; xi = y[i]; }
+        return (m == FilterMode::LP24 || m == FilterMode::Jupiter) ? y[3] : (m == FilterMode::LP18 ? y[2] : (m == FilterMode::LP12 ? y[1] : y[0]));
+      }
+      case FilterMode::Moog: {
+        const double ga = 1 - std::exp(-kPiD * std::min(cutoffHz, 0.45 * sr) / sr), k = 4 * reso, dg = 1 + 3 * drive; double o = 0;
+        for (int p = 0; p < 2; ++p) { const double u = std::tanh(x * dg * 0.8 - k * yy[3]);
+          yy[0] += ga * (u - t[0]); t[0] = std::tanh(yy[0]); yy[1] += ga * (t[0] - t[1]); t[1] = std::tanh(yy[1]); yy[2] += ga * (t[1] - t[2]); t[2] = std::tanh(yy[2]); yy[3] += ga * (t[2] - t[3]); t[3] = std::tanh(yy[3]); o += yy[3]; }
+        return 0.5 * o * (1 + 0.3 * k) / std::sqrt(dg);
+      }
+      case FilterMode::MS20: {
+        const double R = 0.5 * (1 - 0.975 * reso) + 0.012, dg = 1 + 2 * drive; svf(std::tanh(x * dg * 1.2) / dg, g, R, false);
+        z1 = std::tanh(z1 * 0.7) / 0.7; z2 = std::tanh(z2 * 0.7) / 0.7; return std::tanh(lp_ * 1.1) * 0.95;
+      }
+      case FilterMode::SEM: { const double R = 0.5 * (1 - 0.9 * reso) + 0.06; svf(x, g, R, false); return lp_; }
+      case FilterMode::Acid: {
+        const double ga = 1 - std::exp(-kPiD * std::min(cutoffHz, 0.45 * sr) / sr), k = 4.1 * reso, dg = 1 + 5 * drive; double o = 0;
+        for (int p = 0; p < 2; ++p) { const double fbv = yy[3] - fbl; fbl += 0.003 * (yy[3] - fbl);
+          const double u = std::tanh(x * dg * 0.9 - k * fbv * 0.97);
+          yy[0] += ga * (u - t[0]); t[0] = std::tanh(yy[0]); yy[1] += ga * (t[0] - t[1]); t[1] = std::tanh(yy[1]); yy[2] += ga * (t[1] - t[2]); t[2] = std::tanh(yy[2]); yy[3] += ga * (t[2] - t[3]); t[3] = std::tanh(yy[3]); o += 0.6 * yy[2] + 0.4 * yy[3]; }
+        return 0.5 * o * (1 + 0.25 * k) / std::sqrt(dg);
+      }
+      case FilterMode::CombP: case FilterMode::CombM: {
+        if (!cb) return x;
+        if (!cbInit) { for (int i = 0; i < 4096; ++i) cb[i] = 0.f; cbInit = true; }
+        const double f = std::max(30.0, std::min(0.45 * sr, cutoffHz)), D = std::max(2.0, std::min(4090.0, sr / f)), fb = (m == FilterMode::CombP ? 1.0 : -1.0) * std::min(0.96, reso * 0.96); const int n = 4096;
+        double rp = (double)ci - D; if (rp < 0) rp += n; const int i0 = (int)std::floor(rp); const double fr = rp - i0, a = cb[i0 % n], b = cb[(i0 + 1) % n]; double d = a * (1 - fr) + b * fr;
+        cd += 0.55 * (d - cd); d = cd;
+        const double yv = x + fb * d; cb[ci] = (float)yv; ci = (ci + 1) % n; return yv * (1 - 0.5 * std::fabs(fb)) * 0.8;
+      }
+      case FilterMode::Formant: {
+        const double pos = std::min(0.9999, std::max(0.0, std::log(std::max(20.0, cutoffHz) / 20) / std::log(1000.0))) * 4; const int i = (int)std::floor(pos); const double fr = pos - i, Q = 3 + reso * 20; double o = 0;
+        const double* A = kFormants[i]; const double* B = kFormants[i + 1];
+        for (int j = 0; j < 3; ++j) { const double f = A[j] + (B[j] - A[j]) * fr, gg = std::tan(kPiD * std::min(f, 0.45 * sr) / sr), R = 0.5 / Q, a1 = fz[j * 2], a2 = fz[j * 2 + 1];
+          const double hp = (x - (2 * R + gg) * a1 - a2) / (1 + 2 * R * gg + gg * gg), bp = gg * hp + a1; fz[j * 2] = gg * hp + bp; fz[j * 2 + 1] = gg * bp + (gg * bp + a2); o += bp * (j == 0 ? 1 : (j == 1 ? 0.7 : 0.4)) * 2 * R * Q * 0.5; }
+        return o * 1.6;
+      }
+      default: break;
     }
-    float R = 0.5f * (1.f - 0.95f * reso) + 0.02f;
-    float hp = (x - (2.f * R + g) * z1 - z2) / (1.f + 2.f * R * g + g * g);
-    float bp = g * hp + z1; z1 = g * hp + bp;
-    float lp = g * bp + z2; z2 = g * bp + lp;
-    (void)lp;
-    return (m == FilterMode::HP) ? hp : bp * (2.f * R);
+    const double R = 0.5 * (1 - 0.95 * reso) + 0.02;
+    svf(x, g, R, false); const double hp = hp_, bp = bp_, lp = lp_;
+    if (m == FilterMode::HP) return hp;
+    if (m == FilterMode::BP) return bp * (2 * R);
+    if (m == FilterMode::Notch) return hp + lp;
+    const double R2 = 0.55;
+    if (m == FilterMode::HP24) { svf(hp, g, R2, true); return hp_; }
+    svf(bp * (2 * R), g, R2, true); return bp_ * (2 * R2);   // BP24
   }
 };
 
+// LFO shapes 0..6: sine, triangle, square, saw up, random square (new value every cycle), random round (glides between random values), ramp down
+static const double kMenvBeats[16] = {16, 8, 4, 2, 3, 4. / 3, 1, 1.5, 2. / 3, 0.5, 0.75, 1. / 3, 0.25, 0.375, 1. / 6, 0.125};   // drawn envelope length in beats for menvDiv
+inline double lfoWave(int sh, double ph, double cur, double prev) {
+  switch (sh) { case 1: return 4 * std::fabs(ph - 0.5) - 1; case 2: return ph < 0.5 ? 1.0 : -1.0; case 3: return 2 * ph - 1; case 4: return cur; case 5: return prev + (cur - prev) * (1 - std::cos(kPiD * ph)) * 0.5; case 6: return 1 - 2 * ph; default: return std::sin(2 * kPiD * ph); }
+}
+
 struct Voice {
-  bool active = false; int note = 60; float vel = 1.f; uint64_t age = 0;
-  float phase[kLayers][kMaxSaws] = {};
+  bool active = false; int note = 60; double vel = 1.0; uint64_t age = 0;
+  double phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
-  float gl = 0.f; float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
-  float rnd = 0.f, sh = 0.f; float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
-  float lfoPhase = 0.f, t = 0.f, stackCents = 0.f, stackGain = 1.f;
-  float lyOut[kLayers] = {}, fmSubPh = 0.f, nzRaw = 0.f;   // last sample of each layer, FM/AM sources
-  EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
+  double syncPhase[kLayers] = {}, noiseHp = 0, noiseHp2 = 0, gl = 0;
+  double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
+  double lfoPhase = 0, t = 0, stackCents = 0, stackGain = 1;
+  double lyOut[kLayers] = {}, fmSubPh = 0;
+  // control rate values (updated every 4th sample), the second and third LFO, their own random stream (lfoRnd), procedural sample positions and steps
+  int ctr = 0; double lfoC = 0, pEnv = 0, pcC[kLayers] = {1, 1, 1}, psC[kLayers] = {0, 0, 0}, fC[kLayers] = {440, 440, 440}, cc[3] = {1000, 1000, 1000}, laC = 0.01, hcC = 0.9;
+  double lp2[2] = {0, 0}, sa[2] = {0, 0}, sb[2] = {0, 0}, lc2[2] = {0, 0}; uint32_t rs = 1;
+  double sp[4] = {0, 0, 0, 0}, sq[4] = {1, 1, 1, 1}, ax[8] = {0, 0, 0, 0, 0, 0, 0, 0}, svL[kMxSrc] = {};
+  EnvState amp, amp2, amp3, fenv, fenv2, fenv3; Filter fl[3], fr[3]; double hpL = 0, hpR = 0; bool oneShot = false;
+  double lfoRnd() { rs = rs * 1664525u + 1013904223u; return (double)(rs >> 8) / 16777216.0 * 2.0 - 1.0; }
 };
 
 
 // ---- effects ----
 struct DelayLine {
-  std::vector<float> b; size_t w = 0;
+  std::vector<float> b; size_t w = 0;   // float storage, like the playground engine's Float32Array
   void init(size_t n) { b.assign(n + 4, 0.f); w = 0; }
-  void push(float x) { b[w] = x; if (++w >= b.size()) w = 0; }
-  float read(float d) const {  // d samples back, linear interpolation
-    float rp = (float)w - d; while (rp < 0) rp += (float)b.size(); if (rp >= (float)b.size()) rp -= (float)b.size(); size_t i0 = (size_t)rp; float f = rp - (float)i0;
-    size_t i1 = i0 + 1 >= b.size() ? 0 : i0 + 1; return b[i0] * (1.f - f) + b[i1] * f; }
+  void push(double x) { b[w] = (float)x; if (++w >= b.size()) w = 0; }
+  double read(double d) const {  // d samples back, linear interpolation
+    double rp = (double)w - d; while (rp < 0) rp += (double)b.size(); if (rp >= (double)b.size()) rp -= (double)b.size(); size_t i0 = (size_t)rp; double f = rp - (double)i0;
+    size_t i1 = i0 + 1 >= b.size() ? 0 : i0 + 1; return b[i0] * (1. - f) + b[i1] * f; }
 };
 struct Reverb {
-  struct Comb { std::vector<float> b; size_t i = 0; float lp = 0; float run(float x, float fb, float damp) { float o = b[i]; lp = o * (1.f - damp) + lp * damp; b[i] = x + lp * fb; if (++i >= b.size()) i = 0; return o; } };
-  struct Ap { std::vector<float> b; size_t i = 0; float run(float x) { float o = b[i]; float y = -x + o; b[i] = x + o * 0.5f; if (++i >= b.size()) i = 0; return y; } };
+  struct Comb { std::vector<float> b; size_t i = 0; double lp = 0; double run(double x, double fb, double damp) { double o = b[i]; lp = o * (1. - damp) + lp * damp; b[i] = (float)(x + lp * fb); if (++i >= b.size()) i = 0; return o; } };
+  struct Ap { std::vector<float> b; size_t i = 0; double run(double x) { double o = b[i]; double y = -x + o; b[i] = (float)(x + o * 0.5); if (++i >= b.size()) i = 0; return y; } };
   Comb c[2][8]; Ap a[2][4];
-  void init(float sr) {
+  void init(double sr) {
     const int cl[8] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617}, al[4] = {556, 441, 341, 225};
-    float k = sr / 44100.f;
+    double k = sr / 44100.;
     for (int ch = 0; ch < 2; ++ch) { for (int j = 0; j < 8; ++j) { c[ch][j].b.assign((size_t)((cl[j] + ch * 23) * k), 0.f); c[ch][j].i = 0; c[ch][j].lp = 0; }
       for (int j = 0; j < 4; ++j) { a[ch][j].b.assign((size_t)((al[j] + ch * 11) * k), 0.f); a[ch][j].i = 0; } }
   }
   // input mono, outputs wet L/R
-  void run(float in, float size, float damp, float& wl, float& wr) {
-    float fb = 0.70f + 0.27f * size, o[2];
-    for (int ch = 0; ch < 2; ++ch) { float s = 0; for (int j = 0; j < 8; ++j) s += c[ch][j].run(in * 0.15f, fb, damp); for (int j = 0; j < 4; ++j) s = a[ch][j].run(s); o[ch] = s; }
+  void run(double in, double size, double damp, double& wl, double& wr) {
+    double fb = 0.70 + 0.27 * size, o[2];
+    for (int ch = 0; ch < 2; ++ch) { double s = 0; for (int j = 0; j < 8; ++j) s += c[ch][j].run(in * 0.15, fb, damp); for (int j = 0; j < 4; ++j) s = a[ch][j].run(s); o[ch] = s; }
     wl = o[0]; wr = o[1];
   }
 };
 // ---- colour stack: Drive, Transistor, Fuzz (PurrOne stages), 2x oversampled with a 33 tap half-band, fixed 16 sample latency ----
-inline float sstep(float t) { t = t < 0.f ? 0.f : t > 1.f ? 1.f : t; return t * t * (3.f - 2.f * t); }
-inline float asymTanh(float u, float nl) { return u >= 0.f ? std::tanh(u) : nl * std::tanh(u / nl); }
-inline float purrShaper(float x, float drive, float xs, float fuzz) {
-  const float dn = sstep((drive - 0.8f) * 5.f), xn = sstep((xs - 0.8f) * 5.f), fn = sstep((fuzz - 0.8f) * 5.f); float y = x;
-  if (drive > 0.001f) { y = std::tanh(x * (1.f + drive * 5.f + dn * 30.f)); if (dn > 0.f) y += dn * (std::tanh(y * (2.f + 10.f * dn)) - y); }
-  if (xs > 0.001f) { const float nl = std::max(0.25f, 1.f - 0.3f * xs - 0.25f * xn), u = y * (1.f + xs * 5.f + xn * 30.f); y = asymTanh(u, nl); y += (0.3f * xs + 0.25f * xn) * y * y; if (xn > 0.f) { const float y2 = asymTanh(y * (2.f + 10.f * xn) + 0.15f * xn, nl); y += xn * (y2 - y); } }
-  if (fuzz > 0.001f) { const float fz = 1.f + fuzz * 14.f + fn * 70.f, bf = 0.5f * std::min(1.f, fuzz); y = std::tanh(y * fz + bf) - std::tanh(bf); if (fn > 0.f) { const float r = std::sqrt(y * y + 0.02f) - 0.1414f; y += fn * 0.7f * (r - 0.3f); y = std::tanh(y * (1.f + 0.8f * fn)); } }
+inline double sstep(double t) { t = t < 0. ? 0. : t > 1. ? 1. : t; return t * t * (3. - 2. * t); }
+inline double asymTanh(double u, double nl) { return u >= 0. ? std::tanh(u) : nl * std::tanh(u / nl); }
+inline double purrShaper(double x, double drive, double xs, double fuzz) {
+  const double dn = sstep((drive - 0.8) * 5.), xn = sstep((xs - 0.8) * 5.), fn = sstep((fuzz - 0.8) * 5.); double y = x;
+  if (drive > 0.001) { y = std::tanh(x * (1. + drive * 5. + dn * 30.)); if (dn > 0.) y += dn * (std::tanh(y * (2. + 10. * dn)) - y); }
+  if (xs > 0.001) { const double nl = std::max(0.25, 1. - 0.3 * xs - 0.25 * xn), u = y * (1. + xs * 5. + xn * 30.); y = asymTanh(u, nl); y += (0.3 * xs + 0.25 * xn) * y * y; if (xn > 0.) { const double y2 = asymTanh(y * (2. + 10. * xn) + 0.15 * xn, nl); y += xn * (y2 - y); } }
+  if (fuzz > 0.001) { const double fz = 1. + fuzz * 14. + fn * 70., bf = 0.5 * std::min(1., fuzz); y = std::tanh(y * fz + bf) - std::tanh(bf); if (fn > 0.) { const double r = std::sqrt(y * y + 0.02) - 0.1414; y += fn * 0.7 * (r - 0.3); y = std::tanh(y * (1. + 0.8 * fn)); } }
   return y;
 }
-inline float purrMakeup(float drive, float xs, float fuzz, float ref) { float a = 0.f, b = 0.f; for (int i = 0; i < 64; ++i) { const float x = ref * std::sin(2.f * kPi * (float)i / 64.f); a += x * x; const float y = purrShaper(x, drive, xs, fuzz); b += y * y; } const float m = b > 1e-9f ? std::sqrt(a / b) : 1.f; return std::min(4.f, std::max(0.25f, m)); }
+inline double purrMakeup(double drive, double xs, double fuzz, double ref) { double a = 0., b = 0.; for (int i = 0; i < 64; ++i) { const double x = ref * std::sin(2. * kPiD * (double)i / 64.); a += x * x; const double y = purrShaper(x, drive, xs, fuzz); b += y * y; } const double m = b > 1e-9 ? std::sqrt(a / b) : 1.; return std::min(4., std::max(0.25, m)); }
 struct HalfBand33 { double h[33], o[16];
   HalfBand33() { auto i0 = [](double x) { double s = 1, t = 1; for (int k = 1; k < 30; ++k) { t *= (x / (2 * k)) * (x / (2 * k)); s += t; } return s; };
     for (int j = 0; j < 33; ++j) { double r = 2.0 * j / 32.0 - 1.0, w = i0(8.0 * std::sqrt(1.0 - r * r)) / i0(8.0); int k = j - 16; h[j] = (k == 0 ? 0.5 : std::sin(3.14159265358979323846 * k / 2.0) / (3.14159265358979323846 * k)) * w; }
     for (int k = 0; k < 16; ++k) o[k] = h[2 * k + 1]; } };
 inline const HalfBand33& halfBand33() { static const HalfBand33 hb; return hb; }
 struct DriveCh {
-  float x[32] = {}, s[64] = {}, dd[16] = {}; int xi = 0, si = 0, di = 0; float dc = 0.f;
-  float run(float v, bool on, float drive, float xs, float fuzz, float mk, float mix) {
+  double x[32] = {}, s[64] = {}, dd[16] = {}; int xi = 0, si = 0, di = 0; double dc = 0.;
+  double run(double v, bool on, double drive, double xs, double fuzz, double mk, double mix) {
     const HalfBand33& hb = halfBand33(); x[xi] = v; const int xc = xi; xi = (xi + 1) & 31;
-    const float dry = dd[di]; dd[di] = v; di = (di + 1) & 15;
-    if (!on) { si = (si + 1) & 63; s[si] = 0.f; si = (si + 1) & 63; s[si] = 0.f; dc = 0.f; return dry; }
-    const float u0 = x[(xc - 8) & 31]; double u1 = 0; for (int k = 0; k < 16; ++k) u1 += hb.o[k] * x[(xc - k) & 31]; u1 *= 2.0;
-    si = (si + 1) & 63; s[si] = purrShaper(u0 * 1.5f, drive, xs, fuzz) * mk / 1.5f;
+    const double dry = dd[di]; dd[di] = v; di = (di + 1) & 15;
+    if (!on) { si = (si + 1) & 63; s[si] = 0.; si = (si + 1) & 63; s[si] = 0.; dc = 0.; return dry; }
+    const double u0 = x[(xc - 8) & 31]; double u1 = 0; for (int k = 0; k < 16; ++k) u1 += hb.o[k] * x[(xc - k) & 31]; u1 *= 2.0;
+    si = (si + 1) & 63; s[si] = purrShaper(u0 * 1.5, drive, xs, fuzz) * mk / 1.5;
     const int p = si; double y = 0.5 * s[(p - 16) & 63]; for (int k = 0; k < 16; ++k) y += hb.o[k] * s[(p - 2 * k - 1) & 63];
-    si = (si + 1) & 63; s[si] = purrShaper((float)u1 * 1.5f, drive, xs, fuzz) * mk / 1.5f;
-    dc += 0.0005f * ((float)y - dc); return dry * (1.f - mix) + ((float)y - dc) * mix; } };
+    si = (si + 1) & 63; s[si] = purrShaper((double)u1 * 1.5, drive, xs, fuzz) * mk / 1.5;
+    dc += 0.0005 * ((double)y - dc); return dry * (1. - mix) + ((double)y - dc) * mix; } };
 struct DriveStage {
-  DriveCh c[2]; float kd = -1.f, kx = -1.f, kf = -1.f, mk = 1.f; float sl[16] = {}, sr[16] = {}; int si = 0; float oL = 0.f, oR = 0.f, sL = 0.f, sR = 0.f;
-  void process(const Params& p, float L, float R, float sbl, float sbr) {
-    const float d = p.drvDrive, xs = p.drvXs, fz = p.drvFuzz; const bool on = d > 0.001f || xs > 0.001f || fz > 0.001f;
-    if (on && (d != kd || xs != kx || fz != kf)) { kd = d; kx = xs; kf = fz; mk = purrMakeup(d, xs, fz, 0.75f); }
+  DriveCh c[2]; double kd = -1., kx = -1., kf = -1., mk = 1.; double sl[16] = {}, sr[16] = {}; int si = 0; double oL = 0., oR = 0., sL = 0., sR = 0.;
+  void process(const Params& p, double L, double R, double sbl, double sbr) {
+    const double d = p.drvDrive, xs = p.drvXs, fz = p.drvFuzz; const bool on = d > 0.001 || xs > 0.001 || fz > 0.001;
+    if (on && (d != kd || xs != kx || fz != kf)) { kd = d; kx = xs; kf = fz; mk = purrMakeup(d, xs, fz, 0.75); }
     oL = c[0].run(L, on, d, xs, fz, mk, p.drvMix); oR = c[1].run(R, on, d, xs, fz, mk, p.drvMix);
     sL = sl[si]; sR = sr[si]; sl[si] = sbl; sr[si] = sbr; si = (si + 1) & 15; } };
-// ---- 6 band EQ: low cut, low shelf, 2 bells, high shelf, high cut (RBJ biquads, double precision) ----
-enum class EqType { HP, LS, PK, HS, LP };
+// ---- 6 band EQ: low cut, low shelf, 2 bells, high shelf, high cut (RBJ biquads, double precision).
+// Bands 2 to 5 can also be dynamic (their gain moves with the level inside the band) and can saturate only their own band. ----
+enum class EqType { HP, LS, PK, HS, LP, BP };
 inline void eqCoef(EqType type, double f, double g, double q, double sr, double* o) {
-  const double w = 2.0 * 3.14159265358979323846 * std::min(std::max(f, 10.0), 0.45 * sr) / sr, c = std::cos(w), sn = std::sin(w), al = sn / (2.0 * std::max(0.1, q));
+  const double w = 2.0 * kPiD * std::min(std::max(f, 10.0), 0.45 * sr) / sr, c = std::cos(w), sn = std::sin(w), al = sn / (2.0 * std::max(0.1, q));
   double b0, b1, b2, a0, a1, a2;
   if (type == EqType::HP) { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = b0; a0 = 1 + al; a1 = -2 * c; a2 = 1 - al; }
   else if (type == EqType::LP) { b0 = (1 - c) / 2; b1 = 1 - c; b2 = b0; a0 = 1 + al; a1 = -2 * c; a2 = 1 - al; }
+  else if (type == EqType::BP) { b0 = al; b1 = 0; b2 = -al; a0 = 1 + al; a1 = -2 * c; a2 = 1 - al; }
   else { const double A = std::pow(10.0, g / 40.0);
     if (type == EqType::PK) { b0 = 1 + al * A; b1 = -2 * c; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * c; a2 = 1 - al / A; }
     else { const double be = 2 * std::sqrt(A) * al;
@@ -367,232 +470,342 @@ inline void eqCoef(EqType type, double f, double g, double q, double sr, double*
       else { b0 = A * ((A + 1) + (A - 1) * c + be); b1 = -2 * A * ((A - 1) + (A + 1) * c); b2 = A * ((A + 1) + (A - 1) * c - be); a0 = (A + 1) - (A - 1) * c + be; a1 = 2 * ((A - 1) - (A + 1) * c); a2 = (A + 1) - (A - 1) * c - be; } } }
   o[0] = b0 / a0; o[1] = b1 / a0; o[2] = b2 / a0; o[3] = a1 / a0; o[4] = a2 / a0;
 }
+inline double lcosh(double x) { const double a = std::fabs(x); return a > 15 ? a - 0.693147 : std::log(std::cosh(x)); }
+inline double adaaTanh(double v, double v1) { const double d = v - v1; return std::fabs(d) < 1e-4 ? std::tanh(0.5 * (v + v1)) : (lcosh(v) - lcosh(v1)) / d; }   // antiderivative anti-aliased tanh
+static const double kSatDr[3] = {7, 4.5, 16}, kSatBias[3] = {0.3, 0, 0.55}, kSatOut[3] = {1, 1, 0.85};
 struct EqStage {
-  double sr = 48000.0, z[24] = {}, co[30] = {}; bool act[6] = {}, any = false; float key[18] = {-1e9f}; float oL = 0.f, oR = 0.f;
-  void prepare(double s) { sr = s; for (double& v : z) v = 0; for (float& k : key) k = -1e9f; any = false; }
+  double sr = 48000.0, z[24] = {}, co[30] = {}, bz[24] = {}, bco[30] = {}; bool act[6] = {}, any = false, need = false; double oL = 0., oR = 0.;
+  std::vector<double> key; unsigned char dyn[6] = {}, satT[6] = {}, below[6] = {}; double sat[6] = {}, nrm[6] = {}, env[6] = {}, gcur[6] = {}, f[6] = {}, g0[6] = {}, q[6] = {}, thr[6] = {}, rng[6] = {}, ac[6] = {}, rc[6] = {}, u1[12] = {}, dc[12] = {}; unsigned ctr = 0;
+  void prepare(double s) { sr = s; for (double& v : z) v = 0; for (double& v : bz) v = 0; key.clear(); any = false; need = false; ctr = 0;
+    for (int i = 0; i < 6; ++i) { dyn[i] = 0; sat[i] = 0; env[i] = 0; gcur[i] = 0; } for (int i = 0; i < 12; ++i) u1[i] = dc[i] = 0; }
   void update(const Params& p) {
-    const float k[18] = {(float)p.eq1On, p.eq1F, (float)p.eq2On, p.eq2F, p.eq2G, (float)p.eq3On, p.eq3F, p.eq3G, p.eq3Q, (float)p.eq4On, p.eq4F, p.eq4G, p.eq4Q, (float)p.eq5On, p.eq5F, p.eq5G, (float)p.eq6On, p.eq6F};
-    bool same = true; for (int i = 0; i < 18; ++i) if (k[i] != key[i]) same = false; if (same) return; for (int i = 0; i < 18; ++i) key[i] = k[i];
-    const bool on[6] = {p.eq1On, p.eq2On, p.eq3On, p.eq4On, p.eq5On, p.eq6On}; const double f[6] = {p.eq1F, p.eq2F, p.eq3F, p.eq4F, p.eq5F, p.eq6F}, g[6] = {0, p.eq2G, p.eq3G, p.eq4G, p.eq5G, 0}, q[6] = {0.7071, 0.7071, p.eq3Q, p.eq4Q, 0.7071, 0.7071};
-    const EqType t[6] = {EqType::HP, EqType::LS, EqType::PK, EqType::PK, EqType::HS, EqType::LP}; any = false;
-    for (int b = 0; b < 6; ++b) { const bool gainBand = b >= 1 && b <= 4; act[b] = on[b] && !(gainBand && std::fabs(g[b]) < 0.01); if (act[b]) { any = true; eqCoef(t[b], f[b], g[b], q[b], sr, &co[b * 5]); } } }
-  void process(float L, float R) {
+    const bool on[6] = {p.eq1On, p.eq2On, p.eq3On, p.eq4On, p.eq5On, p.eq6On}; const double fr[6] = {p.eq1F, p.eq2F, p.eq3F, p.eq4F, p.eq5F, p.eq6F}, gn[6] = {0, p.eq2G, p.eq3G, p.eq4G, p.eq5G, 0}, qq[6] = {0.7071, 0.7071, p.eq3Q, p.eq4Q, 0.7071, 0.7071};
+    const double dy[6] = {0, p.eq2Dyn, p.eq3Dyn, p.eq4Dyn, p.eq5Dyn, 0}, th[6] = {0, p.eq2Thr, p.eq3Thr, p.eq4Thr, p.eq5Thr, 0}, at[6] = {0, p.eq2Atk, p.eq3Atk, p.eq4Atk, p.eq5Atk, 0}, rl[6] = {0, p.eq2Rel, p.eq3Rel, p.eq4Rel, p.eq5Rel, 0};
+    const double sa[6] = {0, p.eq2Sat, p.eq3Sat, p.eq4Sat, p.eq5Sat, 0}, st[6] = {0, (double)p.eq2SatT, (double)p.eq3SatT, (double)p.eq4SatT, (double)p.eq5SatT, 0}; const bool bl[6] = {false, p.eq2Below, p.eq3Below, p.eq4Below, p.eq5Below, false};
+    std::vector<double> k; k.reserve(48); for (int b = 0; b < 6; ++b) { k.push_back(on[b]); k.push_back(fr[b]); k.push_back(gn[b]); k.push_back(qq[b]); k.push_back(dy[b]); k.push_back(th[b]); k.push_back(at[b]); k.push_back(rl[b]); k.push_back(bl[b]); k.push_back(sa[b]); k.push_back(st[b]); }
+    if (k == key) return;
+    key = k;
+    static const EqType t[6] = {EqType::HP, EqType::LS, EqType::PK, EqType::PK, EqType::HS, EqType::LP}; bool anyB = false, needB = false;
+    for (int b = 0; b < 6; ++b) { const bool gb = b >= 1 && b <= 4; const double g = gn[b]; const bool dn = gb && on[b] && std::fabs(dy[b]) > 0.01; const double sv = gb && on[b] ? sa[b] : 0;
+      dyn[b] = dn ? 1 : 0; sat[b] = sv > 0.001 ? sv : 0; f[b] = fr[b]; g0[b] = g; q[b] = qq[b];
+      const bool a = on[b] && !(gb && std::fabs(g) < 0.01 && !dn && !(sv > 0.001)); act[b] = a;
+      if (a) { anyB = true; if (!dn) gcur[b] = g; else if (gcur[b] == 0 && !env[b]) gcur[b] = g; eqCoef(t[b], fr[b], gcur[b], qq[b], sr, &co[b * 5]); }
+      if (dn || sat[b] > 0) { needB = true; const EqType bt = b == 1 ? EqType::LP : (b == 4 ? EqType::HP : EqType::BP); eqCoef(bt, fr[b], 0, b == 1 || b == 4 ? 0.7071 : std::max(0.5, qq[b]), sr, &bco[b * 5]); }
+      if (dn) { thr[b] = th[b]; rng[b] = dy[b]; ac[b] = 1 - std::exp(-1 / std::max(1.0, at[b] * 0.001 * sr)); rc[b] = 1 - std::exp(-1 / std::max(1.0, rl[b] * 0.001 * sr)); below[b] = bl[b] ? 1 : 0; }
+      if (sat[b] > 0) { const int ty = std::max(0, std::min(2, (int)st[b])); satT[b] = (unsigned char)ty; const double dr = 1 + sat[b] * kSatDr[ty], r = 0.25, y = std::tanh(dr * r + kSatBias[ty]) - std::tanh(kSatBias[ty]); nrm[b] = y > 1e-6 ? r / y * kSatOut[ty] : 1; } }
+    any = anyB; need = needB; }
+  double satOne(int b, double c, int ch) { const int t = satT[b]; const double dr = 1 + sat[b] * kSatDr[t], bi = kSatBias[t], v = dr * c + bi; const int i = b * 2 + ch; const double v1 = u1[i]; u1[i] = v;
+    double y = (adaaTanh(v, v1) - std::tanh(bi)) * nrm[b]; const double mix = std::min(1.0, sat[b] * 5); y = c + (y - c) * mix; dc[i] += 0.0008 * (y - dc[i]); return y - dc[i]; }
+  void process(double L, double R) {
     if (!any) { oL = L; oR = R; return; }
-    double l = L, r = R;
-    for (int b = 0; b < 6; ++b) { if (!act[b]) continue; const double* c = &co[b * 5]; double* zz = &z[b * 4];
+    double l = L, r = R; const bool tick = need && ((++ctr & 15u) == 0);
+    for (int b = 0; b < 6; ++b) { if (!act[b]) continue; const int dy = dyn[b]; const bool st = sat[b] > 0;
+      if (dy || st) { const int c = b * 5, i = b * 4; const double b0 = bco[c], b1 = bco[c + 1], b2 = bco[c + 2], a1 = bco[c + 3], a2 = bco[c + 4];
+        const double cl = b0 * l + bz[i]; bz[i] = b1 * l - a1 * cl + bz[i + 1]; bz[i + 1] = b2 * l - a2 * cl; const double cr = b0 * r + bz[i + 2]; bz[i + 2] = b1 * r - a1 * cr + bz[i + 3]; bz[i + 3] = b2 * r - a2 * cr;
+        if (dy) { const double lv = 0.5 * (std::fabs(cl) + std::fabs(cr)); env[b] += (lv > env[b] ? ac[b] : rc[b]) * (lv - env[b]); }
+        if (st) { l += satOne(b, cl, 0) - cl; r += satOne(b, cr, 1) - cr; } }
+      if (tick && dy) { const double db = 20 * std::log10(env[b] + 1e-9); double over = below[b] ? thr[b] - db : db - thr[b]; if (over < 0) over = 0; const double rg = rng[b], dg = rg > 0 ? std::min(rg, 0.75 * over) : std::max(rg, -0.75 * over);
+        gcur[b] += 0.35 * (g0[b] + dg - gcur[b]); static const EqType t[6] = {EqType::HP, EqType::LS, EqType::PK, EqType::PK, EqType::HS, EqType::LP}; eqCoef(t[b], f[b], gcur[b], q[b], sr, &co[b * 5]); }
+      const double* c = &co[b * 5]; double* zz = &z[b * 4];
       double y = c[0] * l + zz[0]; zz[0] = c[1] * l - c[3] * y + zz[1]; zz[1] = c[2] * l - c[4] * y; l = y;
       y = c[0] * r + zz[2]; zz[2] = c[1] * r - c[3] * y + zz[3]; zz[3] = c[2] * r - c[4] * y; r = y; }
-    oL = (float)l; oR = (float)r; } };
+    oL = l; oR = r; } };
+// ---- crush: bit depth and sample rate reduction ----
+struct Crush {
+  double h[2] = {0, 0}, c = 0, oL = 0, oR = 0;
+  void process(const Params& p, double L, double R) {
+    const double mix = p.crushMix, bits = p.crushBits, rate = p.crushRate; if (mix <= 0 || (bits >= 15.99 && rate <= 1.001)) { oL = L; oR = R; return; }
+    c += 1; if (c >= rate) { c -= rate; const double q = std::pow(2.0, std::max(1.0, bits) - 1), step = 1 / q; h[0] = js_round(L * q) * step; h[1] = js_round(R * q) * step; }
+    oL = L + (h[0] - L) * mix; oR = R + (h[1] - R) * mix; }
+  static double js_round(double x) { return std::floor(x + 0.5); }   // Math.round: halves go up
+};
+// ---- width: mid/side with separate width above and below 2 kHz, plus mid and side saturation (side only above 2 kHz) ----
+struct WidthStage {
+  double sr = 48000, sl = 0, a = 0, u[2] = {0, 0}, oL = 0, oR = 0;
+  void prepare(double s) { sr = s; sl = 0; a = 1 - std::exp(-2 * kPiD * 2000 / s); u[0] = u[1] = 0; }
+  double sat(int i, double x, double amt) { const double dr = 1 + amt * 5, v = dr * x, y = adaaTanh(v, u[i]); u[i] = v; const double nrm = 0.25 / std::tanh(dr * 0.25), o = y * nrm; return x + (o - x) * std::min(1.0, amt * 4); }
+  void process(const Params& p, double L, double R) {
+    const double wm = p.widMid, wh = p.widHi, ms = p.msMid, ss = p.msSide; if (wm == 1 && wh == 1 && ms <= 0 && ss <= 0) { oL = L; oR = R; return; }
+    double m = 0.5 * (L + R); const double sd = 0.5 * (L - R); sl += a * (sd - sl); const double sh = sd - sl; double hi = sh;
+    if (ss > 0) { hi = sat(1, sh, ss); }
+    if (ms > 0) { m = sat(0, m, ms); }
+    const double s2 = sl * wm + hi * wh; oL = m + s2; oR = m - s2; } };
 struct Fx {
-  float sr = 48000.f; DelayLine chor, dl, dr, pre; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0}, rhp = 0.f, dtSm = -1.f;
-  void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); pre.init((size_t)(0.26f * s)); lfo = 0.f; dlp[0] = dlp[1] = 0.f; rhp = 0.f; dtSm = -1.f; }
-  void process(const Params& p, float& L, float& R) {
-    float m = 0.5f * (L + R);
-    if (p.chorusMix > 0.f) {  // side-only: the left and right wet signals are opposite, so they cancel in mono
-      lfo += p.chorusRate / sr; if (lfo >= 1.f) lfo -= 1.f;
-      chor.push(m); const float cd = p.chorusDelay * 0.001f; float d = (cd + 0.006f * p.chorusDepth * std::sin(2.f * kPi * lfo)) * sr;
-      float d2 = (cd + 0.005f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * (lfo + 0.5f))) * sr;
+  double sr = 48000.; DelayLine chor, dl, dr, pre, fl[2]; Reverb rev; double lfo = 0., dlp[2] = {0, 0}, rhp = 0., dtSm = -1., ph[2][6] = {}, phFb[2] = {0, 0};
+  void prepare(double s) { sr = s; chor.init((size_t)(0.05 * s)); dl.init((size_t)(2. * s)); dr.init((size_t)(2. * s)); rev.init(s); pre.init((size_t)(0.26 * s)); fl[0].init((size_t)(0.02 * s)); fl[1].init((size_t)(0.02 * s));
+    lfo = 0.; dlp[0] = dlp[1] = 0.; rhp = 0.; dtSm = -1.; for (auto& a : ph) for (double& v : a) v = 0; phFb[0] = phFb[1] = 0; }
+  void process(const Params& p, double& L, double& R) {
+    const double m = 0.5 * (L + R); const int mt = p.modFxType;
+    if (p.chorusMix > 0 && mt == 1) {   // flanger: short swept delay with feedback
+      lfo += p.chorusRate / sr; if (lfo >= 1) lfo -= 1; const double base = std::max(0.0004, p.chorusDelay * 0.00025), fb = std::max(-0.95, std::min(0.95, (double)p.chorusFb)), wd = 0.25 * p.chorusWidth; double out[2] = {L, R};
+      for (int c = 0; c < 2; ++c) { const double x = c ? R : L, phs = lfo + (c ? wd : 0), d = (base * (1 + 0.9 * p.chorusDepth * std::sin(2 * kPiD * phs))) * sr, y = fl[c].read(std::max(1.0, d)); fl[c].push(x + fb * y); out[c] = x + p.chorusMix * y; }
+      L = out[0]; R = out[1];
+    } else if (p.chorusMix > 0 && mt == 2) {   // phaser: 6 allpass stages swept in frequency, with feedback
+      lfo += p.chorusRate / sr; if (lfo >= 1) lfo -= 1; const double fb = std::max(-0.95, std::min(0.95, (double)p.chorusFb)), wd = 0.25 * p.chorusWidth; double out[2] = {L, R};
+      for (int c = 0; c < 2; ++c) { const double x = c ? R : L, phs = lfo + (c ? wd : 0), f = std::min(0.45 * sr, 220 * std::pow(2.0, p.chorusDepth * 4.2 * (0.5 + 0.5 * std::sin(2 * kPiD * phs)))), tg = std::tan(kPiD * f / sr), a = (tg - 1) / (tg + 1); double* z = ph[c]; double v = x + fb * phFb[c];
+        for (int k = 0; k < 6; ++k) { const double y = a * v + z[k]; z[k] = v - a * y; v = y; } phFb[c] = v; out[c] = x * (1 - 0.5 * p.chorusMix) + v * 0.5 * p.chorusMix; }
+      L = out[0]; R = out[1];
+    }
+    if (p.chorusMix > 0 && mt == 0) {  // chorus, side-only: the left and right wet signals are opposite, so they cancel in mono
+      lfo += p.chorusRate / sr; if (lfo >= 1.) lfo -= 1.;
+      chor.push(m); const double cd = p.chorusDelay * 0.001; const double d = (cd + 0.006 * p.chorusDepth * std::sin(2. * kPiD * lfo)) * sr;
+      const double d2 = (cd + 0.005 + 0.006 * p.chorusDepth * std::sin(2. * kPiD * (lfo + 0.5))) * sr;
       // side = difference of two differently delayed copies: adds width without shifting the left/right balance
-      float w = chor.read(d) - chor.read(d2);
+      const double w = chor.read(d) - chor.read(d2);
       L += p.chorusMix * w; R -= p.chorusMix * w * p.chorusWidth;
     }
-    if (p.delayMix > 0.f) {  // ping-pong, darker on every repeat
-      float tt = delaySeconds(p) * sr;
-      if (dtSm < 0.f) dtSm = tt; dtSm += (tt - dtSm) * (1.f - std::exp(-1.f / (0.06f * sr)));   // time changes glide like tape instead of clicking
-      float t = dtSm;
-      float a = dl.read(t), b = dr.read(t);
-      const float dc = 1.f - 0.93f * p.delayDamp, pg = p.delayPing; dlp[0] += dc * (a - dlp[0]); dlp[1] += dc * (b - dlp[1]);
-      dl.push(m + (pg * dlp[1] + (1.f - pg) * dlp[0]) * p.delayFb); dr.push((pg * dlp[0] + (1.f - pg) * dlp[1]) * p.delayFb + (1.f - pg) * m);
+    if (p.delayMix > 0.) {  // ping-pong, darker on every repeat
+      const double tt = delaySeconds(p) * sr;
+      if (dtSm < 0.) dtSm = tt; dtSm += (tt - dtSm) * (1. - std::exp(-1. / (0.06 * sr)));   // time changes glide like tape instead of clicking
+      const double t = dtSm;
+      const double a = dl.read(t), b = dr.read(t);
+      const double dc = 1. - 0.93 * p.delayDamp, pg = p.delayPing; dlp[0] += dc * (a - dlp[0]); dlp[1] += dc * (b - dlp[1]);
+      dl.push(m + (pg * dlp[1] + (1. - pg) * dlp[0]) * p.delayFb); dr.push((pg * dlp[0] + (1. - pg) * dlp[1]) * p.delayFb + (1. - pg) * m);
       L += p.delayMix * dlp[0]; R += p.delayMix * dlp[1];
     }
-    if (p.reverbMix > 0.f) {  // mid and side are scaled separately: narrow centre, wide sides
-      float ra = 1.f - std::exp(-2.f * kPi * std::max(20.f, p.reverbLowCutHz) / sr);
-      rhp += ra * (m - rhp); float rin = m - rhp;
-      float rin2 = rin; if (p.reverbPre > 0.f) { pre.push(rin); rin2 = pre.read(std::max(1.f, p.reverbPre * 0.001f * sr)); }
-      float wl, wr; rev.run(rin2, p.reverbSize, p.reverbDamp, wl, wr);
-      float wm = 0.5f * (wl + wr), ws = 0.5f * (wl - wr);
-      float outM = wm * 0.8f, outS = ws * (0.4f + 1.2f * p.reverbWidth);
-      const float k = 0.29f;   // wet level matches the dry level at mix = 1 (measured with noise), so the knob reads as % wet
-      float mx = std::min(1.f, p.reverbMix);
-      L = L * (1.f - mx) + mx * (outM + outS) * k; R = R * (1.f - mx) + mx * (outM - outS) * k;
+    if (p.reverbMix > 0.) {  // mid and side are scaled separately: narrow centre, wide sides
+      const double ra = 1. - std::exp(-2. * kPiD * std::max(20., (double)p.reverbLowCutHz) / sr);
+      rhp += ra * (m - rhp); const double rin = m - rhp;
+      double rin2 = rin; if (p.reverbPre > 0.) { pre.push(rin); rin2 = pre.read(std::max(1., p.reverbPre * 0.001 * sr)); }
+      double wl, wr; rev.run(rin2, p.reverbSize, p.reverbDamp, wl, wr);
+      const double wm = 0.5 * (wl + wr), ws = 0.5 * (wl - wr);
+      const double outM = wm * 0.8, outS = ws * (0.4 + 1.2 * p.reverbWidth);
+      const double k = 0.29;   // wet level matches the dry level at mix = 1 (measured with noise), so the knob reads as % wet
+      const double mx = std::min(1., (double)p.reverbMix);
+      L = L * (1. - mx) + mx * (outM + outS) * k; R = R * (1. - mx) + mx * (outM - outS) * k;
     }
   }
 };
 
 // ---- dynamics after the effects ----
-inline float dbToLin(float d) { return std::pow(10.f, d * 0.05f); }
-inline float linToDb(float x) { return 20.f * std::log10(std::max(x, 1e-6f)); }
+inline double dbToLin(double d) { return std::pow(10., d * 0.05); }
+inline double linToDb(double x) { return 20. * std::log10(std::max(x, 1e-6)); }
 // 2nd-order Butterworth section; two in a row give a Linkwitz-Riley 4th-order crossover
 struct Bq {
-  float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
-  void set(bool hp, float fc, float sr) {
-    float w = std::tan(kPi * std::min(fc, 0.45f * sr) / sr), q = 0.70710678f, n = 1.f / (1.f + w / q + w * w);
-    if (hp) { b0 = n; b1 = -2.f * n; b2 = n; } else { b0 = w * w * n; b1 = 2.f * b0; b2 = b0; }
-    a1 = 2.f * (w * w - 1.f) * n; a2 = (1.f - w / q + w * w) * n;
+  double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+  void set(bool hp, double fc, double sr) {
+    double w = std::tan(kPiD * std::min(fc, 0.45 * sr) / sr), q = 0.70710678, n = 1. / (1. + w / q + w * w);
+    if (hp) { b0 = n; b1 = -2. * n; b2 = n; } else { b0 = w * w * n; b1 = 2. * b0; b2 = b0; }
+    a1 = 2. * (w * w - 1.) * n; a2 = (1. - w / q + w * w) * n;
   }
-  float tick(float x) { float y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return y; }
+  double tick(double x) { double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return y; }
 };
-struct Lr4 { Bq a, b; void set(bool hp, float fc, float sr) { a.set(hp, fc, sr); b.set(hp, fc, sr); } float tick(float x) { return b.tick(a.tick(x)); } };
+struct Lr4 { Bq a, b; void set(bool hp, double fc, double sr) { a.set(hp, fc, sr); b.set(hp, fc, sr); } double tick(double x) { return b.tick(a.tick(x)); } };
 
 struct Dynamics {
-  float sr = 48000.f;
+  double sr = 48000.;
   // opto (LA-2A style leveller): peak detector, soft knee 3:1, two release speeds (fast 60 ms, slow 1.5 s) so long compression lets go slowly
-  float oEnv = 0.f, oFast = 0.f, oSlow = 0.f;
+  double oEnv = 0., oFast = 0., oSlow = 0.;
   // squeeze: one-band glue compressor
-  float sEnv = 0.f, sGr = 0.f;
-  float gr[3] = {0.f, 0.f, 0.f};   // meters: opto, OTT average and squeeze gain reduction in dB (for the interface)
+  double sEnv = 0., sGr = 0.;
+  double gr[3] = {0., 0., 0.};   // meters: opto, OTT average and squeeze gain reduction in dB (for the interface)
   // OTT: three bands, each with a level follower; crossovers at 120 Hz and 2.5 kHz
   Lr4 lo[2], hiSplit1[2], midLo[2], hiHp[2], apLo1[2], apLo2[2];
-  float bEnv[3] = {0, 0, 0}, bGain[3] = {1, 1, 1};
-  void prepare(float s) {
-    sr = s; oEnv = oFast = oSlow = sEnv = sGr = 0.f; for (int i = 0; i < 3; ++i) { bEnv[i] = 0.f; bGain[i] = 1.f; }
+  double bEnv[3] = {0, 0, 0}, bGain[3] = {1, 1, 1};
+  void prepare(double s) {
+    sr = s; oEnv = oFast = oSlow = sEnv = sGr = 0.; for (int i = 0; i < 3; ++i) { bEnv[i] = 0.; bGain[i] = 1.; }
     for (int c = 0; c < 2; ++c) { lo[c] = Lr4(); hiSplit1[c] = Lr4(); midLo[c] = Lr4(); hiHp[c] = Lr4(); apLo1[c] = Lr4(); apLo2[c] = Lr4();
-      lo[c].set(false, 120.f, sr); hiSplit1[c].set(true, 120.f, sr); midLo[c].set(false, 2500.f, sr); hiHp[c].set(true, 2500.f, sr);
-      apLo1[c].set(false, 2500.f, sr); apLo2[c].set(true, 2500.f, sr); }
+      lo[c].set(false, 120., sr); hiSplit1[c].set(true, 120., sr); midLo[c].set(false, 2500., sr); hiHp[c].set(true, 2500., sr);
+      apLo1[c].set(false, 2500., sr); apLo2[c].set(true, 2500., sr); }
   }
-  static float coef(float seconds, float sr) { return 1.f - std::exp(-1.f / std::max(1.f, seconds * sr)); }
-  void process(const Params& p, float& L, float& R) {
-    if (p.optoAmt > 0.f) {
-      float pk = std::max(std::fabs(L), std::fabs(R));
-      oEnv += (pk > oEnv ? coef(0.010f, sr) : coef(0.040f, sr)) * (pk - oEnv);
-      float db = linToDb(oEnv), T = -4.f - 26.f * p.optoAmt, over = db - T, knee = 12.f, gr;
-      if (over <= -knee * 0.5f) gr = 0.f; else if (over >= knee * 0.5f) gr = over * (1.f - 1.f / 3.f);
-      else { float x = over + knee * 0.5f; gr = (1.f - 1.f / 3.f) * x * x / (2.f * knee); }
-      oFast += (gr > oFast ? coef(0.010f, sr) : coef(0.060f * p.optoRel, sr)) * (gr - oFast);
-      oSlow += (gr > oSlow ? coef(0.300f, sr) : coef(1.500f * p.optoRel, sr)) * (gr - oSlow);
-      float g = dbToLin(-std::max(oFast, 0.8f * oSlow) + 0.45f * (-T) * (1.f - 1.f / 3.f) + p.optoGain);   // auto makeup
+  static double coef(double seconds, double sr) { return 1. - std::exp(-1. / std::max(1., seconds * sr)); }
+  void process(const Params& p, float& L, float& R) { double l = L, r = R; process(p, l, r); L = (float)l; R = (float)r; }
+  void process(const Params& p, double& L, double& R) {
+    if (p.optoAmt > 0.) {
+      double pk = std::max(std::fabs(L), std::fabs(R));
+      oEnv += (pk > oEnv ? coef(0.010, sr) : coef(0.040, sr)) * (pk - oEnv);
+      double db = linToDb(oEnv), T = -4. - 26. * p.optoAmt, over = db - T, knee = 12., gr;
+      if (over <= -knee * 0.5) gr = 0.; else if (over >= knee * 0.5) gr = over * (1. - 1. / 3.);
+      else { double x = over + knee * 0.5; gr = (1. - 1. / 3.) * x * x / (2. * knee); }
+      oFast += (gr > oFast ? coef(0.010, sr) : coef(0.060 * p.optoRel, sr)) * (gr - oFast);
+      oSlow += (gr > oSlow ? coef(0.300, sr) : coef(1.500 * p.optoRel, sr)) * (gr - oSlow);
+      double g = dbToLin(-std::max(oFast, 0.8 * oSlow) + 0.45 * (-T) * (1. - 1. / 3.) + p.optoGain);   // auto makeup
       L *= g; R *= g;
     }
-    if (p.ottMix > 0.f) {
-      float in[2] = {L, R}, band[2][3], depth = p.ottDepth;
+    if (p.ottMix > 0.) {
+      double in[2] = {L, R}, band[2][3], depth = p.ottDepth;
       for (int c = 0; c < 2; ++c) {
-        float low = lo[c].tick(in[c]), rest = hiSplit1[c].tick(in[c]);
-        float mid = midLo[c].tick(rest), high = hiHp[c].tick(rest);
-        float lowAp = apLo1[c].tick(low) + apLo2[c].tick(low);   // keep the low band in phase with the other two
+        double low = lo[c].tick(in[c]), rest = hiSplit1[c].tick(in[c]);
+        double mid = midLo[c].tick(rest), high = hiHp[c].tick(rest);
+        double lowAp = apLo1[c].tick(low) + apLo2[c].tick(low);   // keep the low band in phase with the other two
         band[c][0] = lowAp; band[c][1] = mid; band[c][2] = high;
       }
-      const float atk[3] = {0.0218f, 0.0135f, 0.0104f}, rel[3] = {0.247f, 0.132f, 0.072f}, tm = p.ottTime, trimB[3] = {p.ottLow, p.ottMid, p.ottHigh};   // seconds per band (mine, in the range such pedals use)
-      float outL = 0.f, outR = 0.f;
+      const double atk[3] = {0.0218, 0.0135, 0.0104}, rel[3] = {0.247, 0.132, 0.072}, tm = p.ottTime, trimB[3] = {p.ottLow, p.ottMid, p.ottHigh};   // seconds per band (mine, in the range such pedals use)
+      double outL = 0., outR = 0.;
       for (int b = 0; b < 3; ++b) {
-        float pk = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
+        double pk = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
         bEnv[b] += (pk > bEnv[b] ? coef(atk[b] * tm, sr) : coef(rel[b] * tm, sr)) * (pk - bEnv[b]);
-        float db = linToDb(bEnv[b]), gdb = 0.f;
-        const float Th = -14.f, Tl = -38.f, rD = 1.f + 5.f * depth, rU = 1.f + 3.f * depth;
-        if (db > Th) gdb = -(db - Th) * (1.f - 1.f / rD);
-        else if (db < Tl) gdb = std::min(18.f * depth, (Tl - db) * (1.f - 1.f / rU)) * std::min(1.f, std::max(0.f, (db + 80.f) / 20.f));   // no boosting of silence
-        float tg = dbToLin(gdb + 3.f * depth + trimB[b]); bGain[b] += (tg - bGain[b]) * 0.05f;
+        double db = linToDb(bEnv[b]), gdb = 0.;
+        const double Th = -14., Tl = -38., rD = 1. + 5. * depth, rU = 1. + 3. * depth;
+        if (db > Th) gdb = -(db - Th) * (1. - 1. / rD);
+        else if (db < Tl) gdb = std::min(18. * depth, (Tl - db) * (1. - 1. / rU)) * std::min(1., std::max(0., (db + 80.) / 20.));   // no boosting of silence
+        double tg = dbToLin(gdb + 3. * depth + trimB[b]); bGain[b] += (tg - bGain[b]) * 0.05;
         outL += band[0][b] * bGain[b]; outR += band[1][b] * bGain[b];
       }
-      L = L * (1.f - p.ottMix) + outL * p.ottMix; R = R * (1.f - p.ottMix) + outR * p.ottMix;
+      L = L * (1. - p.ottMix) + outL * p.ottMix; R = R * (1. - p.ottMix) + outR * p.ottMix;
     }
-    if (p.sqzAmt > 0.f) {
-      float pk = std::max(std::fabs(L), std::fabs(R));
-      sEnv += (pk > sEnv ? coef(p.sqzAtk * 0.001f, sr) : coef(p.sqzRel * 0.001f, sr)) * (pk - sEnv);
-      float db = linToDb(sEnv), T = -8.f - 14.f * p.sqzAmt, R_ = 1.f + 3.f * p.sqzAmt, over = db - T, knee = 6.f, gr;
-      if (over <= -knee * 0.5f) gr = 0.f; else if (over >= knee * 0.5f) gr = over * (1.f - 1.f / R_);
-      else { float x = over + knee * 0.5f; gr = (1.f - 1.f / R_) * x * x / (2.f * knee); }
-      sGr += (gr - sGr) * 0.01f;
-      float g = dbToLin(-sGr + 0.5f * (-T) * (1.f - 1.f / R_) + p.sqzMakeup);
+    if (p.sqzAmt > 0.) {
+      double pk = std::max(std::fabs(L), std::fabs(R));
+      sEnv += (pk > sEnv ? coef(p.sqzAtk * 0.001, sr) : coef(p.sqzRel * 0.001, sr)) * (pk - sEnv);
+      double db = linToDb(sEnv), T = -8. - 14. * p.sqzAmt, R_ = 1. + 3. * p.sqzAmt, over = db - T, knee = 6., gr;
+      if (over <= -knee * 0.5) gr = 0.; else if (over >= knee * 0.5) gr = over * (1. - 1. / R_);
+      else { double x = over + knee * 0.5; gr = (1. - 1. / R_) * x * x / (2. * knee); }
+      sGr += (gr - sGr) * 0.01;
+      double g = dbToLin(-sGr + 0.5 * (-T) * (1. - 1. / R_) + p.sqzMakeup);
       L *= g; R *= g;
     }
-    gr[0] = p.optoAmt > 0.f ? std::max(oFast, 0.8f * oSlow) : 0.f;
-    gr[1] = p.ottMix > 0.f ? 20.f * std::log10((bGain[0] + bGain[1] + bGain[2]) / 3.f + 1e-9f) : 0.f;
-    gr[2] = p.sqzAmt > 0.f ? sGr : 0.f;
+    gr[0] = p.optoAmt > 0. ? std::max(oFast, 0.8 * oSlow) : 0.;
+    gr[1] = p.ottMix > 0. ? 20. * std::log10((bGain[0] + bGain[1] + bGain[2]) / 3. + 1e-9) : 0.;
+    gr[2] = p.sqzAmt > 0. ? sGr : 0.;
   }
 };
 
 struct Master {
-  float sr = 48000.f, env[3] = {0, 0, 0}, gn[3] = {1, 1, 1}, gr[3] = {0, 0, 0}, xl = 0.f, xr = 0.f, outL = 0.f, outR = 0.f;
+  double sr = 48000., env[3] = {0, 0, 0}, gn[3] = {1, 1, 1}, gr[3] = {0, 0, 0}, xl = 0., xr = 0., outL = 0., outR = 0.;
   Lr4 lo[2], hi1[2], midLo[2], hiHp[2], ap1[2], ap2[2];
-  void prepare(float s) {
-    sr = s; for (int i = 0; i < 3; ++i) { env[i] = 0.f; gn[i] = 1.f; gr[i] = 0.f; } xl = xr = 0.f;
-    for (int c = 0; c < 2; ++c) { lo[c].set(false, 150.f, sr); hi1[c].set(true, 150.f, sr); midLo[c].set(false, 3000.f, sr); hiHp[c].set(true, 3000.f, sr); ap1[c].set(false, 3000.f, sr); ap2[c].set(true, 3000.f, sr); }
+  void prepare(double s) {
+    sr = s; for (int i = 0; i < 3; ++i) { env[i] = 0.; gn[i] = 1.; gr[i] = 0.; } xl = xr = 0.;
+    for (int c = 0; c < 2; ++c) { lo[c].set(false, 150., sr); hi1[c].set(true, 150., sr); midLo[c].set(false, 3000., sr); hiHp[c].set(true, 3000., sr); ap1[c].set(false, 3000., sr); ap2[c].set(true, 3000., sr); }
   }
-  static float coef(float seconds, float sr) { return 1.f - std::exp(-1.f / std::max(1.f, seconds * sr)); }
-  static float lncosh(float u) { float a = std::fabs(u); return a + std::log1p(std::exp(-2.f * a)) - 0.6931471805599453f; }
-  static float clip(float x, float prev, float c) { float d = x - prev; if (std::fabs(d) < 1e-5f) return c * std::tanh(0.5f * (x + prev) / c); return c * c * (lncosh(x / c) - lncosh(prev / c)) / d; }
-  void process(const Params& p, float L, float R) {
-    const float mix = p.dmMix;
-    if (!(mix > 0.f)) { gr[0] = gr[1] = gr[2] = 0.f; outL = L; outR = R; return; }
-    float in[2] = {L, R}, band[2][3];
+  static double coef(double seconds, double sr) { return 1. - std::exp(-1. / std::max(1., seconds * sr)); }
+  static double lncosh(double u) { double a = std::fabs(u); return a + std::log1p(std::exp(-2. * a)) - 0.6931471805599453; }
+  static double clip(double x, double prev, double c) { double d = x - prev; if (std::fabs(d) < 1e-5) return c * std::tanh(0.5 * (x + prev) / c); return c * c * (lncosh(x / c) - lncosh(prev / c)) / d; }
+  void process(const Params& p, double L, double R) {
+    const double mix = p.dmMix;
+    if (!(mix > 0.)) { gr[0] = gr[1] = gr[2] = 0.; outL = L; outR = R; return; }
+    double in[2] = {L, R}, band[2][3];
     for (int c = 0; c < 2; ++c) {
-      float low = lo[c].tick(in[c]), rest = hi1[c].tick(in[c]), mid = midLo[c].tick(rest), high = hiHp[c].tick(rest);
+      double low = lo[c].tick(in[c]), rest = hi1[c].tick(in[c]), mid = midLo[c].tick(rest), high = hiHp[c].tick(rest);
       band[c][0] = ap1[c].tick(low) + ap2[c].tick(low); band[c][1] = mid; band[c][2] = high;
     }
-    const float atk[3] = {0.014f, 0.007f, 0.0025f}, rel[3] = {0.16f, 0.09f, 0.05f}, T0[3] = {-9.f, -10.f, -12.f}, trim[3] = {p.dmLow, 0.f, p.dmHigh};
-    const float R_ = 1.5f + 3.5f * p.dmDrive; float wl = 0.f, wr = 0.f;
+    const double atk[3] = {0.014, 0.007, 0.0025}, rel[3] = {0.16, 0.09, 0.05}, T0[3] = {-9., -10., -12.}, trim[3] = {p.dmLow, p.dmMid, p.dmHigh};
+    const double R_ = 1.5 + 3.5 * p.dmDrive; double wl = 0., wr = 0.;
     for (int b = 0; b < 3; ++b) {
-      float pk = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
+      double pk = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
       env[b] += (pk > env[b] ? coef(atk[b], sr) : coef(rel[b], sr)) * (pk - env[b]);
-      float T = T0[b] - 12.f * p.dmDrive, over = linToDb(env[b]) - T, knee = 8.f, g;
-      if (over <= -knee * 0.5f) g = 0.f; else if (over >= knee * 0.5f) g = over * (1.f - 1.f / R_); else { float x = over + knee * 0.5f; g = (1.f - 1.f / R_) * x * x / (2.f * knee); }
-      gn[b] += (dbToLin(-g + 0.85f * (-T) * (1.f - 1.f / R_) + trim[b] * 6.f) - gn[b]) * 0.2f; gr[b] = g;
+      double T = T0[b] - 12. * p.dmDrive, over = linToDb(env[b]) - T, knee = 8., g;
+      if (over <= -knee * 0.5) g = 0.; else if (over >= knee * 0.5) g = over * (1. - 1. / R_); else { double x = over + knee * 0.5; g = (1. - 1. / R_) * x * x / (2. * knee); }
+      gn[b] += (dbToLin(-g + 0.85 * (-T) * (1. - 1. / R_) + trim[b] * 6.) - gn[b]) * 0.2; gr[b] = g;
       wl += band[0][b] * gn[b]; wr += band[1][b] * gn[b];
     }
-    const float dl0 = band[0][0] + band[0][1] + band[0][2], dr0 = band[1][0] + band[1][1] + band[1][2];
-    const float gc = 1.f + p.dmClip * 1.2f, c = 0.85f, a = wl * gc, b2 = wr * gc;
-    const float yl = clip(a, xl, c), yr = clip(b2, xr, c); xl = a; xr = b2;
-    outL = dl0 * (1.f - mix) + yl * mix; outR = dr0 * (1.f - mix) + yr * mix;
+    const double dl0 = band[0][0] + band[0][1] + band[0][2], dr0 = band[1][0] + band[1][1] + band[1][2];
+    const double gc = 1. + p.dmClip * 1.2, c = 0.85, a = wl * gc, b2 = wr * gc;
+    const double yl = clip(a, xl, c), yr = clip(b2, xr, c); xl = a; xr = b2;
+    outL = dl0 * (1. - mix) + yl * mix; outR = dr0 * (1. - mix) + yr * mix;
   }
 };
+
+// ---- built-in samples: made from maths when the engine is prepared (no recorded or vendor audio). Same generator as makeSamples() in the playground engine. ----
+struct SampleBank { std::vector<float> d[kSmpCount]; };
+inline std::shared_ptr<const SampleBank> makeSamples(double sr) {
+  auto bank = std::make_shared<SampleBank>();
+  uint32_t seed = 987654321u;
+  auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (double)(seed >> 8) / 16777216.0 * 2.0 - 1.0; };
+  const double TP = 2.0 * kPiD;
+  auto N = [&](double sec) { return (int)std::floor(sec * sr); };
+  auto sgn = [](double x) { return x > 0 ? 1.0 : (x < 0 ? -1.0 : 0.0); };
+  typedef std::vector<float> Buf;
+  auto fin = [&](int id, Buf a) { double pk = 1e-9; for (float v : a) pk = std::max(pk, (double)std::fabs(v)); const double g = 0.9 / pk; const int n = std::min(64, (int)a.size() >> 2);
+    for (int i = 0; i < n; ++i) { float& v = a[a.size() - 1 - i]; v = (float)(v * ((double)i / n)); } for (float& v : a) v = (float)(v * g); bank->d[id] = std::move(a); };
+  auto lpn = [&](Buf& a, double c) -> Buf& { double y = 0; for (float& v : a) { y += c * (v - y); v = (float)y; } return a; };
+  auto hpn = [&](Buf& a, double c) -> Buf& { double y = 0; for (float& v : a) { y += c * (v - y); v = (float)(v - y); } return a; };
+  auto bpn = [&](Buf& a, double f0, double f1) -> Buf& { lpn(a, 1 - std::exp(-TP * f1 / sr)); return hpn(a, 1 - std::exp(-TP * f0 / sr)); };
+  auto sweep = [&](double len, double f0, double f1, double tau, double dec, double sat) { Buf a(N(len), 0.f); double ph = 0; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, f = f1 + (f0 - f1) * std::exp(-t / tau); ph += f / sr; const double v = std::sin(TP * ph) * std::exp(-t / dec); a[i] = (float)(sat != 0 ? std::tanh(v * sat) : v); } return a; };
+  auto ks = [&](double len, double f, double damp, double bright) { const int D = std::max(2, (int)std::floor(sr / f + 0.5)); Buf buf(D, 0.f), a(N(len), 0.f); double lp = 0;
+    for (int i = 0; i < D; ++i) { lp += bright * (rnd() - lp); const double r2 = rnd(); buf[i] = (float)(lp * 1.5 + r2 * 0.3 * bright); }
+    int p = 0; double prev = 0; for (size_t i = 0; i < a.size(); ++i) { const double x = buf[p], y = (x + prev) * 0.5 * (1 - damp) + x * damp; prev = x; buf[p] = (float)(y * 0.9995); a[i] = (float)x; if (++p >= D) p = 0; } return a; };
+  { Buf a(N(0.012), 0.f); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.0012)); fin(1, lpn(a, 0.25)); }
+  { Buf a(N(0.01), 0.f); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.0007)); a[0] = 1.f; fin(2, hpn(a, 0.06)); }
+  { Buf a(N(0.02), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)((std::sin(TP * 1900 * t) * 0.8 + r * 0.4) * std::exp(-t / 0.0022)); } fin(3, a); }
+  { Buf a = sweep(0.4, 240, 48, 0.035, 0.12, 0); for (int i = 0; i < N(0.004); ++i) { const double r = rnd(); a[i] = (float)(a[i] + r * 0.3 * (1 - (double)i / N(0.004))); } fin(4, a); }
+  fin(5, sweep(0.45, 520, 52, 0.022, 0.16, 3.2));
+  fin(6, sweep(0.6, 70, 38, 0.06, 0.22, 0));
+  { Buf a(N(0.35), 0.f), t1 = sweep(0.2, 260, 185, 0.02, 0.05, 0), nz(a.size(), 0.f); for (size_t i = 0; i < nz.size(); ++i) nz[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.07)); bpn(nz, 900, 9000); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(nz[i] * 1.1 + (i < t1.size() ? t1[i] * 0.7 : 0.0)); fin(7, a); }
+  { Buf a(N(0.2), 0.f), t1 = sweep(0.1, 300, 210, 0.012, 0.03, 0), nz(a.size(), 0.f); for (size_t i = 0; i < nz.size(); ++i) nz[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.035)); bpn(nz, 1200, 8000); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(nz[i] * 1.2 + (i < t1.size() ? t1[i] * 0.5 : 0.0)); fin(8, a); }
+  { Buf a(N(0.32), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; double e = 0; for (int k = 0; k < 4; ++k) { const double tk = t - k * 0.011; if (tk >= 0) e += (k < 3 ? std::exp(-tk / 0.003) : std::exp(-tk / 0.09)); } a[i] = (float)(rnd() * e); } fin(9, bpn(a, 800, 3500)); }
+  { Buf a(N(0.08), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)((std::sin(TP * 1750 * t) * 0.7 + std::sin(TP * 480 * t) * 0.6 + r * 0.3) * std::exp(-t / 0.012)); } fin(10, a); }
+  { Buf a(N(0.12), 0.f); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.016)); hpn(a, 0.55); fin(11, hpn(a, 0.5)); }
+  { Buf a(N(0.6), 0.f); const double r6[6] = {1, 1.4471, 1.6170, 1.9265, 2.5028, 2.6637}; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; double v = 0; for (double q : r6) v += sgn(std::sin(TP * 330 * q * t)); const double r = rnd(); a[i] = (float)((v / 6 * 0.7 + r * 0.5) * std::exp(-t / 0.11)); } hpn(a, 0.5); fin(12, hpn(a, 0.45)); }
+  fin(13, ks(1.4, 261.63, 0.55, 0.35));
+  fin(14, ks(1.6, 261.63, 0.12, 1.0));
+  { Buf a = ks(0.5, 261.63, 0.7, 0.8); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(a[i] * std::exp(-(double)i / sr / 0.14)); fin(15, a); }
+  { Buf a(N(1.8), 0.f); const double f = 261.63; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, m = std::sin(TP * f * 3.5 * t) * 2.6 * std::exp(-t / 0.18); a[i] = (float)(std::sin(TP * f * t + m) * std::exp(-t / 0.5)); } fin(16, a); }
+  { Buf a(N(2.4), 0.f); const double f = 523.25, pr[5] = {1, 2.76, 5.4, 8.93, 11.34}, am[5] = {1, 0.55, 0.3, 0.18, 0.1}, dc[5] = {1.4, 0.7, 0.4, 0.25, 0.15}; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; double v = 0; for (int k = 0; k < 5; ++k) v += am[k] * std::sin(TP * f * pr[k] * t) * std::exp(-t / dc[k]); a[i] = (float)v; } fin(17, a); }
+  { Buf a(N(0.22), 0.f); double ph = 0; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, f = 160 + 4200 * std::exp(-t / 0.03); ph += f / sr; a[i] = (float)(sgn(std::sin(TP * ph)) * 0.6 * std::exp(-t / 0.07) + std::sin(TP * ph) * 0.4 * std::exp(-t / 0.07)); } fin(18, a); }
+  { Buf a(N(0.5), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(rnd() * std::pow(std::sin(kPiD * std::min(1.0, t / 0.5)), 1.5) * std::exp(-t / 0.3)); } fin(19, bpn(a, 500, 6500)); }
+  return bank;
+}
+inline std::shared_ptr<const SampleBank> sampleBank(double sr) {   // one bank per sample rate, shared by all engines
+  static std::mutex mu; static std::map<int, std::shared_ptr<const SampleBank>> cache; std::lock_guard<std::mutex> lk(mu);
+  auto& e = cache[(int)std::lround(sr)]; if (!e) e = makeSamples(sr); return e;
+}
 
 class Engine {
  public:
   Params p;
-  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); drv = DriveStage(); eq.prepare(sr); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); }
+  void prepare(double sampleRate) { sr = sampleRate; for (auto& v : voices) v = Voice(); drv = DriveStage(); crush = Crush(); wid = WidthStage(); wid.prepare(sr); eq.prepare(sr); bl = br = 0.0; bl2 = br2 = 0.0; limEnv = 0.0; limAtk = 1.0 - std::exp(-1.0 / (0.0004 * sr)); limRel = 1.0 - std::exp(-1.0 / (0.12 * sr));
+    fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bank = sampleBank(sr); if (combPool.size() != (size_t)kMaxVoices * 6 * 4096) combPool.assign((size_t)kMaxVoices * 6 * 4096, 0.f); for (double& g : mgS) g = 0; }
+  void envsOn(Voice& v) { v.amp.on(); v.amp2.on(); v.amp3.on(); v.fenv.on(); v.fenv2.on(); v.fenv3.on(); }
+  void envsOff(Voice& v) { v.amp.off(); v.amp2.off(); v.amp3.off(); v.fenv.off(); v.fenv2.off(); v.fenv3.off(); }
   void noteOn(int note, float vel) {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;
       for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
-      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->sh = v->rnd; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
+      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (double)(v->note - note); v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.0; v->rnd = 2.0 * rng.next() - 1.0; v->sh = v->rnd; envsOn(*v); v->sp[0] = v->sp[1] = v->sp[2] = v->sp[3] = 0.0; return; }
     }
     const int n = p.mono ? 1 : std::max(1, std::min(4, p.stackCount));   // Stack mode plays several detuned copies per key
     for (int k = 0; k < n; ++k) {
       Voice* v = allocVoice();
-      *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->sh = v->rnd; v->age = ++clock;
-      v->stackCents = n > 1 ? ((float)k / (float)(n - 1) * 2.f - 1.f) * p.stackCents : 0.f; v->stackGain = 1.f / std::sqrt((float)n);
-      for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.f : rng.next();
-      v->amp.on(); v->fenv.on();
+      *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.0 * rng.next() - 1.0; v->sh = v->rnd; v->sh0 = 0.0; v->age = ++clock;
+      v->rs = ((uint32_t)(note + 1) * 2654435761u) ^ ((uint32_t)v->age * 40503u); v->sa[0] = v->lfoRnd(); v->sa[1] = v->lfoRnd(); v->sb[0] = v->sb[1] = 0.0;   // each voice has its own random stream for LFO 2 and 3
+      v->stackCents = n > 1 ? ((double)k / (double)(n - 1) * 2.0 - 1.0) * p.stackCents : 0.0; v->stackGain = 1.0 / std::sqrt((double)n);
+      for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.0 : rng.next();
+      envsOn(*v);
       for (int l = 0; l < kLayers; ++l) if (p.layer[l].wave == Wave::Sample && p.layer[l].sample && p.layer[l].sample->oneShot) v->oneShot = true;
     }
   }
-  void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) { v.amp.off(); v.fenv.off(); } }
+  void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) envsOff(v); }
   void allOff() { for (auto& v : voices) v.active = false; }
   struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}; };
-  Meters meters() const { Meters m = mtr; m.lim = limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = dyn.gr[i]; m.dm[i] = dm.gr[i]; } return m; }
-  void reserve(int maxBlock) { if ((int)subBusL.size() < maxBlock) { subBusL.assign(maxBlock, 0.f); subBusR.assign(maxBlock, 0.f); } }
+  Meters meters() const { Meters m = mtr; m.lim = (float)limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = (float)dyn.gr[i]; m.dm[i] = (float)dm.gr[i]; } return m; }
+  void reserve(int maxBlock) { if ((int)subBusL.size() < maxBlock) { subBusL.assign(maxBlock, 0.0); subBusR.assign(maxBlock, 0.0); } }
   int activeVoices() const { int n = 0; for (const auto& v : voices) if (v.active) ++n; return n; }
 
   // adds nothing, overwrites outL/outR
   void render(float* outL, float* outR, int n) {
     for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
-    if ((int)subBusL.size() < n) { subBusL.assign(n, 0.f); subBusR.assign(n, 0.f); }
-    std::fill(subBusL.begin(), subBusL.begin() + n, 0.f); std::fill(subBusR.begin(), subBusR.begin() + n, 0.f); sbL = subBusL.data(); sbR = subBusR.data();
-    for (auto& v : voices) if (v.active) renderVoice(v, outL, outR, n);
+    if ((int)subBusL.size() < n) { subBusL.assign(n, 0.0); subBusR.assign(n, 0.0); }
+    std::fill(subBusL.begin(), subBusL.begin() + n, 0.0); std::fill(subBusR.begin(), subBusR.begin() + n, 0.0); sbL = subBusL.data(); sbR = subBusR.data();
+    if (combPool.empty()) combPool.assign((size_t)kMaxVoices * 6 * 4096, 0.f);
+    if (!bank) bank = sampleBank(sr);
+    mxn = 0; for (int a = 0; a < kMxSrc; ++a) for (int b = 0; b < kMxDst; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
+    for (int vi = 0; vi < kMaxVoices; ++vi) if (voices[vi].active) renderVoice(voices[vi], vi, outL, outR, n);
     mtr.active = activeVoices();
+    globals();
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
-    eq.update(p); float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr); bool bad = false;
+    eq.update(pe); const double a = 1.0 - std::exp(-2.0 * kPiD * std::max(10.0, (double)p.bassMonoHz) / sr); bool bad = false;
     for (int i = 0; i < n; ++i) {
-      drv.process(p, outL[i], outR[i], sbL[i], sbR[i]); outL[i] = drv.oL; outR[i] = drv.oR; const float sbl = drv.sL, sbr = drv.sR;
-      fx.process(p, outL[i], outR[i]);
-      const float fl = outL[i], fr = outR[i]; float dl = fl, dr = fr;
+      drv.process(pe, outL[i], outR[i], sbL[i], sbR[i]); crush.process(pe, drv.oL, drv.oR); const double sbl = drv.sL, sbr = drv.sR;
+      double fl = crush.oL, fr = crush.oR; fx.process(pe, fl, fr);
+      double dl = fl, dr = fr;
       dyn.process(p, dl, dr);
       dl = fl + (dl - fl) * p.dynMix; dr = fr + (dr - fr) * p.dynMix;
       bl += a * (dl - bl); bl2 += a * (bl - bl2);
       br += a * (dr - br); br2 += a * (br - br2);
-      float m = 0.5f * (bl2 + br2);
-      dm.process(p, dl - bl2 + m, dr - br2 + m);
-      eq.process(dm.outL + sbl, dm.outR + sbr); float xl = eq.oL * p.master, xr = eq.oR * p.master;
+      const double m = 0.5 * (bl2 + br2);
+      wid.process(pe, dl - bl2 + m, dr - br2 + m);
+      dm.process(pe, wid.oL, wid.oR);
+      eq.process(dm.outL + sbl, dm.outR + sbr); double xl = eq.oL * pe.master, xr = eq.oR * pe.master;
       if (p.limiter) {   // feed-forward peak limiter, 0.4 ms attack, 120 ms release; overshoots are caught by the smooth clipper
-        float pk = std::max(std::fabs(xl), std::fabs(xr));
+        const double pk = std::max(std::fabs(xl), std::fabs(xr));
         limEnv += (pk > limEnv ? limAtk : limRel) * (pk - limEnv);
-        if (limEnv > p.limCeil) { float g = p.limCeil / limEnv; xl *= g; xr *= g; }
+        if (limEnv > p.limCeil) { const double g = p.limCeil / limEnv; xl *= g; xr *= g; }
       }
-      outL[i] = softClip(xl, p.clipKnee); outR[i] = softClip(xr, p.clipKnee);
+      outL[i] = (float)softClip(xl, p.clipKnee); outR[i] = (float)softClip(xr, p.clipKnee);
       if (!std::isfinite(outL[i] + outR[i])) bad = true;
     }
     if (bad) {   // safety guard: a bad value anywhere resets the engine instead of blasting or hanging the host
-      ++trips; for (auto& v : voices) v = Voice(); drv = DriveStage(); eq.prepare(sr); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
+      ++trips; for (auto& v : voices) v = Voice(); drv = DriveStage(); crush = Crush(); wid = WidthStage(); wid.prepare(sr); eq.prepare(sr); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.0; for (double& g : mgS) g = 0;
       for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
     }
     { float pl = 0.f, pr = 0.f; for (int i = 0; i < n; ++i) { pl = std::max(pl, std::fabs(outL[i])); pr = std::max(pr, std::fabs(outR[i])); } mtr.l = pl; mtr.r = pr; }
@@ -608,101 +821,147 @@ class Engine {
     }
     return v;
   }
-  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; DriveStage drv; EqStage eq; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
+  double sr = 48000.0; Voice voices[kMaxVoices]; Rng rng; DriveStage drv; Crush crush; WidthStage wid; EqStage eq; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
   int trips = 0;   // how many times the safety guard reset the engine
-  Meters mtr;
-  std::vector<float> subBusL, subBusR; float* sbL = nullptr; float* sbR = nullptr;
-  float bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05f, limRel = 0.0002f;
+  Meters mtr; Params pe;   // pe: the settings the effects really use this block (p plus global modulation and the Build macro)
+  std::shared_ptr<const SampleBank> bank; std::vector<float> combPool;
+  std::vector<double> subBusL, subBusR; double* sbL = nullptr; double* sbR = nullptr;
+  double bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05, limRel = 0.0002;
+  int mxs[kMxSrc * kMxDst], mxd[kMxSrc * kMxDst], mxn = 0; double mxv[kMxSrc * kMxDst]; double mgS[kMxDst] = {};
 
-  // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.
-  void addSub(Voice& v, float& L, float& R, float invSr, float lvl) {
-    if (lvl <= 0.f) return;
-    float sf = 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f);
-    float sdt = sf * invSr; if (sdt > 0.45f) return; float& sp = v.subPhase; float s;
-    switch (p.subWave) {
-      case Wave::Tri: s = 4.f * std::fabs(sp - 0.5f) - 1.f; break;
-      case Wave::Pulse: s = (sp < 0.5f ? 1.f : -1.f) + blep(sp, sdt) - blep(sp < 0.5f ? sp + 0.5f : sp - 0.5f, sdt); s *= 0.8f; break;
-      case Wave::Saw: s = (2.f * sp - 1.f) - blep(sp, sdt); break;
-      default: s = std::sin(2.f * kPi * sp); break;
-    }
-    sp += sdt; if (sp >= 1.f) sp -= 1.f;
-    L += lvl * s * 0.7f; R += lvl * s * 0.7f;
+  // drawn modulation envelope k (0..2) at time t
+  double menvAt(int k, double t) const {
+    const float* m = k == 0 ? p.menv : (k == 1 ? p.menv2 : p.menv3); const bool sy = k == 0 ? p.menvSync : (k == 1 ? p.menv2Sync : p.menv3Sync); const int dv = std::max(0, std::min(15, k == 0 ? p.menvDiv : (k == 1 ? p.menv2Div : p.menv3Div)));
+    const double T = std::max(0.02, sy ? kMenvBeats[dv] * 60. / std::max(20., std::min(400., (double)p.bpm)) : (double)(k == 0 ? p.menvTime : (k == 1 ? p.menv2Time : p.menv3Time))); const bool lp = k == 0 ? p.menvLoop : (k == 1 ? p.menv2Loop : p.menv3Loop);
+    double x = t / T; if (lp) x -= std::floor(x); else if (x > 1) x = 1; const double f = x * 63; const int i = std::min(62, (int)f); return m[i] + (m[i + 1] - m[i]) * (f - i);
+  }
+  // global modulation (reverb, delay, drive, clipper, high pass, low pass, width) comes from the newest sounding voice; the Build macro adds to it
+  void globals() {
+    pe = p; double mg[kMxDst] = {}; const double b = std::max(0.0, std::min(1.0, (double)p.build));
+    const Voice* y = nullptr; if (mxn) { for (const auto& v : voices) if (v.active && (!y || v.age > y->age)) y = &v; }
+    if (y) for (int k = 0; k < mxn; ++k) { const int d = mxd[k]; if (d >= 16) mg[d] += y->svL[mxs[k]] * mxv[k]; }
+    for (int d = 16; d < kMxDst; ++d) mgS[d] += 0.35 * (mg[d] - mgS[d]);
+    const double* g = mgS; auto c01 = [](double x) { return x < 0 ? 0.0 : x > 1 ? 1.0 : x; };
+    const double hpB = b <= 0 ? 0 : (b < 0.5 ? 20 + 130 * std::pow(2 * b, 2.0) : 150 * std::pow(2500.0 / 150.0, (b - 0.5) * 2));
+    pe.reverbMix = (float)c01(p.reverbMix + g[16] + 0.5 * b); pe.delayMix = (float)c01(p.delayMix + g[17] + 0.2 * b);
+    pe.reverbLowCutHz = (float)(b > 0 ? p.reverbLowCutHz + std::max(0.0, 500.0 - p.reverbLowCutHz) * b : (double)p.reverbLowCutHz);
+    pe.drvDrive = (float)c01(p.drvDrive + g[18]); pe.dmClip = (float)c01(p.dmClip + g[19] + 0.5 * std::log10(1 + 9 * b));
+    const double hm = g[20], f1 = p.eq1F * std::pow(2.0, 6 * hm); pe.eq1On = p.eq1On || hm > 0.002 || b > 0.001;
+    pe.eq1F = (float)std::min(20000.0, std::max(20.0, b > 0.001 ? std::max((p.eq1On || hm > 0.002) ? f1 : 0.0, hpB) : f1));
+    const double lm = g[21]; pe.eq6On = p.eq6On || lm < -0.002; pe.eq6F = (float)std::min(20000.0, std::max(20.0, p.eq6F * std::pow(2.0, 6 * std::min(0.0, lm))));
+    pe.widHi = (float)(std::min(2.0, std::max(0.0, p.widHi + g[22])) * (1 - 0.3 * b)); pe.widMid = (float)(std::min(2.0, std::max(0.0, p.widMid + 0.5 * g[22])) * (1 - 0.15 * b));
+    pe.master = (float)(p.master * std::pow(10.0, -2.5 * b / 20));
   }
 
-  void renderVoice(Voice& v, float* oL, float* oR, int n) {
-    const float invSr = 1.f / sr;
-    int mxs[126], mxd[126]; float mxv[126]; int mxn = 0;   // sparse list of the non-zero matrix cells
-    for (int a = 0; a < 9; ++a) for (int b = 0; b < 14; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
-    float md[14] = {}, sv[9];
+  // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.
+  void addSub(Voice& v, double& L, double& R, double invSr, double lvl) {
+    if (lvl <= 0.0) return;
+    const double sf = 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0) / 12.0), sdt = sf * invSr; if (sdt > 0.45) return; double sp = v.subPhase, s;
+    switch (p.subWave) {
+      case Wave::Tri: s = 4.0 * std::fabs(sp - 0.5) - 1.0; break;
+      case Wave::Pulse: s = (sp < 0.5 ? 1.0 : -1.0) + blep(sp, sdt) - blep(sp < 0.5 ? sp + 0.5 : sp - 0.5, sdt); s *= 0.8; break;
+      case Wave::Saw: s = (2.0 * sp - 1.0) - blep(sp, sdt); break;
+      default: s = std::sin(2.0 * kPiD * sp); break;
+    }
+    sp += sdt; if (sp >= 1.0) sp -= 1.0; v.subPhase = sp;
+    L += lvl * s * 0.7; R += lvl * s * 0.7;
+  }
+
+  void renderVoice(Voice& v, int vi, float* oL, float* oR, int n) {
+    const double invSr = 1.0 / sr; const bool link = p.ampLink, hasMx = mxn > 0;
+    double sv[kMxSrc] = {}, md[kMxDst] = {};
+    for (int q = 0; q < 3; ++q) { v.fl[q].cb = &combPool[((size_t)vi * 6 + q * 2) * 4096]; v.fr[q].cb = &combPool[((size_t)vi * 6 + q * 2 + 1) * 4096]; }
     bool usedAsSrc[kLayers] = {}, anyFmSub = false, anyFmNz = false;
     for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly]; if (q.wave == Wave::Off || q.level <= 0.f) continue;
       if (q.fmAmt > 0.f && q.fmSrc >= 1 && q.fmSrc <= 3) usedAsSrc[q.fmSrc - 1] = true; if (q.amAmt > 0.f && q.amSrc >= 1 && q.amSrc <= 3) usedAsSrc[q.amSrc - 1] = true;
       if ((q.fmAmt > 0.f && q.fmSrc == 4) || (q.amAmt > 0.f && q.amSrc == 4)) anyFmSub = true; if ((q.fmAmt > 0.f && q.fmSrc == 5) || (q.amAmt > 0.f && q.amSrc == 5)) anyFmNz = true; }
     // per-block tables for the supersaw layers (pan law and spread depend only on settings, so they are not recomputed per sample)
-    float tSp[kLayers][kMaxSaws], tCl[kLayers][kMaxSaws], tCr[kLayers][kMaxSaws]; bool tOn[kLayers][kMaxSaws];
+    double tSp[kLayers][kMaxSaws], tCl[kLayers][kMaxSaws], tCr[kLayers][kMaxSaws]; bool tOn[kLayers][kMaxSaws];
     for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly];
       if (!(q.wave == Wave::SuperSaw || q.wave == Wave::SuperSquare || (q.wave == Wave::Custom && q.table && q.table->ready()))) continue;
-      const int nv = std::max(1, std::min(kMaxSaws, q.voices)); const float sideFade = q.cents > 0.f ? 1.f : std::min(1.f, q.detune * 20.f), norm = 1.f / (1.f + (float)(nv - 1) * 0.62f * sideFade);
-      for (int j = 0; j < nv; ++j) { const float sp = sawSpread(j, nv); const bool centre = (nv % 2 == 1 && j == nv / 2); float g = centre ? 1.f : 0.62f * sideFade; g *= norm;
-        const float ang = (sp * p.spread + 1.f) * kPi * 0.25f; tSp[ly][j] = sp; tOn[ly][j] = g > 0.f; tCl[ly][j] = g * std::cos(ang) * 1.414f; tCr[ly][j] = g * std::sin(ang) * 1.414f; } }
+      const int nv = std::max(1, std::min(kMaxSaws, q.voices)); const double sideFade = q.cents > 0.f ? 1.0 : std::min(1.0, q.detune * 20.0), norm = 1.0 / (1.0 + (double)(nv - 1) * 0.62 * sideFade);
+      for (int j = 0; j < nv; ++j) { const double sp = sawSpread(j, nv); const bool centre = (nv % 2 == 1 && j == nv / 2); double g = centre ? 1.0 : 0.62 * sideFade; g *= norm;
+        const double ang = (sp * p.spread + 1.0) * kPiD * 0.25; tSp[ly][j] = sp; tOn[ly][j] = g > 0.0; tCl[ly][j] = g * std::cos(ang) * 1.414; tCr[ly][j] = g * std::sin(ang) * 1.414; } }
+    const double dk = 1.0 + p.dist * 14.0, dnm = 1.0 / std::tanh(dk * 0.6);
+    const FilterMode modes[3] = {p.filterMode, p.f2Mode, p.f3Mode}; const bool parallel = p.fRoute == 1, post = p.smpPost; const int lfoS[3] = {p.lfoShape, p.lfo2Shape, p.lfo3Shape};
+    const double rr[3] = {0, p.f2Res, p.f3Res}, dd[3] = {0, p.f2Drv, p.f3Drv}; double srcV[6];
     for (int i = 0; i < n; ++i) {
-      float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
-      if (v.amp.stage == 0) { v.active = false; return; }
-      v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.f) { v.lfoPhase -= 1.f; v.sh = 2.f * rng.next() - 1.f; }
-      float lph = v.lfoPhase + p.lfoStart; if (lph >= 1.f) lph -= 1.f;
-      float lfo = (p.lfoShape == 1 ? 4.f * std::fabs(lph - 0.5f) - 1.f : (p.lfoShape == 2 ? (lph < 0.5f ? 1.f : -1.f) : (p.lfoShape == 3 ? 2.f * lph - 1.f : (p.lfoShape == 4 ? v.sh : std::sin(2.f * kPi * lph))))) * p.lfoDepth * (p.lfoFade > 0.f ? std::min(1.f, v.t / p.lfoFade) : 1.f);
-      float pAtt = p.pitchAttack > 0.f ? std::min(1.f, v.t / p.pitchAttack) : 1.f;
-      const float pd = std::max(0.f, v.t - p.pitchAttack - p.pitchHold), pt = std::max(0.001f, p.pitchTime);
-      float pitchEnv = p.pitchAmt * pAtt * ((1.f - p.pitchCurve) * std::exp(-pd / pt) + p.pitchCurve * std::max(0.f, 1.f - pd / (3.f * pt))) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
+      const double ampE = v.amp.tick(p.amp, sr); double aE2 = ampE, aE3 = ampE;
+      if (!link) { aE2 = v.amp2.tick(p.amp2, sr); aE3 = v.amp3.tick(p.amp3, sr); }
+      const double fE = v.fenv.tick(p.fenv, sr), fE2 = v.fenv2.tick(p.fenv2, sr), fE3 = v.fenv3.tick(p.fenv3, sr);
+      if (v.amp.stage == 0 && (link || ((p.layer[1].wave == Wave::Off || v.amp2.stage == 0) && (p.layer[2].wave == Wave::Off || v.amp3.stage == 0) && (p.layer[0].wave == Wave::Off || v.amp.stage == 0)))) { v.active = false; return; }
+      const bool ctl = (v.ctr++ & 3) == 0;
+      v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.0) { v.lfoPhase -= 1.0; v.sh0 = v.sh; v.sh = 2.0 * rng.next() - 1.0; }
+      for (int k = 0; k < 2; ++k) { v.lp2[k] += (k ? p.lfo3Rate : p.lfo2Rate) * invSr; if (v.lp2[k] >= 1.0) { v.lp2[k] -= 1.0; v.sb[k] = v.sa[k]; v.sa[k] = v.lfoRnd(); } }
+      double lfo, lfo2, lfo3;
+      if (ctl) {
+        double lph = v.lfoPhase + p.lfoStart; if (lph >= 1.0) lph -= 1.0;
+        lfo = lfoWave(lfoS[0], lph, v.sh, v.sh0) * p.lfoDepth * (p.lfoFade > 0.f ? std::min(1.0, v.t / p.lfoFade) : 1.0); v.lfoC = lfo;
+        double q2 = v.lp2[0] + p.lfo2Start; if (q2 >= 1.0) q2 -= 1.0; lfo2 = lfoWave(lfoS[1], q2, v.sa[0], v.sb[0]) * p.lfo2Depth * (p.lfo2Fade > 0.f ? std::min(1.0, v.t / p.lfo2Fade) : 1.0); v.lc2[0] = lfo2;
+        double q3 = v.lp2[1] + p.lfo3Start; if (q3 >= 1.0) q3 -= 1.0; lfo3 = lfoWave(lfoS[2], q3, v.sa[1], v.sb[1]) * p.lfo3Depth * (p.lfo3Fade > 0.f ? std::min(1.0, v.t / p.lfo3Fade) : 1.0); v.lc2[1] = lfo3;
+      } else { lfo = v.lfoC; lfo2 = v.lc2[0]; lfo3 = v.lc2[1]; }
+      double pitchEnv;
+      if (ctl) {
+        const double pAtt = p.pitchAttack > 0.f ? std::min(1.0, v.t / p.pitchAttack) : 1.0;
+        const double pd = std::max(0.0, v.t - p.pitchAttack - p.pitchHold), pt = std::max(0.001, (double)p.pitchTime);
+        pitchEnv = p.pitchAmt * pAtt * ((1.0 - p.pitchCurve) * std::exp(-pd / pt) + p.pitchCurve * std::max(0.0, 1.0 - pd / (3.0 * pt))) - p.pitchFall * (1.0 - std::exp(-v.t / std::max(0.01, (double)p.pitchFallTime)));
+        v.pEnv = pitchEnv;
+      } else pitchEnv = v.pEnv;
       v.t += invSr;
-      if (v.gl != 0.f) { v.gl *= std::exp(-invSr / std::max(0.001f, p.glide)); if (std::fabs(v.gl) < 1e-4f) v.gl = 0.f; }
-      if ((int)(v.t * sr) % 512 == 0)
-        for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004f * (2.f * rng.next() - 1.f);
-      for (int j = 0; j < kMaxSaws; ++j) v.drift[j] += 0.0005f * (v.driftT[j] - v.drift[j]);
+      if (v.gl != 0.0) { v.gl *= std::exp(-invSr / std::max(0.001, (double)p.glide)); if (std::fabs(v.gl) < 1e-4) v.gl = 0.0; }
+      if ((long long)std::floor(v.t * sr) % 512 == 0)
+        for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004 * (2.0 * rng.next() - 1.0);
+      if (ctl) for (int j = 0; j < kMaxSaws; ++j) v.drift[j] += 0.002 * (v.driftT[j] - v.drift[j]);
 
-      if (mxn) {
-        for (int k = 0; k < 14; ++k) md[k] = 0.f;
-        sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = std::max(-2.f, std::min(2.f, pitchEnv / 12.f)); sv[4] = p.modWheel;
-        sv[5] = std::max(-2.f, std::min(2.f, (float)(v.note - 60) / 24.f)); sv[6] = v.vel; sv[7] = v.rnd;
-        { const float T = std::max(0.02f, p.menvTime); float x = v.t / T; if (p.menvLoop) x -= std::floor(x); else if (x > 1.f) x = 1.f; const float fp = x * 63.f; const int i0 = std::min(62, (int)fp); sv[8] = p.menv[i0] + (p.menv[i0 + 1] - p.menv[i0]) * (fp - (float)i0); if (p.menvInv) sv[8] = 1.f - sv[8]; }
+      if (hasMx) {
+        for (int k = 0; k < kMxDst; ++k) md[k] = 0.0;
+        sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = std::max(-2.0, std::min(2.0, pitchEnv / 12.0)); sv[4] = p.modWheel;
+        sv[5] = std::max(-2.0, std::min(2.0, (double)(v.note - 60) / 24.0)); sv[6] = v.vel; sv[7] = v.rnd;
+        sv[8] = p.menvInv ? 1.0 - menvAt(0, v.t) : menvAt(0, v.t); sv[9] = lfo2; sv[10] = lfo3; sv[11] = fE2; sv[12] = fE3;
+        sv[13] = p.menv2Inv ? 1.0 - menvAt(1, v.t) : menvAt(1, v.t); sv[14] = p.menv3Inv ? 1.0 - menvAt(2, v.t) : menvAt(2, v.t);
         for (int k = 0; k < mxn; ++k) md[mxd[k]] += sv[mxs[k]] * mxv[k];
+        if (i == n - 1) for (int k = 0; k < kMxSrc; ++k) v.svL[k] = sv[k];
       }
-      float L = 0.f, R = 0.f;
-      float srcV[6] = {0.f, v.lyOut[0], v.lyOut[1], v.lyOut[2], 0.f, 0.f};
-      if (anyFmSub) { srcV[4] = std::sin(2.f * kPi * v.fmSubPh); v.fmSubPh += 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f) * invSr; if (v.fmSubPh >= 1.f) v.fmSubPh -= 1.f; }
-      if (anyFmNz) { v.nzRaw = 2.f * rng.next() - 1.f; srcV[5] = v.nzRaw; }
+      double L = 0.0, R = 0.0, smL = 0.0, smR = 0.0;
+      srcV[0] = 0.0; srcV[1] = v.lyOut[0]; srcV[2] = v.lyOut[1]; srcV[3] = v.lyOut[2]; srcV[4] = 0.0; srcV[5] = 0.0;
+      if (anyFmSub) { srcV[4] = std::sin(2.0 * kPiD * v.fmSubPh); v.fmSubPh += 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0) / 12.0) * invSr; if (v.fmSubPh >= 1.0) v.fmSubPh -= 1.0; }
+      if (anyFmNz) srcV[5] = 2.0 * rng.next() - 1.0;
       for (int ly = 0; ly < kLayers; ++ly) {
-        const LayerParams& lp = p.layer[ly];
-        if (lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.f; continue; }
-        float semis = (float)(v.note - 69) + v.gl + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo + v.stackCents * 0.01f + p.wheelVib * p.modWheel * 0.01f * lfo + md[0] * 12.f;
-        float f = 440.f * std::exp2(semis / 12.f);
-        float fmF = 1.f; if (lp.fmAmt > 0.f && lp.fmSrc >= 1 && lp.fmSrc <= 5 && lp.fmSrc != ly + 1) fmF = std::max(0.02f, 1.f + lp.fmAmt * 3.f * srcV[lp.fmSrc]);
-        float dt = std::min(0.45f, f * invSr * fmF);
-        float lL = 0.f, lR = 0.f;
+        const LayerParams& lp = p.layer[ly]; const double le = link ? 1.0 : (ly == 0 ? ampE : (ly == 1 ? aE2 : aE3));
+        if (ctl) { const double pg = (std::min(1.0, std::max(-1.0, lp.pan + p.lfoPan * lfo + md[6])) + 1.0) * kPiD * 0.25; v.pcC[ly] = std::cos(pg) * 1.414; v.psC[ly] = std::sin(pg) * 1.414; }
+        if (lp.smp != 0 && bank) { const std::vector<float>& d = bank->d[lp.smp]; if (!d.empty()) {
+          if (ctl) v.sq[ly] = std::pow(2.0, (lp.smpPitch + (smpKeyed(lp.smp) ? v.note - 60 + v.gl : 0.0)) / 12.0);
+          const double pos = v.sp[ly]; const int i0 = (int)pos;
+          if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } }
+        if (lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
+        double f;
+        if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
+          f = 440.0 * std::pow(2.0, semis / 12.0); v.fC[ly] = f; } else f = v.fC[ly];
+        double fmF = 1.0; if (lp.fmAmt > 0.f && lp.fmSrc >= 1 && lp.fmSrc <= 5 && lp.fmSrc != ly + 1) fmF = std::max(0.02, 1.0 + lp.fmAmt * 3.0 * srcV[lp.fmSrc]);
+        const double dt = std::min(0.45, f * invSr * fmF);
+        double lL = 0.0, lR = 0.0;
         if (lp.wave == Wave::SuperSaw || lp.wave == Wave::SuperSquare || (lp.wave == Wave::Custom && lp.table && lp.table->ready())) {
-          int nv = std::max(1, std::min(kMaxSaws, lp.voices));
-          float det = lp.cents > 0.f ? std::exp2(std::max(0.f, lp.cents + md[5] * 50.f) / 1200.f) - 1.f : jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo) + md[5] * 0.5f))) * kMaxDetune * p.detuneRange;
-          float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f + md[4] * 0.45f));
+          const int nv = std::max(1, std::min(kMaxSaws, lp.voices));
+          const double det = lp.cents > 0.f ? std::pow(2.0, std::max(0.0, lp.cents + md[5] * 50.0) / 1200.0) - 1.0 : jpDetune(std::min(1.0, std::max(0.0, lp.detune * (1.0 + p.lfoDetune * lfo) + md[5] * 0.5))) * kMaxDetune * p.detuneRange;
+          const double pw = std::min(0.95, std::max(0.05, lp.pwm + p.lfoPwm * lfo * 0.45 + md[4] * 0.45));
           for (int j = 0; j < nv; ++j) {
             if (!tOn[ly][j]) continue;
-            const float sp = tSp[ly][j];
-            float d = std::min(0.45f, dt * (1.f + det * sp + v.drift[j]));
-            float& ph = v.phase[ly][j];
-            float s;
-            if (lp.wave == Wave::SuperSaw) s = (2.f * ph - 1.f) - blep(ph, d);
-            else if (lp.wave == Wave::Custom) s = lp.table->read(ph, d);
+            const double d = std::min(0.45, dt * (1.0 + det * tSp[ly][j] + v.drift[j]));
+            double x = v.phase[ly][j], s;
+            if (lp.wave == Wave::SuperSaw) s = (2.0 * x - 1.0) - blep(x, d);
+            else if (lp.wave == Wave::Custom) s = lp.table->read((float)x, (float)d);
             else {
-              s = (ph < pw ? 1.f : -1.f) + blep(ph, d);
-              float t2 = ph - pw; if (t2 < 0.f) t2 += 1.f;
+              s = (x < pw ? 1.0 : -1.0) + blep(x, d);
+              double t2 = x - pw; if (t2 < 0.0) t2 += 1.0;
               s -= blep(t2, d);
-              s *= 0.8f;
+              s *= 0.8;
             }
-            ph += d; if (ph >= 1.f) ph -= 1.f;
+            x += d; if (x >= 1.0) x -= 1.0; v.phase[ly][j] = x;
             lL += tCl[ly][j] * s; lR += tCr[ly][j] * s;
           }
         } else if (lp.wave == Wave::Sample && lp.sample && !lp.sample->l.empty()) {
           const Sample& sm = *lp.sample;
-          double rate = (double)(f / midiToHz((float)sm.rootNote)) * sm.sampleRate / sr;
+          double rate = (double)(f / midiToHz((double)sm.rootNote)) * sm.sampleRate / sr;
           double& pos = v.samplePos[ly];
           size_t N = sm.l.size();
           if (sm.loop && sm.loopEnd > sm.loopStart && pos >= (double)sm.loopEnd) pos -= (double)(sm.loopEnd - sm.loopStart);
@@ -715,78 +974,76 @@ class Engine {
             };
             float sl = h(sm.l), sr_ = h(sm.r.empty() ? sm.l : sm.r);
             // width control also applies to samples (mid/side)
-            float mid = 0.5f * (sl + sr_), side = 0.5f * (sl - sr_) * p.spread;
+            double mid = 0.5 * (sl + sr_), side = 0.5 * (sl - sr_) * p.spread;
             lL = mid + side; lR = mid - side;
             pos += rate;
           }
         } else {
-          float& ph = v.phase[ly][0];
-          float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f + md[4] * 0.45f));
-          // with sync on, the slave oscillator makes the sound and the master only restarts it
-          float& sph = v.syncPhase[ly];
-          float odt = dt;
-          if (lp.sync) {
-            float sem = std::min(48.f, std::max(0.f, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo + lp.syncKey * (float)(v.note - 60) / 12.f + lp.syncWheel * p.modWheel + md[8 + ly] * 12.f));
-            odt = std::min(0.45f, dt * std::exp2(sem / 12.f));
+          const double pw = std::min(0.95, std::max(0.05, lp.pwm + p.lfoPwm * lfo * 0.45 + md[4] * 0.45));
+          double odt = dt;
+          if (lp.sync) {   // with sync on, the slave oscillator makes the sound and the master only restarts it
+            const double sem = std::min(48.0, std::max(0.0, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo + lp.syncKey * (double)(v.note - 60) / 12.0 + lp.syncWheel * p.modWheel + md[8 + ly] * 12.0));
+            odt = std::min(0.45, dt * std::pow(2.0, sem / 12.0));
           }
-          float& op = lp.sync ? sph : ph;
-          auto shape = [&](float x, float d) {
-            float w = 0.f;
+          auto shape = [&](double x, double d) {
+            double w = 0.0;
             switch (lp.wave) {
-              case Wave::Saw:   w = (2.f * x - 1.f) - blep(x, d); break;
-              case Wave::Pulse: { w = (x < pw ? 1.f : -1.f) + blep(x, d); float t2 = x - pw; if (t2 < 0) t2 += 1.f; w -= blep(t2, d); w *= 0.8f; } break;
-              case Wave::Tri:   w = 4.f * std::fabs(x - 0.5f) - 1.f; break;
-              default:          w = std::sin(2.f * kPi * x); break;
+              case Wave::Saw:   w = (2.0 * x - 1.0) - blep(x, d); break;
+              case Wave::Pulse: { w = (x < pw ? 1.0 : -1.0) + blep(x, d); double t2 = x - pw; if (t2 < 0) t2 += 1.0; w -= blep(t2, d); w *= 0.8; } break;
+              case Wave::Tri:   w = 4.0 * std::fabs(x - 0.5) - 1.0; break;
+              default:          w = std::sin(2.0 * kPiD * x); break;
             }
             return w;
           };
-          float s = shape(op, odt);
-          bool wrapped = false; ph += dt; if (ph >= 1.f) { ph -= 1.f; wrapped = true; }
+          double& ph0 = v.phase[ly][0]; const double op = lp.sync ? v.syncPhase[ly] : ph0;
+          double s = shape(op, odt); bool wrapped = false; ph0 += dt; if (ph0 >= 1.0) { ph0 -= 1.0; wrapped = true; }
           if (lp.sync) {
-            float before = s;
-            sph += odt;
-            if (wrapped) {  // master wrapped this sample: restart the slave at the exact fractional position
-              float frac = ph / dt;                       // 0..1, how far past the wrap we already are
-              sph = frac * odt;
-              float after = shape(sph, odt);
-              s = before * frac + after * (1.f - frac);   // short crossfade over the step: first-order band limiting
-            } else if (sph >= 1.f) sph -= 1.f;
+            const double before = s; double sph = v.syncPhase[ly] + odt;
+            if (wrapped) { const double frac = ph0 / dt; sph = frac * odt; const double after = shape(sph, odt); s = before * frac + after * (1.0 - frac); }   // short crossfade over the step: first-order band limiting
+            else if (sph >= 1.0) sph -= 1.0;
+            v.syncPhase[ly] = sph;
           }
           lL = lR = s;
         }
-        v.lyOut[ly] = 0.5f * (lL + lR);
-        if (lp.amAmt > 0.f && lp.amSrc >= 1 && lp.amSrc <= 5 && lp.amSrc != ly + 1) { const float am = 1.f - lp.amAmt + lp.amAmt * srcV[lp.amSrc]; lL *= am; lR *= am; }
-        float pg = (std::min(1.f, std::max(-1.f, lp.pan + p.lfoPan * lfo + md[6])) + 1.f) * kPi * 0.25f;
-        L += lp.level * lL * std::cos(pg) * 1.414f; R += lp.level * lR * std::sin(pg) * 1.414f;
+        v.lyOut[ly] = 0.5 * (lL + lR);
+        if (lp.amAmt > 0.f && lp.amSrc >= 1 && lp.amSrc <= 5 && lp.amSrc != ly + 1) { const double am = 1.0 - lp.amAmt + lp.amAmt * srcV[lp.amSrc]; lL *= am; lR *= am; }
+        L += lp.level * lL * v.pcC[ly] * le; R += lp.level * lR * v.psC[ly] * le;
       }
-      const float nzl = std::max(0.f, p.noiseLevel + md[12] * 0.5f), subL = std::max(0.f, p.subLevel + md[11] * 0.7f);
-      if (nzl > 0.f) {  // white noise, high-passed (two poles) so only the top end is added
-        float n = (2.f * rng.next() - 1.f);
-        float a = 1.f - std::exp(-2.f * kPi * std::min(0.45f * sr, std::max(100.f, p.noiseHpHz)) / sr);
-        v.noiseHp += a * (n - v.noiseHp); float h1 = n - v.noiseHp;
-        v.noiseHp2 += a * (h1 - v.noiseHp2); float h2 = h1 - v.noiseHp2;
-        L += nzl * 0.5f * h2; R += nzl * 0.5f * h2;
+      const double nzl = std::max(0.0, p.noiseLevel + md[12] * 0.5), subL = std::max(0.0, p.subLevel + md[11] * 0.7), en = link ? 1.0 : ampE;
+      if (nzl > 0.0) {  // white noise, high-passed (two poles) so only the top end is added
+        const double nz = 2.0 * rng.next() - 1.0, a = 1.0 - std::exp(-2.0 * kPiD * std::min(0.45 * sr, std::max(100.0, (double)p.noiseHpHz)) / sr);
+        v.noiseHp += a * (nz - v.noiseHp); const double h1 = nz - v.noiseHp; v.noiseHp2 += a * (h1 - v.noiseHp2); const double h2 = h1 - v.noiseHp2;
+        L += nzl * 0.5 * h2 * en; R += nzl * 0.5 * h2 * en;
       }
-      auto distort = [&](float& l, float& r) {
-        if (p.dist <= 0.f) return;
-        float k = 1.f + p.dist * 14.f, norm = 1.f / std::tanh(k * 0.6f);
-        l = std::tanh(k * l + 0.15f * p.dist) * norm * 0.8f; r = std::tanh(k * r + 0.15f * p.dist) * norm * 0.8f; };
-      if (p.subPreFilter) addSub(v, L, R, invSr, subL);
-      if (p.distPre) distort(L, R);
-      // filter
-      float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f + p.wheelCutoff * p.modWheel * 5.f + p.velCutoff * v.vel * 5.f + md[1] * 5.f);
-      cut = std::min(18000.f, std::max(20.f, cut));
-      const float rs = std::min(1.f, std::max(0.f, p.reso + md[2] * 0.5f)), dv = std::min(1.f, std::max(0.f, p.drive + md[3] * 0.75f));
-      L = v.fl.process(L, p.filterMode, cut, rs, dv, sr);
-      R = v.fr.process(R, p.filterMode, cut, rs, dv, sr);
-      { // low cut, then distortion
-        float a = 1.f - std::exp(-2.f * kPi * std::max(5.f, std::min(2000.f, p.lowCutHz * std::exp2(md[13] * 4.f))) / sr);
-        v.hpL += a * (L - v.hpL); v.hpR += a * (R - v.hpR); L -= v.hpL; R -= v.hpR;
-        if (!p.distPre) distort(L, R);
+      if (p.nzSmp != 0 && bank) { const std::vector<float>& d = bank->d[p.nzSmp]; if (!d.empty()) {
+        if (ctl) v.sq[3] = std::pow(2.0, (p.nzSmpPitch + (smpKeyed(p.nzSmp) ? v.note - 60 + v.gl : 0.0)) / 12.0);
+        const double pos = v.sp[3]; const int i0 = (int)pos;
+        if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * p.nzSmpVol * en; v.sp[3] = pos + v.sq[3]; smL += sm; smR += sm; } } }
+      if (!post) { L += smL; R += smR; }
+      auto distort = [&]() { if (p.dist <= 0.f) return; L = std::tanh(dk * L + 0.15 * p.dist) * dnm * 0.8; R = std::tanh(dk * R + 0.15 * p.dist) * dnm * 0.8; };
+      if (p.subPreFilter) addSub(v, L, R, invSr, subL * en);
+      if (p.distPre) distort();
+      if (ctl) {
+        const double cut = p.cutoff * std::pow(2.0, p.envAmt * fE * 5.0 + p.keyTrack * (double)(v.note - 60) / 12.0 + p.lfoCutoff * lfo * 2.0 + p.wheelCutoff * p.modWheel * 5.0 + p.velCutoff * v.vel * 5.0 + md[1] * 5.0); v.cc[0] = std::min(18000.0, std::max(20.0, cut));
+        v.cc[1] = std::min(18000.0, std::max(20.0, p.f2Cut * std::pow(2.0, p.f2Env * fE2 * 5.0 + p.f2Key * (double)(v.note - 60) / 12.0 + md[14] * 5.0)));
+        v.cc[2] = std::min(18000.0, std::max(20.0, p.f3Cut * std::pow(2.0, p.f3Env * fE3 * 5.0 + p.f3Key * (double)(v.note - 60) / 12.0 + md[15] * 5.0)));
+        v.laC = 1.0 - std::exp(-2.0 * kPiD * std::max(5.0, std::min(0.45 * sr, p.lowCutHz * std::pow(2.0, md[13] * 4.0))) / sr); v.hcC = 1.0 - std::exp(-2.0 * kPiD * std::max(20.0, std::min(0.45 * sr, (double)p.highCutHz)) / sr);
       }
-      float subS = 0.f; if (!p.subPreFilter && subL > 0.f) { float t2l = 0.f, t2r = 0.f; addSub(v, t2l, t2r, invSr, subL); subS = t2l; }
-      float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f * v.stackGain * (1.f - p.lfoAmp * 0.5f * (1.f - lfo)) * (mxn ? std::max(0.f, 1.f + md[7]) : 1.f);
-      oL[i] += L * g; oR[i] += R * g; if (subS != 0.f) { sbL[i] += subS * g; sbR[i] += subS * g; }
+      const double rs0 = std::min(1.0, std::max(0.0, p.reso + md[2] * 0.5)), dv = std::min(1.0, std::max(0.0, p.drive + md[3] * 0.75));
+      const double rrr[3] = {rs0, rr[1], rr[2]}, ddd[3] = {dv, dd[1], dd[2]};
+      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); } }
+      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; al += v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); ar += v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
+      if (post) { L += smL; R += smR; }
+      { // high pass (and, next to a highpass filter, a low pass) on the whole voice, then distortion
+        const double la = v.laC; const bool hpT = modes[0] == FilterMode::HP || modes[0] == FilterMode::HP24; const int ns = std::max(0, std::min(3, p.auxSlope));
+        v.hpL += la * (L - v.hpL); v.hpR += la * (R - v.hpR); L -= v.hpL; R -= v.hpR;
+        if (!hpT) { if (ns > 0) { double* ax = v.ax; for (int s2 = 0; s2 < ns; ++s2) { ax[s2] += la * (L - ax[s2]); L -= ax[s2]; ax[4 + s2] += la * (R - ax[4 + s2]); R -= ax[4 + s2]; } } }
+        else if (p.highCutHz < 19990.f) { double* ax = v.ax; const double hc = v.hcC; for (int s2 = 0; s2 <= ns; ++s2) { ax[s2] += hc * (L - ax[s2]); L = ax[s2]; ax[4 + s2] += hc * (R - ax[4 + s2]); R = ax[4 + s2]; } }
+        if (!p.distPre) distort();
+      }
+      double subS = 0.0; if (!p.subPreFilter && subL > 0.0) { double t2l = 0.0, t2r = 0.0; addSub(v, t2l, t2r, invSr, subL * en); subS = t2l; }
+      const double g = (link ? ampE : 1.0) * (0.4 + 0.6 * v.vel) * 1.3 * v.stackGain * (1.0 - p.lfoAmp * 0.5 * (1.0 - lfo)) * (hasMx ? std::max(0.0, 1.0 + md[7]) : 1.0);
+      oL[i] += (float)(L * g); oR[i] += (float)(R * g); if (subS != 0.0) { sbL[i] += subS * g; sbR[i] += subS * g; }
     }
   }
 };

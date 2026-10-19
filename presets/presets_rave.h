@@ -7,8 +7,8 @@
 namespace supurr::presets {
 
 // mod matrix indices
-enum { S_LFO, S_FENV, S_AENV, S_PENV, S_WHL, S_KEY, S_VEL, S_RND, S_MEN };
-enum { D_PITCH, D_CUT, D_RES, D_DRV, D_PWM, D_DET, D_PAN, D_VOL, D_SY1, D_SY2, D_SY3, D_SUB, D_NZ, D_LC };
+enum { S_LFO, S_FENV, S_AENV, S_PENV, S_WHL, S_KEY, S_VEL, S_RND, S_MEN, S_LFO2, S_LFO3, S_FENV2, S_FENV3, S_MEN2, S_MEN3 };
+enum { D_PITCH, D_CUT, D_RES, D_DRV, D_PWM, D_DET, D_PAN, D_VOL, D_SY1, D_SY2, D_SY3, D_SUB, D_NZ, D_LC, D_CUT2, D_CUT3, D_RVB, D_DLY, D_DRS, D_CLIP, D_HPF, D_LPF, D_WID };
 
 inline void lay(Params& p, int i, Wave w, float lv, int oct = 0, float tune = 0.f, int vo = 1, float cents = 0.f, float pwm = 0.5f, float pan = 0.f) {
   LayerParams& l = p.layer[i]; l.wave = w; l.level = lv; l.octave = oct; l.tune = tune; l.voices = vo; l.cents = cents; l.pwm = pwm; l.pan = pan;
