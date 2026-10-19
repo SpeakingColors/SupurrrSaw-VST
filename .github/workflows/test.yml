@@ -14,7 +14,7 @@ jobs:
         run: |
           mkdir -p out
           c++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp 2> build.log || { echo "::error::$(tail -c 700 build.log | tr '\n' ' ')"; exit 1; }
-          ./presets_test out > test.log 2>&1 || { echo "::error::$(tail -c 700 test.log | tr '\n' ' ')"; exit 1; }
+          ./presets_test out > test.log 2>&1 || { echo "::error::$(grep -B1 FAIL test.log | head -c 900 | tr '\n' ' ')"; exit 1; }
           tail -n 3 test.log
       - name: Build the demo renderer
         shell: bash
