@@ -65,7 +65,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(bpm); S87_F(optoAmt); S87_F(ottDepth); S87_F(ottMix); S87_F(sqzAmt);
         S87_F(reverbMix); S87_F(reverbSize); S87_F(reverbWidth); S87_F(reverbLowCutHz);
         S87_F(master); S87_F(clipKnee); S87_B(limiter); S87_F(limCeil); S87_I(polyphony); S87_F(modWheel);
-        S87_F(dynMix); S87_F(dmMix); S87_F(dmDrive); S87_F(dmClip); S87_F(dmLow); S87_F(dmHigh);
+        S87_F(dynMix); S87_F(dmMix); S87_F(dmDrive); S87_F(dmClip); S87_F(dmLow); S87_F(dmHigh); S87_F(drvDrive); S87_F(drvXs); S87_F(drvFuzz); S87_F(drvMix);
         S87_F(chorusDelay); S87_F(chorusWidth); S87_F(delayDamp); S87_F(delayPing); S87_F(reverbPre); S87_F(reverbDamp);
         S87_F(optoGain); S87_F(optoRel); S87_F(ottLow); S87_F(ottMid); S87_F(ottHigh); S87_F(ottTime);
         S87_F(sqzAtk); S87_F(sqzRel); S87_F(sqzMakeup);

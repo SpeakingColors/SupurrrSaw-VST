@@ -211,6 +211,13 @@ int main(int argc, char** argv) {
     CHECK(d1.first > d0.first + 1.0 && d2.first > d1.first); CHECK(d2.second <= 1.f);
     auto s0 = meas(0.4f, 0.f), s1 = meas(0.4f, 0.4f); CHECK(s1.first > s0.first - 0.5);
   }
+  { // drive stack: off is a clean 16 sample delay, on changes the sound, stays finite, level matched within 6 dB, DC small
+    DriveStage ds; Params q; float in[400], out[400]; for (int i = 0; i < 400; ++i) { in[i] = 0.5f * std::sin(2.f * 3.14159265f * 440.f * i / 48000.f); ds.process(q, in[i], in[i], 0.f, 0.f); out[i] = ds.oL; }
+    double e0 = 0; for (int i = 16; i < 400; ++i) e0 = std::max(e0, (double)std::fabs(out[i] - in[i - 16])); CHECK(e0 < 1e-6);
+    for (int mode = 0; mode < 3; ++mode) { Params w; (mode == 0 ? w.drvDrive : mode == 1 ? w.drvXs : w.drvFuzz) = 0.9f; DriveStage d2; double a = 0, b = 0, dc = 0; int cnt = 0;
+      for (int i = 0; i < 9600; ++i) { float x = 0.5f * std::sin(2.f * 3.14159265f * 440.f * i / 48000.f); d2.process(w, x, x, 0.f, 0.f); CHECK(d2.oL == d2.oL); if (i > 4800) { a += (double)x * x; b += (double)d2.oL * d2.oL; dc += d2.oL; ++cnt; } }
+      double db = 10.0 * std::log10(b / a); std::printf("drive stack mode %d at 0.9: %+.1f dB, dc %.4f\n", mode, db, dc / cnt); CHECK(std::fabs(db) < 1.5); CHECK(std::fabs(dc / cnt) < 0.02); }
+  }
   { // drums: each one is finite, stays under the ceiling and dies away
     for (const char* nm : {"kick", "snare", "closed_hat", "open_hat", "crash"}) { Params q; CHECK(presets::byName(nm, q)); Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0, tail = 0;
       e.noteOn(48, 1.f); for (int b = 0; b < 190; ++b) { if (b == 47) e.noteOff(48); e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); if (b > 180) tail = std::max(tail, std::fabs(L[i])); } }

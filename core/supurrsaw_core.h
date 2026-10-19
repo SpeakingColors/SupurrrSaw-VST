@@ -175,6 +175,7 @@ struct Params {
   float optoGain = 0.f, optoRel = 1.f;                       // dB, release scale
   float ottLow = 0.f, ottMid = 0.f, ottHigh = 0.f, ottTime = 1.f;   // band trims in dB, speed scale
   float sqzAtk = 4.f, sqzRel = 90.f, sqzMakeup = 0.f;        // ms, ms, dB
+  float drvDrive = 0.f, drvXs = 0.f, drvFuzz = 0.f, drvMix = 1.f;   // colour stack on the voice sum, before the effects (Drive, Transistor, Fuzz)
   float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmHigh = 0.f;
   // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random, drawn mod envelope.
   // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
@@ -315,6 +316,40 @@ struct Reverb {
     wl = o[0]; wr = o[1];
   }
 };
+// ---- colour stack: Drive, Transistor, Fuzz (PurrOne stages), 2x oversampled with a 33 tap half-band, fixed 16 sample latency ----
+inline float sstep(float t) { t = t < 0.f ? 0.f : t > 1.f ? 1.f : t; return t * t * (3.f - 2.f * t); }
+inline float asymTanh(float u, float nl) { return u >= 0.f ? std::tanh(u) : nl * std::tanh(u / nl); }
+inline float purrShaper(float x, float drive, float xs, float fuzz) {
+  const float dn = sstep((drive - 0.8f) * 5.f), xn = sstep((xs - 0.8f) * 5.f), fn = sstep((fuzz - 0.8f) * 5.f); float y = x;
+  if (drive > 0.001f) { y = std::tanh(x * (1.f + drive * 5.f + dn * 30.f)); if (dn > 0.f) y += dn * (std::tanh(y * (2.f + 10.f * dn)) - y); }
+  if (xs > 0.001f) { const float nl = std::max(0.25f, 1.f - 0.3f * xs - 0.25f * xn), u = y * (1.f + xs * 5.f + xn * 30.f); y = asymTanh(u, nl); y += (0.3f * xs + 0.25f * xn) * y * y; if (xn > 0.f) { const float y2 = asymTanh(y * (2.f + 10.f * xn) + 0.15f * xn, nl); y += xn * (y2 - y); } }
+  if (fuzz > 0.001f) { const float fz = 1.f + fuzz * 14.f + fn * 70.f, bf = 0.5f * std::min(1.f, fuzz); y = std::tanh(y * fz + bf) - std::tanh(bf); if (fn > 0.f) { const float r = std::sqrt(y * y + 0.02f) - 0.1414f; y += fn * 0.7f * (r - 0.3f); y = std::tanh(y * (1.f + 0.8f * fn)); } }
+  return y;
+}
+inline float purrMakeup(float drive, float xs, float fuzz, float ref) { float a = 0.f, b = 0.f; for (int i = 0; i < 64; ++i) { const float x = ref * std::sin(2.f * kPi * (float)i / 64.f); a += x * x; const float y = purrShaper(x, drive, xs, fuzz); b += y * y; } const float m = b > 1e-9f ? std::sqrt(a / b) : 1.f; return std::min(4.f, std::max(0.25f, m)); }
+struct HalfBand33 { double h[33], o[16];
+  HalfBand33() { auto i0 = [](double x) { double s = 1, t = 1; for (int k = 1; k < 30; ++k) { t *= (x / (2 * k)) * (x / (2 * k)); s += t; } return s; };
+    for (int j = 0; j < 33; ++j) { double r = 2.0 * j / 32.0 - 1.0, w = i0(8.0 * std::sqrt(1.0 - r * r)) / i0(8.0); int k = j - 16; h[j] = (k == 0 ? 0.5 : std::sin(3.14159265358979323846 * k / 2.0) / (3.14159265358979323846 * k)) * w; }
+    for (int k = 0; k < 16; ++k) o[k] = h[2 * k + 1]; } };
+inline const HalfBand33& halfBand33() { static const HalfBand33 hb; return hb; }
+struct DriveCh {
+  float x[32] = {}, s[64] = {}, dd[16] = {}; int xi = 0, si = 0, di = 0; float dc = 0.f;
+  float run(float v, bool on, float drive, float xs, float fuzz, float mk, float mix) {
+    const HalfBand33& hb = halfBand33(); x[xi] = v; const int xc = xi; xi = (xi + 1) & 31;
+    const float dry = dd[di]; dd[di] = v; di = (di + 1) & 15;
+    if (!on) { si = (si + 1) & 63; s[si] = 0.f; si = (si + 1) & 63; s[si] = 0.f; dc = 0.f; return dry; }
+    const float u0 = x[(xc - 8) & 31]; double u1 = 0; for (int k = 0; k < 16; ++k) u1 += hb.o[k] * x[(xc - k) & 31]; u1 *= 2.0;
+    si = (si + 1) & 63; s[si] = purrShaper(u0 * 1.5f, drive, xs, fuzz) * mk / 1.5f;
+    const int p = si; double y = 0.5 * s[(p - 16) & 63]; for (int k = 0; k < 16; ++k) y += hb.o[k] * s[(p - 2 * k - 1) & 63];
+    si = (si + 1) & 63; s[si] = purrShaper((float)u1 * 1.5f, drive, xs, fuzz) * mk / 1.5f;
+    dc += 0.0005f * ((float)y - dc); return dry * (1.f - mix) + ((float)y - dc) * mix; } };
+struct DriveStage {
+  DriveCh c[2]; float kd = -1.f, kx = -1.f, kf = -1.f, mk = 1.f; float sl[16] = {}, sr[16] = {}; int si = 0; float oL = 0.f, oR = 0.f, sL = 0.f, sR = 0.f;
+  void process(const Params& p, float L, float R, float sbl, float sbr) {
+    const float d = p.drvDrive, xs = p.drvXs, fz = p.drvFuzz; const bool on = d > 0.001f || xs > 0.001f || fz > 0.001f;
+    if (on && (d != kd || xs != kx || fz != kf)) { kd = d; kx = xs; kf = fz; mk = purrMakeup(d, xs, fz, 0.75f); }
+    oL = c[0].run(L, on, d, xs, fz, mk, p.drvMix); oR = c[1].run(R, on, d, xs, fz, mk, p.drvMix);
+    sL = sl[si]; sR = sr[si]; sl[si] = sbl; sr[si] = sbr; si = (si + 1) & 15; } };
 struct Fx {
   float sr = 48000.f; DelayLine chor, dl, dr, pre; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0}, rhp = 0.f, dtSm = -1.f;
   void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); pre.init((size_t)(0.26f * s)); lfo = 0.f; dlp[0] = dlp[1] = 0.f; rhp = 0.f; dtSm = -1.f; }
@@ -471,7 +506,7 @@ struct Master {
 class Engine {
  public:
   Params p;
-  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); }
+  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); drv = DriveStage(); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); }
   void noteOn(int note, float vel) {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;
@@ -505,6 +540,7 @@ class Engine {
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
     float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr); bool bad = false;
     for (int i = 0; i < n; ++i) {
+      drv.process(p, outL[i], outR[i], sbL[i], sbR[i]); outL[i] = drv.oL; outR[i] = drv.oR; const float sbl = drv.sL, sbr = drv.sR;
       fx.process(p, outL[i], outR[i]);
       const float fl = outL[i], fr = outR[i]; float dl = fl, dr = fr;
       dyn.process(p, dl, dr);
@@ -513,7 +549,7 @@ class Engine {
       br += a * (dr - br); br2 += a * (br - br2);
       float m = 0.5f * (bl2 + br2);
       dm.process(p, dl - bl2 + m, dr - br2 + m);
-      float xl = (dm.outL + sbL[i]) * p.master, xr = (dm.outR + sbR[i]) * p.master;
+      float xl = (dm.outL + sbl) * p.master, xr = (dm.outR + sbr) * p.master;
       if (p.limiter) {   // feed-forward peak limiter, 0.4 ms attack, 120 ms release; overshoots are caught by the smooth clipper
         float pk = std::max(std::fabs(xl), std::fabs(xr));
         limEnv += (pk > limEnv ? limAtk : limRel) * (pk - limEnv);
@@ -523,7 +559,7 @@ class Engine {
       if (!std::isfinite(outL[i] + outR[i])) bad = true;
     }
     if (bad) {   // safety guard: a bad value anywhere resets the engine instead of blasting or hanging the host
-      ++trips; for (auto& v : voices) v = Voice(); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
+      ++trips; for (auto& v : voices) v = Voice(); drv = DriveStage(); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
       for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
     }
     { float pl = 0.f, pr = 0.f; for (int i = 0; i < n; ++i) { pl = std::max(pl, std::fabs(outL[i])); pr = std::max(pr, std::fabs(outR[i])); } mtr.l = pl; mtr.r = pr; }
@@ -539,7 +575,7 @@ class Engine {
     }
     return v;
   }
-  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
+  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; DriveStage drv; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
   int trips = 0;   // how many times the safety guard reset the engine
   Meters mtr;
   std::vector<float> subBusL, subBusR; float* sbL = nullptr; float* sbR = nullptr;
