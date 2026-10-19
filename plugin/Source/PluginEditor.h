@@ -21,6 +21,7 @@ private:
 
     SupurrProcessor& proc;
     std::unique_ptr<juce::WebBrowserComponent> web;
+    std::unique_ptr<juce::ResizableBorderComponent> edges;   // all four sides and four corners, aspect ratio kept by the constrainer
     juce::String lastTrips;
     int tripsSeen = 0;
     double scopeAcc = 0;

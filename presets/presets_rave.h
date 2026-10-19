@@ -14,6 +14,14 @@ inline void lay(Params& p, int i, Wave w, float lv, int oct = 0, float tune = 0.
   LayerParams& l = p.layer[i]; l.wave = w; l.level = lv; l.octave = oct; l.tune = tune; l.voices = vo; l.cents = cents; l.pwm = pwm; l.pan = pan;
 }
 
+// ---------- basics ----------
+inline void moogBass(Params& p) {   // simple analog ladder bass: two saws an octave apart, a pulse sub, closed LP24 with a short pluck
+  p = Params();
+  lay(p, 0, Wave::Saw, 0.55f); lay(p, 1, Wave::Saw, 0.35f, -1, 7.f); lay(p, 2, Wave::Pulse, 0.3f, -1, -5.f, 1, 0.f, 0.5f);
+  p.mono = true; p.glide = 0.02f; p.filterMode = FilterMode::LP24; p.cutoff = 420.f; p.reso = 0.28f; p.envAmt = 0.5f; p.keyTrack = 0.25f; p.fenv = {0.002f, 0.28f, 0.3f, 0.15f};
+  p.drift = 0.12f; p.drive = 0.15f; p.amp = {0.002f, 0.25f, 0.8f, 0.12f}; p.spread = 0.15f; p.bassMonoHz = 250.f; p.lowCutHz = 28.f;
+}
+
 // ---------- leads ----------
 inline void virusCommercial(Params& p) {   // Classic Virus commercial trance lead: unison saws, open filter, dotted delay, long reverb
   p = Params();
@@ -372,6 +380,7 @@ inline void cowbell808(Params& p) {
 struct RaveEntry { const char* name; void (*fn)(Params&); int note; float hold, total; };
 inline const RaveEntry* raveList(int& n) {
   static const RaveEntry L[] = {
+    {"moog_bass", moogBass, 36, 0.8f, 1.6f},
     {"virus_commercial", virusCommercial, 69, 1.5f, 3.0f}, {"hardstyle_stab", hardstyleStab, 57, 0.3f, 1.2f}, {"hyper_trance_chord", hyperTranceChord, 60, 1.5f, 3.0f},
     {"vowel_pluck", vowelPluck, 57, 0.3f, 1.5f}, {"minimal_pluck", minimalPluck, 69, 0.3f, 1.2f}, {"house_m1_piano", houseM1Piano, 60, 1.2f, 3.0f},
     {"hardcore_piano", hardcorePiano, 72, 1.0f, 2.5f}, {"dream_trance_piano", dreamTrancePiano, 64, 1.2f, 3.5f}, {"garage_4am_epiano", garage4amEpiano, 60, 0.5f, 1.5f},

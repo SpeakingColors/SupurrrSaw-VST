@@ -73,6 +73,12 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
 #undef S87_F
 #undef S87_I
 #undef S87_B
+        m["ampCA"] = [](Params& p, const juce::var& v) { p.amp.ca = asF(v); };
+        m["ampCD"] = [](Params& p, const juce::var& v) { p.amp.cd = asF(v); };
+        m["ampCR"] = [](Params& p, const juce::var& v) { p.amp.cr = asF(v); };
+        m["fenvCA"] = [](Params& p, const juce::var& v) { p.fenv.ca = asF(v); };
+        m["fenvCD"] = [](Params& p, const juce::var& v) { p.fenv.cd = asF(v); };
+        m["fenvCR"] = [](Params& p, const juce::var& v) { p.fenv.cr = asF(v); };
         m["ampA"] = [](Params& p, const juce::var& v) { p.amp.a = asF(v); };
         m["ampD"] = [](Params& p, const juce::var& v) { p.amp.d = asF(v); };
         m["ampS"] = [](Params& p, const juce::var& v) { p.amp.s = asF(v); };

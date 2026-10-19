@@ -11,7 +11,7 @@ SupurrProcessor::SupurrProcessor()
 {
     for (auto& a : mGr) a.store (0.f);
     for (auto& a : mDm) a.store (0.f);
-    supurr::presets::byName ("hoover_classic", pending);   // same patch the page starts with, so MIDI works before the editor opens
+    supurr::presets::byName ("trance_90s", pending);   // same patch the page starts with, so MIDI works before the editor opens
     engine.p = pending;
     Diagnostics::log ("plugin created, version " + juce::String (JucePlugin_VersionString));
 }

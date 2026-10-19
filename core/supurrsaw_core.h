@@ -69,7 +69,15 @@ struct WaveTable {
   }
 };
 
-struct Adsr { float a = 0.002f, d = 0.3f, s = 0.8f, r = 0.3f; };  // seconds, sustain 0..1
+// seconds, sustain 0..1. ca/cd/cr bend the attack, decay and release: 0 is a straight line, +1 bulges outward (bell, away from the straight line),
+// -1 bends inward (under the line, fast then slow). The decay and release defaults reproduce the earlier exponential feel.
+struct Adsr { float a = 0.002f, d = 0.3f, s = 0.8f, r = 0.3f, ca = 0.f, cd = -0.4f, cr = -0.4f; };
+// fraction of a move done after fraction f of its time; rising: outward = fast start, falling: outward = stays high longer
+inline float envShape(float f, float c, bool rising) {
+  float p = 1.f + 4.f * std::fabs(c);
+  bool fastStart = rising ? (c >= 0.f) : (c < 0.f);
+  return fastStart ? 1.f - std::pow(1.f - f, p) : std::pow(f, p);
+}
 
 struct LayerParams {
   Wave wave = Wave::Off;
@@ -103,7 +111,7 @@ struct Params {
   // sub oscillator (always mono and centred)
   float subLevel = 0.f;
   Wave subWave = Wave::Sine;   // Sine, Tri, Pulse, Saw
-  int subOctave = -1;          // -1 or -2
+  int subOctave = -1;          // -4..+4 octaves from the note (0 = same pitch)
   // filter
   FilterMode filterMode = FilterMode::LP24;
   float cutoff = 4000.f, reso = 0.2f, drive = 0.f, envAmt = 0.f, keyTrack = 0.f;
@@ -222,14 +230,15 @@ inline float blep(float t, float dt) {
 struct Rng { uint32_t s = 12345u; float next() { s = s * 1664525u + 1013904223u; return (float)(s >> 8) * (1.f / 16777216.f); } };
 
 struct EnvState {
-  float v = 0.f; int stage = 0;  // 0 idle 1 attack 2 decay/sustain 3 release
-  void on() { stage = 1; }
-  void off() { if (stage) stage = 3; }
+  float v = 0.f, v0 = 0.f; int stage = 0; float n = 0.f;  // 0 idle 1 attack 2 decay/sustain 3 release; n counts samples in the stage
+  void on() { stage = 1; n = 0.f; v0 = v; }
+  void off() { if (stage && stage != 3) { stage = 3; n = 0.f; v0 = v; } }
   float tick(const Adsr& e, float sr) {
     switch (stage) {
-      case 1: v += 1.f / std::max(1.f, e.a * sr); if (v >= 1.f) { v = 1.f; stage = 2; } break;
-      case 2: v += (e.s - v) * (1.f - std::exp(-1.f / std::max(1.f, e.d * sr * 0.3f))); break;
-      case 3: v += (0.f - v) * (1.f - std::exp(-1.f / std::max(1.f, e.r * sr * 0.3f))); if (v < 1e-4f) { v = 0.f; stage = 0; } break;
+      case 1: { n += 1.f; float len = std::max(1.f, e.a * sr * (1.f - v0)); float f = n / len;
+        if (f >= 1.f) { v = 1.f; stage = 2; n = 0.f; v0 = 1.f; } else v = v0 + (1.f - v0) * envShape(f, e.ca, true); break; }
+      case 2: { n += 1.f; float f = n / std::max(1.f, e.d * sr); v = f >= 1.f ? e.s : v0 + (e.s - v0) * envShape(f, e.cd, false); break; }
+      case 3: { n += 1.f; float f = n / std::max(1.f, e.r * sr); if (f >= 1.f) { v = 0.f; stage = 0; } else v = v0 * (1.f - envShape(f, e.cr, false)); break; }
       default: break;
     }
     return v;
@@ -540,7 +549,7 @@ class Engine {
   void addSub(Voice& v, float& L, float& R, float invSr, float lvl) {
     if (lvl <= 0.f) return;
     float sf = 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f);
-    float sdt = sf * invSr; float& sp = v.subPhase; float s;
+    float sdt = sf * invSr; if (sdt > 0.45f) return; float& sp = v.subPhase; float s;
     switch (p.subWave) {
       case Wave::Tri: s = 4.f * std::fabs(sp - 0.5f) - 1.f; break;
       case Wave::Pulse: s = (sp < 0.5f ? 1.f : -1.f) + blep(sp, sdt) - blep(sp < 0.5f ? sp + 0.5f : sp - 0.5f, sdt); s *= 0.8f; break;

@@ -126,17 +126,24 @@ SupurrEditor::SupurrEditor (SupurrProcessor& p) : AudioProcessorEditor (&p), pro
     addAndMakeVisible (*web);
     web->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
 
-    setResizable (true, true);
+    setResizable (true, false);
     setResizeLimits (kBaseW / 3, kBaseH / 3, kBaseW * 2, kBaseH * 2);
     getConstrainer()->setFixedAspectRatio ((double) kBaseW / kBaseH);
     setSize (juce::jmin (kBaseW, 1180), (int) (juce::jmin (kBaseW, 1180) * (double) kBaseH / kBaseW));
+    edges = std::make_unique<juce::ResizableBorderComponent> (this, getConstrainer());
+    edges->setBorderThickness (juce::BorderSize<int> (6));
+    addAndMakeVisible (*edges);
     tripsSeen = proc.takeMeters().trips;
     startTimerHz (30);
 }
 
 SupurrEditor::~SupurrEditor() { stopTimer(); }
 
-void SupurrEditor::resized() { if (web) web->setBounds (getLocalBounds()); }
+void SupurrEditor::resized()
+{
+    if (web) web->setBounds (getLocalBounds());
+    if (edges) { edges->setBounds (getLocalBounds()); edges->toFront (false); }
+}
 
 void SupurrEditor::timerCallback()
 {
