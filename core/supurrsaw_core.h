@@ -156,10 +156,19 @@ struct Params {
   // Mastering: dynMix scales the whole opto/OTT/squeeze chain; dm* is the dance master chain (3 band compressor, clipper, dry/wet)
   float lfoDepth = 1.f, lfoFade = 0.f, lfoStart = 0.f;   // LFO master depth, fade-in time (s) and start phase (0..1); shapes: 0 sine, 1 tri, 2 square, 3 saw, 4 sample and hold
   float pitchHold = 0.f, pitchCurve = 0.f;               // pitch envelope: hold before the fall (s), 0 = exponential fall, 1 = linear fall
+  // extra effect controls (defaults reproduce the original sound)
+  float chorusDelay = 12.f, chorusWidth = 1.f;               // ms, 0..1
+  float delayDamp = 0.7f, delayPing = 1.f;                   // darkness of the repeats, 0 straight .. 1 ping-pong
+  float reverbPre = 0.f, reverbDamp = 0.25f;                 // ms, tail darkness
+  float optoGain = 0.f, optoRel = 1.f;                       // dB, release scale
+  float ottLow = 0.f, ottMid = 0.f, ottHigh = 0.f, ottTime = 1.f;   // band trims in dB, speed scale
+  float sqzAtk = 4.f, sqzRel = 90.f, sqzMakeup = 0.f;        // ms, ms, dB
   float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmHigh = 0.f;
-  // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random.
+  // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random, drawn mod envelope.
   // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
-  float mx[8][14] = {};
+  float mx[9][14] = {};   // row 8 is the drawn mod envelope
+  float menv[64]; float menvTime = 0.5f; bool menvLoop = false;   // drawn modulation envelope (0..1 over menvTime seconds, one shot or loop)
+  Params() { for (int i = 0; i < 64; ++i) menv[i] = std::exp(-4.f * (float)i / 63.f); }
 };
 
 // smooth knee clipper: identity below T, then T + w*tanh((|x|-T)/w); C2-continuous at T, tops out at exactly 1
@@ -286,38 +295,39 @@ struct Reverb {
       for (int j = 0; j < 4; ++j) { a[ch][j].b.assign((size_t)((al[j] + ch * 11) * k), 0.f); a[ch][j].i = 0; } }
   }
   // input mono, outputs wet L/R
-  void run(float in, float size, float& wl, float& wr) {
+  void run(float in, float size, float damp, float& wl, float& wr) {
     float fb = 0.70f + 0.27f * size, o[2];
-    for (int ch = 0; ch < 2; ++ch) { float s = 0; for (int j = 0; j < 8; ++j) s += c[ch][j].run(in * 0.15f, fb, 0.25f); for (int j = 0; j < 4; ++j) s = a[ch][j].run(s); o[ch] = s; }
+    for (int ch = 0; ch < 2; ++ch) { float s = 0; for (int j = 0; j < 8; ++j) s += c[ch][j].run(in * 0.15f, fb, damp); for (int j = 0; j < 4; ++j) s = a[ch][j].run(s); o[ch] = s; }
     wl = o[0]; wr = o[1];
   }
 };
 struct Fx {
-  float sr = 48000.f; DelayLine chor, dl, dr; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0}, rhp = 0.f, dtSm = -1.f;
-  void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); lfo = 0.f; dlp[0] = dlp[1] = 0.f; rhp = 0.f; dtSm = -1.f; }
+  float sr = 48000.f; DelayLine chor, dl, dr, pre; Reverb rev; float lfo = 0.f, dlp[2] = {0, 0}, rhp = 0.f, dtSm = -1.f;
+  void prepare(float s) { sr = s; chor.init((size_t)(0.05f * s)); dl.init((size_t)(2.f * s)); dr.init((size_t)(2.f * s)); rev.init(s); pre.init((size_t)(0.26f * s)); lfo = 0.f; dlp[0] = dlp[1] = 0.f; rhp = 0.f; dtSm = -1.f; }
   void process(const Params& p, float& L, float& R) {
     float m = 0.5f * (L + R);
     if (p.chorusMix > 0.f) {  // side-only: the left and right wet signals are opposite, so they cancel in mono
       lfo += p.chorusRate / sr; if (lfo >= 1.f) lfo -= 1.f;
-      chor.push(m); float d = (0.012f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * lfo)) * sr;
-      float d2 = (0.017f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * (lfo + 0.5f))) * sr;
+      chor.push(m); const float cd = p.chorusDelay * 0.001f; float d = (cd + 0.006f * p.chorusDepth * std::sin(2.f * kPi * lfo)) * sr;
+      float d2 = (cd + 0.005f + 0.006f * p.chorusDepth * std::sin(2.f * kPi * (lfo + 0.5f))) * sr;
       // side = difference of two differently delayed copies: adds width without shifting the left/right balance
       float w = chor.read(d) - chor.read(d2);
-      L += p.chorusMix * w; R -= p.chorusMix * w;
+      L += p.chorusMix * w; R -= p.chorusMix * w * p.chorusWidth;
     }
     if (p.delayMix > 0.f) {  // ping-pong, darker on every repeat
       float tt = delaySeconds(p) * sr;
       if (dtSm < 0.f) dtSm = tt; dtSm += (tt - dtSm) * (1.f - std::exp(-1.f / (0.06f * sr)));   // time changes glide like tape instead of clicking
       float t = dtSm;
       float a = dl.read(t), b = dr.read(t);
-      dlp[0] += 0.35f * (a - dlp[0]); dlp[1] += 0.35f * (b - dlp[1]);
-      dl.push(m + dlp[1] * p.delayFb); dr.push(dlp[0] * p.delayFb);
+      const float dc = 1.f - 0.93f * p.delayDamp, pg = p.delayPing; dlp[0] += dc * (a - dlp[0]); dlp[1] += dc * (b - dlp[1]);
+      dl.push(m + (pg * dlp[1] + (1.f - pg) * dlp[0]) * p.delayFb); dr.push((pg * dlp[0] + (1.f - pg) * dlp[1]) * p.delayFb + (1.f - pg) * m);
       L += p.delayMix * dlp[0]; R += p.delayMix * dlp[1];
     }
     if (p.reverbMix > 0.f) {  // mid and side are scaled separately: narrow centre, wide sides
       float ra = 1.f - std::exp(-2.f * kPi * std::max(20.f, p.reverbLowCutHz) / sr);
       rhp += ra * (m - rhp); float rin = m - rhp;
-      float wl, wr; rev.run(rin, p.reverbSize, wl, wr);
+      float rin2 = rin; if (p.reverbPre > 0.f) { pre.push(rin); rin2 = pre.read(std::max(1.f, p.reverbPre * 0.001f * sr)); }
+      float wl, wr; rev.run(rin2, p.reverbSize, p.reverbDamp, wl, wr);
       float wm = 0.5f * (wl + wr), ws = 0.5f * (wl - wr);
       float outM = wm * 0.8f, outS = ws * (0.4f + 1.2f * p.reverbWidth);
       const float k = 0.29f;   // wet level matches the dry level at mix = 1 (measured with noise), so the knob reads as % wet
@@ -365,9 +375,9 @@ struct Dynamics {
       float db = linToDb(oEnv), T = -4.f - 26.f * p.optoAmt, over = db - T, knee = 12.f, gr;
       if (over <= -knee * 0.5f) gr = 0.f; else if (over >= knee * 0.5f) gr = over * (1.f - 1.f / 3.f);
       else { float x = over + knee * 0.5f; gr = (1.f - 1.f / 3.f) * x * x / (2.f * knee); }
-      oFast += (gr > oFast ? coef(0.010f, sr) : coef(0.060f, sr)) * (gr - oFast);
-      oSlow += (gr > oSlow ? coef(0.300f, sr) : coef(1.500f, sr)) * (gr - oSlow);
-      float g = dbToLin(-std::max(oFast, 0.8f * oSlow) + 0.45f * (-T) * (1.f - 1.f / 3.f));   // auto makeup
+      oFast += (gr > oFast ? coef(0.010f, sr) : coef(0.060f * p.optoRel, sr)) * (gr - oFast);
+      oSlow += (gr > oSlow ? coef(0.300f, sr) : coef(1.500f * p.optoRel, sr)) * (gr - oSlow);
+      float g = dbToLin(-std::max(oFast, 0.8f * oSlow) + 0.45f * (-T) * (1.f - 1.f / 3.f) + p.optoGain);   // auto makeup
       L *= g; R *= g;
     }
     if (p.ottMix > 0.f) {
@@ -378,28 +388,28 @@ struct Dynamics {
         float lowAp = apLo1[c].tick(low) + apLo2[c].tick(low);   // keep the low band in phase with the other two
         band[c][0] = lowAp; band[c][1] = mid; band[c][2] = high;
       }
-      const float atk[3] = {0.0218f, 0.0135f, 0.0104f}, rel[3] = {0.247f, 0.132f, 0.072f};   // seconds per band (mine, in the range such pedals use)
+      const float atk[3] = {0.0218f, 0.0135f, 0.0104f}, rel[3] = {0.247f, 0.132f, 0.072f}, tm = p.ottTime, trimB[3] = {p.ottLow, p.ottMid, p.ottHigh};   // seconds per band (mine, in the range such pedals use)
       float outL = 0.f, outR = 0.f;
       for (int b = 0; b < 3; ++b) {
         float pk = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
-        bEnv[b] += (pk > bEnv[b] ? coef(atk[b], sr) : coef(rel[b], sr)) * (pk - bEnv[b]);
+        bEnv[b] += (pk > bEnv[b] ? coef(atk[b] * tm, sr) : coef(rel[b] * tm, sr)) * (pk - bEnv[b]);
         float db = linToDb(bEnv[b]), gdb = 0.f;
         const float Th = -14.f, Tl = -38.f, rD = 1.f + 5.f * depth, rU = 1.f + 3.f * depth;
         if (db > Th) gdb = -(db - Th) * (1.f - 1.f / rD);
         else if (db < Tl) gdb = std::min(18.f * depth, (Tl - db) * (1.f - 1.f / rU)) * std::min(1.f, std::max(0.f, (db + 80.f) / 20.f));   // no boosting of silence
-        float tg = dbToLin(gdb + 3.f * depth); bGain[b] += (tg - bGain[b]) * 0.05f;
+        float tg = dbToLin(gdb + 3.f * depth + trimB[b]); bGain[b] += (tg - bGain[b]) * 0.05f;
         outL += band[0][b] * bGain[b]; outR += band[1][b] * bGain[b];
       }
       L = L * (1.f - p.ottMix) + outL * p.ottMix; R = R * (1.f - p.ottMix) + outR * p.ottMix;
     }
     if (p.sqzAmt > 0.f) {
       float pk = std::max(std::fabs(L), std::fabs(R));
-      sEnv += (pk > sEnv ? coef(0.004f, sr) : coef(0.090f, sr)) * (pk - sEnv);
+      sEnv += (pk > sEnv ? coef(p.sqzAtk * 0.001f, sr) : coef(p.sqzRel * 0.001f, sr)) * (pk - sEnv);
       float db = linToDb(sEnv), T = -8.f - 14.f * p.sqzAmt, R_ = 1.f + 3.f * p.sqzAmt, over = db - T, knee = 6.f, gr;
       if (over <= -knee * 0.5f) gr = 0.f; else if (over >= knee * 0.5f) gr = over * (1.f - 1.f / R_);
       else { float x = over + knee * 0.5f; gr = (1.f - 1.f / R_) * x * x / (2.f * knee); }
       sGr += (gr - sGr) * 0.01f;
-      float g = dbToLin(-sGr + 0.5f * (-T) * (1.f - 1.f / R_));
+      float g = dbToLin(-sGr + 0.5f * (-T) * (1.f - 1.f / R_) + p.sqzMakeup);
       L *= g; R *= g;
     }
   }
@@ -471,7 +481,7 @@ class Engine {
     std::fill(subBusL.begin(), subBusL.begin() + n, 0.f); std::fill(subBusR.begin(), subBusR.begin() + n, 0.f); sbL = subBusL.data(); sbR = subBusR.data();
     for (auto& v : voices) if (v.active) renderVoice(v, outL, outR, n);
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
-    float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr);
+    float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr); bool bad = false;
     for (int i = 0; i < n; ++i) {
       fx.process(p, outL[i], outR[i]);
       const float fl = outL[i], fr = outR[i]; float dl = fl, dr = fr;
@@ -488,6 +498,11 @@ class Engine {
         if (limEnv > p.limCeil) { float g = p.limCeil / limEnv; xl *= g; xr *= g; }
       }
       outL[i] = softClip(xl, p.clipKnee); outR[i] = softClip(xr, p.clipKnee);
+      if (!std::isfinite(outL[i] + outR[i])) bad = true;
+    }
+    if (bad) {   // safety guard: a bad value anywhere resets the engine instead of blasting or hanging the host
+      ++trips; for (auto& v : voices) v = Voice(); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
+      for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
     }
   }
 
@@ -502,6 +517,7 @@ class Engine {
     return v;
   }
   float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
+  int trips = 0;   // how many times the safety guard reset the engine
   std::vector<float> subBusL, subBusR; float* sbL = nullptr; float* sbR = nullptr;
   float bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05f, limRel = 0.0002f;
 
@@ -522,9 +538,9 @@ class Engine {
 
   void renderVoice(Voice& v, float* oL, float* oR, int n) {
     const float invSr = 1.f / sr;
-    int mxs[112], mxd[112]; float mxv[112]; int mxn = 0;   // sparse list of the non-zero matrix cells
-    for (int a = 0; a < 8; ++a) for (int b = 0; b < 14; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
-    float md[14] = {}, sv[8];
+    int mxs[126], mxd[126]; float mxv[126]; int mxn = 0;   // sparse list of the non-zero matrix cells
+    for (int a = 0; a < 9; ++a) for (int b = 0; b < 14; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
+    float md[14] = {}, sv[9];
     for (int i = 0; i < n; ++i) {
       float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
       if (v.amp.stage == 0) { v.active = false; return; }
@@ -544,6 +560,7 @@ class Engine {
         for (int k = 0; k < 14; ++k) md[k] = 0.f;
         sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = std::max(-2.f, std::min(2.f, pitchEnv / 12.f)); sv[4] = p.modWheel;
         sv[5] = std::max(-2.f, std::min(2.f, (float)(v.note - 60) / 24.f)); sv[6] = v.vel; sv[7] = v.rnd;
+        { const float T = std::max(0.02f, p.menvTime); float x = v.t / T; if (p.menvLoop) x -= std::floor(x); else if (x > 1.f) x = 1.f; const float fp = x * 63.f; const int i0 = std::min(62, (int)fp); sv[8] = p.menv[i0] + (p.menv[i0 + 1] - p.menv[i0]) * (fp - (float)i0); }
         for (int k = 0; k < mxn; ++k) md[mxd[k]] += sv[mxs[k]] * mxv[k];
       }
       float L = 0.f, R = 0.f;

@@ -1,5 +1,6 @@
 // Renders every built-in preset to a WAV and checks: no NaN, bounded peak, not silent, mono compatibility, sync/noise behave.
 // Usage: presets_test [outdir]   (build: g++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp)
+#include <functional>
 #include "../presets/presets.h"
 #include <cstdio>
 #include <string>
@@ -172,7 +173,7 @@ int main(int argc, char** argv) {
     double base = rms(0, 0, 0.f); int changed = 0;
     for (int d : {0, 1, 2, 5, 6, 7, 11, 12, 13}) { if (std::fabs(rms(4, d, 0.8f) - base) > 1e-6) ++changed; }
     std::printf("mod matrix: %d of 9 wheel destinations changed the sound\n", changed); CHECK(changed == 9);
-    for (int sidx = 0; sidx < 8; ++sidx) for (int d = 0; d < 14; ++d) CHECK(std::isfinite(rms(sidx, d, 1.f)));
+    for (int sidx = 0; sidx < 9; ++sidx) for (int d = 0; d < 14; ++d) CHECK(std::isfinite(rms(sidx, d, 1.f)));
   }
   { // dance master chain: louder at the same ceiling, never above the limiter, no NaN, sub stays clean
     auto meas = [&](float mix, float sub) { Params q; presets::byName("trance_lead", q); q.dmMix = mix; q.subLevel = sub; Engine e; e.prepare(48000); e.p = q; float L[512], R[512]; double s2 = 0; int cnt = 0; float pk = 0;
@@ -187,6 +188,36 @@ int main(int argc, char** argv) {
     for (const char* nm : {"kick", "snare", "closed_hat", "open_hat", "crash"}) { Params q; CHECK(presets::byName(nm, q)); Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0, tail = 0;
       e.noteOn(48, 1.f); for (int b = 0; b < 190; ++b) { if (b == 47) e.noteOff(48); e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); if (b > 180) tail = std::max(tail, std::fabs(L[i])); } }
       CHECK(pk > 0.3f && pk <= 1.f); CHECK(tail < 0.01f); }
+  }
+  { // every one of the 126 mod matrix cells must change the sound (nothing decorative)
+    auto mk = [&](int syl, int src, int dst) { Params q; q.dmMix = 0.f; q.reverbMix = q.chorusMix = q.delayMix = 0.f; q.limiter = false; q.cutoff = 3000.f; q.reso = 0.3f; q.drive = 0.2f; q.lowCutHz = 100.f; q.subLevel = 0.3f; q.noiseLevel = 0.3f;
+      q.pitchAmt = 7.f; q.pitchTime = 0.5f; q.lfoRate = 5.f; q.modWheel = 1.f; q.fenv.s = 0.6f; q.amp.s = 0.7f;
+      q.layer[0].wave = Wave::Pulse; q.layer[0].level = 0.5f; q.layer[0].pwm = 0.5f; q.layer[1].wave = Wave::SuperSaw; q.layer[1].level = 0.5f; q.layer[1].detune = 0.5f; q.layer[1].voices = 5; q.layer[2].wave = Wave::Saw; q.layer[2].level = 0.4f;
+      if (syl >= 0) { for (int i = 0; i < 3; ++i) q.layer[i].wave = Wave::Off; q.layer[syl].wave = Wave::Saw; q.layer[syl].level = 0.6f; q.layer[syl].sync = true; q.layer[syl].syncSemis = 7.f; }
+      if (src >= 0) q.mx[src][dst] = 0.8f;
+      Engine e; e.prepare(48000); e.p = q; e.noteOn(72, 0.8f); std::vector<float> o; float L[500], R[500]; for (int b = 0; b < 48; ++b) { e.render(L, R, 500); o.insert(o.end(), L, L + 500); } return o; };
+    int dead = 0;
+    for (int s = 0; s < 9; ++s) for (int d = 0; d < 14; ++d) { int syl = d == 8 ? 0 : d == 9 ? 1 : d == 10 ? 2 : -1; auto a0 = mk(syl, -1, 0), a1 = mk(syl, s, d); double df = 0, sm = 0; for (size_t i = 0; i < a0.size(); ++i) { df += std::fabs(a0[i] - a1[i]); sm += std::fabs(a0[i]); } if (!(df / (sm + 1e-9) > 1e-3)) { ++dead; std::printf("dead cell %d->%d\n", s, d); } }
+    CHECK(dead == 0);
+  }
+  { // every extra effect control changes the sound when its effect is on
+    auto rd = [&](std::function<void(Params&)> f) { Params q; q.dmMix = 0.f; q.layer[0].wave = Wave::Saw; q.layer[0].level = 0.6f; q.cutoff = 6000.f; q.limiter = false; f(q); Engine e; e.prepare(48000); e.p = q; e.noteOn(57, 0.9f); std::vector<float> o; float L[500], R[500]; for (int b = 0; b < 60; ++b) { if (b == 20) e.noteOff(57); e.render(L, R, 500); o.insert(o.end(), L, L + 500); } return o; };
+    struct C { const char* n; std::function<void(Params&)> on, mod; } cs[] = {
+      {"chorusDelay", [](Params& q) { q.chorusMix = 0.8f; q.chorusDepth = 0.8f; }, [](Params& q) { q.chorusDelay = 25.f; }},
+      {"chorusWidth", [](Params& q) { q.chorusMix = 0.8f; }, [](Params& q) { q.chorusWidth = 0.f; }},
+      {"delayDamp", [](Params& q) { q.delayMix = 0.8f; q.delayFb = 0.7f; q.delayTime = 0.1f; }, [](Params& q) { q.delayDamp = 1.f; }},
+      {"delayPing", [](Params& q) { q.delayMix = 0.8f; q.delayFb = 0.7f; q.delayTime = 0.1f; }, [](Params& q) { q.delayPing = 0.f; }},
+      {"reverbPre", [](Params& q) { q.reverbMix = 0.8f; }, [](Params& q) { q.reverbPre = 120.f; }},
+      {"reverbDamp", [](Params& q) { q.reverbMix = 0.8f; }, [](Params& q) { q.reverbDamp = 0.8f; }},
+      {"optoGain", [](Params& q) { q.optoAmt = 0.6f; }, [](Params& q) { q.optoGain = 4.f; }},
+      {"optoRel", [](Params& q) { q.optoAmt = 0.8f; }, [](Params& q) { q.optoRel = 2.f; }},
+      {"ottLow", [](Params& q) { q.ottMix = 1.f; q.ottDepth = 0.6f; }, [](Params& q) { q.ottLow = 5.f; }},
+      {"ottHigh", [](Params& q) { q.ottMix = 1.f; q.ottDepth = 0.6f; }, [](Params& q) { q.ottHigh = 5.f; }},
+      {"ottTime", [](Params& q) { q.ottMix = 1.f; q.ottDepth = 0.8f; }, [](Params& q) { q.ottTime = 3.f; }},
+      {"sqzAtk", [](Params& q) { q.sqzAmt = 0.8f; }, [](Params& q) { q.sqzAtk = 40.f; }},
+      {"sqzRel", [](Params& q) { q.sqzAmt = 0.8f; }, [](Params& q) { q.sqzRel = 500.f; }},
+      {"sqzMakeup", [](Params& q) { q.sqzAmt = 0.8f; }, [](Params& q) { q.sqzMakeup = 4.f; }}};
+    for (auto& c : cs) { auto a0 = rd(c.on), a1 = rd([&](Params& q) { c.on(q); c.mod(q); }); double df = 0, sm = 0; for (size_t i = 0; i < a0.size(); ++i) { df += std::fabs(a0[i] - a1[i]); sm += std::fabs(a0[i]); } if (!(df / (sm + 1e-9) > 1e-3)) { std::printf("dead control %s\n", c.n); CHECK(false); } }
   }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
