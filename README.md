@@ -50,7 +50,7 @@ The built-in `assets/samples/choir_stab_classic.wav` was made by Studio 87 and s
 
 AGPL-3.0-or-later (the JUCE framework is used under the AGPLv3). You can use, change and share it, and anyone who shares a modified version must share the source under the same terms.
 
-Free to use. Donations welcome (link coming soon).
+Free to use. Donations welcome: https://ko-fi.com/studio87
 
 Not affiliated with or endorsed by Roland, Korg or any other brand mentioned. Names are used only to describe sounds and compatibility.
 
