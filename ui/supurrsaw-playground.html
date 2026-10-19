@@ -2207,14 +2207,26 @@ function loop(t){
   if(curPage==="fx"){drawScopeOn(scFx,"x");GRM.forEach(drawGR);FXG.forEach(o=>drawFxg(o,t));}
   if(curPage==="mod"&&LFODRAW&&t-lastAnim>33){LFODRAW();if(MENVDRAW)MENVDRAW();lastAnim=t;}
 }
-const tip=$("#tip");let tipT=null;
+const tip=$("#tip");let tipT=null,tipDrag=null;
+function tipFill(t){const n=t.querySelector(":scope > .n"),v=t.querySelector(":scope > .v");tip.textContent="";
+  if(n&&v){const h=document.createElement("b");h.textContent=n.textContent+": "+v.textContent;h.style.cssText="display:block;color:#ffd100;margin-bottom:2px";tip.appendChild(h);}
+  tip.appendChild(document.createTextNode(t.dataset.tip||""));}
+function tipPlace(t){const r=t.getBoundingClientRect();tip.style.left=clamp(r.left,8,innerWidth-270)+"px";tip.style.top=(r.bottom+6>innerHeight-150?r.top-tip.offsetHeight-6:r.bottom+6)+"px";}
 document.addEventListener("pointerover",e=>{
+  if(tipDrag)return;
   clearTimeout(tipT);tip.style.display="none";
   if(!$("#tipsOn").checked||e.pointerType==="touch")return;
   const t=e.target.closest&&e.target.closest("[data-tip]");if(!t||!t.dataset.tip)return;
-  tipT=setTimeout(()=>{tip.textContent=t.dataset.tip;tip.style.display="block";const r=t.getBoundingClientRect();tip.style.left=clamp(r.left,8,innerWidth-270)+"px";tip.style.top=(r.bottom+6>innerHeight-150?r.top-tip.offsetHeight-6:r.bottom+6)+"px";},1000);
+  tipT=setTimeout(()=>{tipFill(t);tip.style.display="block";tipPlace(t);},1000);
 });
-document.addEventListener("pointerdown",()=>{clearTimeout(tipT);tip.style.display="none";},true);
+/* while a knob is being dragged the bubble stays up (right away) and follows the value */
+document.addEventListener("pointerdown",e=>{clearTimeout(tipT);tip.style.display="none";tipDrag=null;
+  if(!$("#tipsOn").checked||e.pointerType==="touch")return;
+  const k=e.target.closest&&e.target.closest(".knob[data-tip]");if(!k||e.target.tagName==="INPUT")return;
+  tipDrag=k;tipFill(k);tip.style.display="block";tipPlace(k);},true);
+document.addEventListener("pointermove",()=>{if(tipDrag){tipFill(tipDrag);tipPlace(tipDrag);}},true);
+const tipEnd=()=>{if(tipDrag){tipDrag=null;tip.style.display="none";}};
+document.addEventListener("pointerup",tipEnd,true);document.addEventListener("pointercancel",tipEnd,true);
 window.addEventListener("resize",()=>{if(P)drawAll();});
 
 /* ---------- init ---------- */
