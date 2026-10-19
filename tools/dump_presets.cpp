@@ -2,6 +2,8 @@
 // Usage: dump_presets > presets.json
 #include "../presets/presets.h"
 #include <cstdio>
+#include <vector>
+#include <string>
 #include <algorithm>
 using namespace supurr;
 static const char* W[] = {"Off", "SuperSaw", "SuperSquare", "Saw", "Pulse", "Tri", "Sine", "Sample", "Custom"};
@@ -10,9 +12,10 @@ int main() {
   const char* names[] = {"hoover", "hoover_classic", "hoover_prodigy", "pick", "pluck", "trance_lead", "trance_hybrid", "trance_90s", "talking_lead", "daft_funk", "trance_bass", "funk_bass", "freeway_bass",
                          "better_off_alone", "gimme_lead", "levels_lead", "sandstorm_lead", "gigi_lead", "alexf_lead", "mgmt_lead", "pendulum_lead", "nightcall_keys", "brejcha_bass", "feellove_bass", "nboy_303", "spaghetti_bass", "access_bass", "epiano_dx", "epiano_wurly", "piano", "felt_piano", "organ", "clav", "strings", "warm_pad", "glass_pad", "choir", "bell", "brass", "kick", "snare", "closed_hat", "open_hat", "crash"};
   std::printf("{\n"); bool first = true;
-  for (const char* n : names) {
-    Params p; if (!presets::byName(n, p)) { std::fprintf(stderr, "missing %s\n", n); return 1; }
-    std::printf("%s\"%s\": {\"layers\":[", first ? "" : ",\n", n); first = false;
+  std::vector<std::string> all(std::begin(names), std::end(names)); { int rn; const presets::RaveEntry* RL = presets::raveList(rn); for (int i = 0; i < rn; ++i) all.push_back(RL[i].name); }
+  for (const std::string& n : all) {
+    Params p; if (!presets::byName(n, p)) { std::fprintf(stderr, "missing %s\n", n.c_str()); return 1; }
+    std::printf("%s\"%s\": {\"layers\":[", first ? "" : ",\n", n.c_str()); first = false;
     for (int l = 0; l < kLayers; ++l) { const LayerParams& a = p.layer[l];
       std::printf("%s{\"wave\":\"%s\",\"level\":%g,\"voices\":%d,\"detune\":%g,\"pwm\":%g,\"octave\":%d,\"tune\":%g,\"pan\":%g,\"sync\":%s,\"syncSemis\":%g,\"syncEnv\":%g,\"syncLfo\":%g,\"syncKey\":%g,\"syncWheel\":%g,\"cents\":%g,\"lfoPitchCents\":%g,\"fmSrc\":%d,\"fmAmt\":%g,\"amSrc\":%d,\"amAmt\":%g}",
         l ? "," : "", W[(int)a.wave], a.level, a.voices, a.detune, a.pwm, a.octave, a.tune, a.pan, a.sync ? "true" : "false", a.syncSemis, a.syncEnv, a.syncLfo, a.syncKey, a.syncWheel, a.cents, a.lfoPitchCents, a.fmSrc, a.fmAmt, a.amSrc, a.amAmt); }

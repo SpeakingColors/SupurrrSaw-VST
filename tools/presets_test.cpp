@@ -48,6 +48,18 @@ int main(int argc, char** argv) {
     CHECK(!r.nan); CHECK(r.peak < 1.0 && r.peak > 0.05); CHECK(r.rms > 0.01); CHECK(monoDb > -6.0);
     writeWav(dir + "/preset_" + pr.name + ".wav", r.l, r.r);
   }
+  { // rave pack: same checks for every recipe preset, plus the byName lookup
+    int rn; const presets::RaveEntry* RL = presets::raveList(rn);
+    for (int i = 0; i < rn; ++i) {
+      Engine e; RL[i].fn(e.p); e.p.master *= presets::raveGain(RL[i].name); Engine e2; CHECK(presets::byName(RL[i].name, e2.p));
+      Result r = render(e, RL[i].note, RL[i].hold, RL[i].total);
+      double sl = 0, sr = 0, sm = 0; for (size_t k = 0; k < r.l.size(); ++k) { sl += r.l[k]*r.l[k]; sr += r.r[k]*r.r[k]; sm += 0.25*(r.l[k]+r.r[k])*(r.l[k]+r.r[k]); }
+      double monoDb = 10 * std::log10((sm + 1e-12) / (0.5 * (sl + sr) + 1e-12));
+      std::printf("%-22s peak %.2f rms %.3f mono-sum %+.1f dB\n", RL[i].name, r.peak, r.rms, monoDb);
+      CHECK(!r.nan); CHECK(r.peak < 1.0 && r.peak > 0.05); CHECK(r.rms > 0.01); CHECK(monoDb > -6.0);
+      writeWav(dir + "/preset_" + RL[i].name + ".wav", r.l, r.r);
+    }
+  }
   { // reverb mix is a true crossfade: at 0.1 the wet level is far below the dry level; the reverb low cut removes low end from the wet only
     double lowWet[2];
     for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 18000; e.p.reverbMix = 1.f; e.p.reverbLowCutHz = k ? 400.f : 20.f; Result r = render(e, 33, 0.3f, 1.5f);

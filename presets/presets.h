@@ -429,6 +429,9 @@ inline void crash(Params& p) {
   p.amp = {0.002f, 1.6f, 0.f, 1.2f}; p.chorusMix = 0.25f; p.reverbMix = 0.15f; p.reverbSize = 0.6f; p.master = 0.9f;
 }
 
+}  // namespace supurr::presets
+#include "presets_rave.h"
+namespace supurr::presets {
 inline bool byName(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
   else if (n == "trance_hybrid") tranceHybrid(p); else if (n == "trance_90s") trance90s(p);
@@ -442,7 +445,7 @@ inline bool byName(const std::string& n, Params& p) {
   else if (n == "nightcall_keys") nightCallKeys(p); else if (n == "freeway_bass") freewayBass(p);
   else if (n == "brejcha_bass") brejchaBass(p); else if (n == "feellove_bass") feelLoveBass(p); else if (n == "nboy_303") nboy303(p); else if (n == "spaghetti_bass") spaghettiBass(p); else if (n == "access_bass") accessBass(p);
   else if (n == "kick") kick(p); else if (n == "snare") snare(p); else if (n == "closed_hat") closedHat(p); else if (n == "open_hat") openHat(p); else if (n == "crash") crash(p);
-  else return false;
+  else return raveByName(n, p);
   return true;
 }
 
