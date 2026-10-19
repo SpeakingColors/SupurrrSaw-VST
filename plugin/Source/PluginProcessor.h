@@ -51,8 +51,19 @@ private:
     void applyPendingParams();
     void pushEvent (int type, int note, float vel);
     void buildTable (int layer, const float* data, int len);
+    void setKitFromJson (const juce::var& k);        // drum kit mode: a list of pads, or null for off
+    void rebuildKit();                               // builds the pads on the message thread and hands them to the audio thread
 
     supurr::Engine engine;
+
+    // drum kit mode: the message thread builds a KitEngine, the audio thread takes it over at the next block
+    juce::SpinLock kitLock;
+    std::shared_ptr<supurr::KitEngine> kitNext;                       // handed over (under kitLock)
+    std::vector<std::shared_ptr<supurr::KitEngine>> kitRetired;       // keeps old kits alive so they are freed off the audio thread
+    std::shared_ptr<supurr::KitEngine> kitLive;                       // audio thread only
+    std::atomic<bool> kitDirty { false };
+    std::vector<supurr::KitEngine::Def> kitDefs;                      // message thread: lets the kit be rebuilt when the sample rate changes
+    std::atomic<int> maxBlockNow { 8192 };
 
     // parameters: message thread edits `pending`, the audio thread copies it when `dirty`
     juce::SpinLock paramLock;
@@ -66,6 +77,7 @@ private:
     juce::CriticalSection stateLock;
     juce::var paramsJson;   // nested object exactly as the page sends it
     juce::var uiJson;
+    juce::var kitJson;      // the kit exactly as the page sent it (resolved pads), saved with the project
 
     // notes from the page
     struct Ev { int type = 0, note = 0; float vel = 0; };

@@ -26,6 +26,7 @@ bool SupurrProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 void SupurrProcessor::prepareToPlay (double sr, int block)
 {
     sampleRateNow.store (sr);
+    maxBlockNow.store (juce::jmax (block, 8192));
     engine.prepare (sr);
     engine.reserve (juce::jmax (block, 8192));
     {
@@ -33,6 +34,7 @@ void SupurrProcessor::prepareToPlay (double sr, int block)
         engine.p = pending;
         dirty.store (false);
     }
+    if (! kitDefs.empty()) rebuildKit();   // a kit from the project, or from before a sample rate change
     Diagnostics::log ("audio start: " + juce::String (sr, 0) + " Hz, block " + juce::String (block));
 }
 
@@ -63,10 +65,18 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     float* R = buffer.getWritePointer (1);
 
     const bool isMuted = muted.load();
-    if (isMuted && ! wasMuted) engine.allOff();
+    if (isMuted && ! wasMuted) { engine.allOff(); if (kitLive) kitLive->allOff(); }
     wasMuted = isMuted;
 
     applyPendingParams();
+    if (kitDirty.load())
+    {
+        const juce::SpinLock::ScopedTryLockType kl (kitLock);
+        if (kl.isLocked()) { kitLive = kitNext; kitDirty.store (false); engine.allOff(); }
+    }
+    auto noteOnAny = [&] (int note, float vel) { if (kitLive) kitLive->noteOn (note, vel); else engine.noteOn (note, vel); };
+    auto noteOffAny = [&] (int note) { if (! kitLive) engine.noteOff (note); };
+    auto allOffAny = [&] { engine.allOff(); if (kitLive) kitLive->allOff(); };
 
     // notes from the on screen keyboard and the demo player
     {
@@ -78,9 +88,9 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             {
                 const Ev& e = fifoData[(size_t) (start + i)];
                 if (isMuted) continue;
-                if (e.type == 0) engine.noteOn (e.note, e.vel);
-                else if (e.type == 1) engine.noteOff (e.note);
-                else engine.allOff();
+                if (e.type == 0) noteOnAny (e.note, e.vel);
+                else if (e.type == 1) noteOffAny (e.note);
+                else allOffAny();
             }
         };
         run (s1, n1); run (s2, n2);
@@ -91,7 +101,11 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     int pos = 0;
     auto renderTo = [&] (int end)
     {
-        if (end > pos && ! isMuted) engine.render (L + pos, R + pos, end - pos);
+        if (end > pos && ! isMuted)
+        {
+            if (kitLive) kitLive->render (L + pos, R + pos, end - pos, engine.p.master, engine.p.clipKnee);
+            else engine.render (L + pos, R + pos, end - pos);
+        }
         pos = juce::jmax (pos, end);
     };
     for (const auto meta : midi)
@@ -99,9 +113,9 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         const auto msg = meta.getMessage();
         renderTo (juce::jlimit (0, n, meta.samplePosition));
         if (isMuted) continue;
-        if (msg.isNoteOn()) engine.noteOn (msg.getNoteNumber(), msg.getFloatVelocity());
-        else if (msg.isNoteOff()) engine.noteOff (msg.getNoteNumber());
-        else if (msg.isAllNotesOff() || msg.isAllSoundOff()) engine.allOff();
+        if (msg.isNoteOn()) noteOnAny (msg.getNoteNumber(), msg.getFloatVelocity());
+        else if (msg.isNoteOff()) noteOffAny (msg.getNoteNumber());
+        else if (msg.isAllNotesOff() || msg.isAllSoundOff()) allOffAny();
         else if (msg.isController() && msg.getControllerNumber() == 1)
         {
             wheelCC = (float) msg.getControllerValue() / 127.f;
@@ -129,7 +143,7 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     auto bump = [] (std::atomic<float>& a, float v) { float o = a.load(); while (v > o && ! a.compare_exchange_weak (o, v)) {} };
     bump (mPeakL, pl); bump (mPeakR, pr);
     const auto m = engine.meters();
-    mLim.store (m.lim); mActive.store (m.active); mTrips.store (m.trips);
+    mLim.store (m.lim); mActive.store (kitLive ? kitLive->activePads() : m.active); mTrips.store (m.trips);
     for (int i = 0; i < 3; ++i) { mGr[i].store (m.gr[i]); mDm[i].store (m.dm[i]); }
 }
 
@@ -169,6 +183,60 @@ void SupurrProcessor::buildTable (int layer, const float* data, int len)
     tables[layer] = t;
     pending.layer[layer].table = t;
     dirty.store (true);
+}
+
+static std::vector<int> intList (const juce::var& v)
+{
+    std::vector<int> r;
+    if (auto* a = v.getArray()) for (auto& x : *a) r.push_back ((int) x);
+    return r;
+}
+
+void SupurrProcessor::setKitFromJson (const juce::var& k)
+{
+    kitDefs.clear();
+    if (auto* pads = k.getArray())
+        for (auto& s : *pads)
+        {
+            supurr::KitEngine::Def d;
+            d.n = intList (s["n"]); d.ch = intList (s["ch"]);
+            d.play = (s["play"].isVoid() || s["play"].isUndefined()) ? -1 : (int) s["play"];
+            d.g = s.hasProperty ("g") ? (float) (double) s["g"] : 1.f;
+            setAll (d.p, s["full"]);
+            if (auto* cy = s["cyc"].getArray())
+                for (int i = 0; i < juce::jmin (3, cy->size()); ++i)
+                    if (auto* arr = (*cy)[i].getArray())
+                    {
+                        std::vector<float> f; f.reserve ((size_t) arr->size());
+                        for (auto& x : *arr) f.push_back ((float) (double) x);
+                        if (f.size() >= 8)
+                        {
+                            auto w = std::make_shared<supurr::WaveTable>();
+                            w->setCycle (f.data(), (int) f.size());
+                            if (w->ready()) d.p.layer[i].table = w;
+                        }
+                    }
+            if (! d.n.empty()) kitDefs.push_back (std::move (d));
+        }
+    rebuildKit();
+}
+
+void SupurrProcessor::rebuildKit()
+{
+    std::shared_ptr<supurr::KitEngine> k;
+    if (! kitDefs.empty())
+    {
+        k = std::make_shared<supurr::KitEngine>();
+        k->build (kitDefs, sampleRateNow.load(), maxBlockNow.load());
+    }
+    std::vector<std::shared_ptr<supurr::KitEngine>> drop;
+    {
+        const juce::SpinLock::ScopedLockType sl (kitLock);
+        if (kitNext) kitRetired.push_back (kitNext);
+        while (kitRetired.size() > 4) { drop.push_back (kitRetired.front()); kitRetired.erase (kitRetired.begin()); }
+        kitNext = k;
+        kitDirty.store (true);
+    }
 }
 
 static void setInJson (juce::var& root, const juce::String& key, const juce::var& v)
@@ -211,6 +279,14 @@ void SupurrProcessor::handleUiMessage (const juce::var& m)
         pending = np;
         dirty.store (true);
     }
+    else if (t == "kit")
+    {
+        {
+            const juce::ScopedLock sl (stateLock);
+            kitJson = m["k"];
+        }
+        setKitFromJson (m["k"]);
+    }
     else if (t == "cyc")
     {
         const int ly = juce::jlimit (0, 2, (int) m["ly"]);
@@ -247,6 +323,7 @@ void SupurrProcessor::getStateInformation (juce::MemoryBlock& dest)
         o->setProperty ("params", paramsJson);
         o->setProperty ("ui", uiJson);
         o->setProperty ("vol", (double) volume.load());
+        if (kitJson.isArray()) o->setProperty ("kit", kitJson);
     }
     const auto text = juce::JSON::toString (juce::var (o), true);
     dest.append (text.toRawUTF8(), text.getNumBytesAsUTF8());
@@ -272,6 +349,11 @@ void SupurrProcessor::setStateInformation (const void* data, int size)
         uiJson = v["ui"];
     }
     if (v.hasProperty ("vol")) volume.store ((float) (double) v["vol"]);
+    {
+        const juce::ScopedLock sl (stateLock);
+        kitJson = v["kit"];
+    }
+    setKitFromJson (kitJson);
     if (paramsJson.isObject())
     {
         supurr::Params np;

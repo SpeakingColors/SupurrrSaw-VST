@@ -429,6 +429,27 @@ int main(int argc, char** argv) {
     CHECK(relDiff(runP(s), runP(s1)) > 1e-3 && relDiff(runP(s1), runP(s2)) > 1e-3 && relDiff(runP(s1), runP(s3)) > 1e-3); Params s4 = s; s4.menv2Div = 3; s4.bpm = 300.f; CHECK(relDiff(runP(s), runP(s4)) == 0.0);   // div and bpm are ignored with sync off
     std::printf("dmMid and drawn envelope tempo sync act\n");
   }
+  { // drum kit mode: pads sound at their keys, unmapped keys are silent, a pad can cut another, a key can layer pads
+    auto mk = [](const char* name, int key, int play, float g, std::vector<int> ch) { KitEngine::Def d; presets::byName(name, d.p); d.n = {key}; d.play = play; d.g = g; d.ch = ch; return d; };
+    std::vector<KitEngine::Def> defs = { mk("kick_909", 36, 36, 1.f, {}), mk("snare_909", 38, 60, 0.9f, {}), mk("hat_909_closed", 42, 60, 0.5f, {46}), mk("hat_909_open", 46, 60, 0.58f, {}) };
+    Params main; presets::byName("trance_90s", main);
+    auto hit = [&](KitEngine& k, int key, int blocks, double* pk) { std::vector<float> l(256), r(256); double e = 0, mx = 0; k.noteOn(key, 0.9f); bool fin = true;
+      for (int b = 0; b < blocks; ++b) { k.render(l.data(), r.data(), 256, main.master, main.clipKnee); for (int i = 0; i < 256; ++i) { if (!std::isfinite(l[i] + r[i])) fin = false; e += (double)l[i] * l[i]; mx = std::max(mx, (double)std::fabs(l[i])); } }
+      if (pk) *pk = mx; CHECK(fin); return e; };
+    for (int key : {36, 38, 42, 46}) { KitEngine k; k.build(defs, 48000, 256); double pk = 0; double e = hit(k, key, 80, &pk); CHECK(e > 1e-3); CHECK(pk < 1.0); }
+    { KitEngine k; k.build(defs, 48000, 256); double e = hit(k, 60, 40, nullptr); CHECK(e == 0.0); }   // key with no pad stays silent
+    { // open hat rings, then the closed hat cuts it: the tail after the cut is much quieter than the same tail without the cut
+      auto tail = [&](bool cut) { KitEngine k; k.build(defs, 48000, 256); std::vector<float> l(256), r(256); k.noteOn(46, 0.9f); for (int b = 0; b < 20; ++b) k.render(l.data(), r.data(), 256, main.master, main.clipKnee);
+        if (cut) k.noteOn(42, 0.9f); double e = 0; for (int b = 0; b < 100; ++b) { k.render(l.data(), r.data(), 256, main.master, main.clipKnee); if (b > 30) for (int i = 0; i < 256; ++i) e += (double)l[i] * l[i]; } return e; };
+      double a = tail(false), c = tail(true); CHECK(a > 1e-4); CHECK(c < 0.25 * a); }
+    { // two pads on one key play together (layering): louder than either alone
+      std::vector<KitEngine::Def> lay = { mk("kick_909", 36, 36, 1.f, {}), mk("snare_909", 36, 60, 0.9f, {}) };
+      KitEngine k1, k2, k3; k1.build(lay, 48000, 256); k2.build({lay[0]}, 48000, 256); k3.build({lay[1]}, 48000, 256);
+      double e1 = hit(k1, 36, 40, nullptr), e2 = hit(k2, 36, 40, nullptr), e3 = hit(k3, 36, 40, nullptr); CHECK(e1 > std::max(e2, e3)); }
+    { // a block longer than the build size is handled in chunks
+      KitEngine k; k.build(defs, 48000, 128); std::vector<float> l(1000), r(1000); k.noteOn(36, 0.9f); k.render(l.data(), r.data(), 1000, main.master, main.clipKnee); double e = 0; for (float x : l) e += (double)x * x; CHECK(e > 1e-3); }
+    std::printf("drum kit: pads, choke, layers and long blocks work\n");
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }

@@ -1056,4 +1056,55 @@ class Engine {
   }
 };
 
+
+// Drum kit mode: every pad is its own small Engine, so each drum keeps its own sound and effects. Keys map to pads,
+// a pad can cut another pad short (closed hat cuts open hat) and a key can play several pads at once (layers).
+// Mirrors the JS engine in the playground (setKit / renderKit).
+class KitEngine {
+ public:
+  struct Def { std::vector<int> n, ch; int play = -1; float g = 1.f; Params p; };   // play < 0: the pad plays at the key itself
+  void build(const std::vector<Def>& defs, double sampleRate, int maxBlock) {
+    sr = sampleRate; slots.clear(); block = std::max(64, maxBlock);
+    for (const auto& d : defs) {
+      if (d.n.empty()) continue;
+      Slot s; s.n = d.n; s.ch = d.ch; s.play = d.play; s.g = d.g; s.e.reset(new Engine()); s.e->p = d.p; s.e->prepare(sr); s.e->reserve(block);
+      slots.push_back(std::move(s));
+    }
+    kL.assign((size_t)block, 0.f); kR.assign((size_t)block, 0.f); aL.assign((size_t)block, 0.0); aR.assign((size_t)block, 0.0);
+  }
+  bool empty() const { return slots.empty(); }
+  int pads() const { return (int)slots.size(); }
+  void noteOn(int note, float vel) {
+    for (auto& s : slots) {
+      if (std::find(s.n.begin(), s.n.end(), note) == s.n.end()) continue;
+      for (auto& t : slots) if (&t != &s && !s.ch.empty() && std::find(s.ch.begin(), s.ch.end(), t.n[0]) != s.ch.end()) t.e->allOff();
+      s.e->noteOn(s.play < 0 ? note : s.play, vel); s.hot = (long long)(4.0 * sr);
+    }
+  }
+  void noteOff(int) {}   // drums are one shots
+  void allOff() { for (auto& s : slots) { s.e->allOff(); s.hot = 0; } }
+  int activePads() const { return act; }
+  // master and knee come from the main patch, like the JS engine
+  void render(float* outL, float* outR, int n, float master, float knee) {
+    act = 0; bool bad = false;
+    for (int pos = 0; pos < n; pos += block) {
+      const int m = std::min(block, n - pos);
+      std::fill(aL.begin(), aL.begin() + m, 0.0); std::fill(aR.begin(), aR.begin() + m, 0.0);
+      for (auto& s : slots) {
+        if (s.hot <= 0) continue;
+        s.e->render(kL.data(), kR.data(), m); s.hot -= m; if (s.e->activeVoices() > 0) ++act;
+        for (int i = 0; i < m; ++i) { aL[(size_t)i] += (double)kL[(size_t)i] * s.g; aR[(size_t)i] += (double)kR[(size_t)i] * s.g; }
+      }
+      for (int i = 0; i < m; ++i) {
+        const float l = (float)softClip(aL[(size_t)i] * master, knee), r = (float)softClip(aR[(size_t)i] * master, knee);
+        outL[pos + i] = l; outR[pos + i] = r; if (!std::isfinite(l + r)) bad = true;
+      }
+    }
+    if (bad) { allOff(); for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f; }
+  }
+ private:
+  struct Slot { std::vector<int> n, ch; int play = -1; float g = 1.f; std::unique_ptr<Engine> e; long long hot = 0; };
+  std::vector<Slot> slots; std::vector<float> kL, kR; std::vector<double> aL, aR; double sr = 48000.0; int block = 8192; int act = 0;
+};
+
 }  // namespace supurr

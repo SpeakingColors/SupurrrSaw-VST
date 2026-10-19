@@ -205,7 +205,7 @@ canvas{display:block;max-width:100%}
     <button class="btn sm" id="save" data-tip="Save this patch. Asks before it overwrites anything."><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 3h13l3 3v15H4z"/><path d="M7 3v6h9V3M7 21v-7h10v7"/></svg></button>
   </div>
   <nav class="pages" id="pages">
-  <button data-p="sound" class="on">Sound</button><button data-p="mod">Mod</button><button data-p="fx">FX</button><button data-p="presets">Presets</button><button data-p="kit">Kit</button>
+  <button data-p="sound" class="on">Sound</button><button data-p="kit">Kit</button><button data-p="mod">Mod</button><button data-p="fx">FX</button><button data-p="presets">Presets</button>
 </nav>
   <span class="grow"></span>
   <div class="topk" id="topk"></div>
@@ -1081,7 +1081,7 @@ function logMove(k,old,v){
   m.b=v;clearTimeout(m.to);m.to=setTimeout(()=>commit(k),1500);
   updateDiffInfo();
 }
-function stateDoc(){return {updatedAt:new Date().toISOString(),name:CURNAME,base:CURBASEKEY,engine:3,params:clone(P),diffFromBase:diffOf(BASE,P),touched:Object.keys(touched),session:SID,page:curPage};}
+function stateDoc(){return {updatedAt:new Date().toISOString(),name:CURNAME,base:CURBASEKEY,engine:3,params:clone(P),diffFromBase:diffOf(BASE,P),touched:Object.keys(touched),session:SID,page:curPage,kit:(()=>{try{return KITCUR;}catch(e){return "off";}})(),keds:(()=>{try{return KEDS;}catch(e){return null;}})()};}
 async function flush(){
   if(!DB||flushing)return;
   commitAll();
@@ -2450,15 +2450,20 @@ function slotPreset(s){
 }
 function kitDef(id){const m=kmodel(id);if(!m)return null;
   return m.slots.filter(s=>s.n.length).map(s=>Object.assign({n:s.n,play:s.play,g:s.g,ch:s.cut>=0&&m.slots[s.cut]?m.slots[s.cut].n:[]},slotPreset(s)));}
+/* what goes to the engine: in the browser the engine builds the pad sounds itself; the plugin gets every pad resolved to full parameters */
+function kitMsg(id){
+  const d=kitDef(id);if(!d||!window.__SUPURR_PLUGIN)return d;
+  return d.map(s=>({n:s.n,play:s.play,g:s.g,ch:s.ch,full:s.full||EN.loadPreset(s.p),cyc:s.cyc?s.cyc.map(c=>c?Array.from(c):null):null}));
+}
 let ktm=0;
-function kitPush(){clearTimeout(ktm);ktm=setTimeout(()=>{if(KITCUR!=="off")send({t:"kit",k:kitDef(KITCUR)});},180);}
+function kitPush(){dirtyC=true;clearTimeout(ktm);ktm=setTimeout(()=>{if(KITCUR!=="off")send({t:"kit",k:kitMsg(KITCUR)});},180);}
 function kitSet(id){
   const m=id!=="off"&&kmodel(id);KITCUR=m?id:"off";
   if(KITCUR!=="off"&&TWK){TWK=null;twkShow();}
   const s=$("#kitSel");if(s)s.value=KITCUR;const s2=$("#kitSel2");if(s2)s2.value=KITCUR;
-  send({t:"kit",k:m?kitDef(KITCUR):null});kitRefresh();
+  send({t:"kit",k:m?kitMsg(KITCUR):null});dirtyC=true;kitRefresh();
 }
-window.__kitResend=()=>{if(KITCUR!=="off")send({t:"kit",k:kitDef(KITCUR)});};
+window.__kitResend=()=>{if(KITCUR!=="off")send({t:"kit",k:kitMsg(KITCUR)});};
 function KITS_OPTS(){
   [$("#kitSel"),$("#kitSel2")].forEach((ks,j)=>{if(!ks)return;ks.innerHTML="";
     const add=(p,v,t)=>{const o=el("option","",t);o.value=v;p.appendChild(o);};
@@ -2845,7 +2850,9 @@ window.__plugRestore=function(st){
   if(st.vol!=null){const v=$("#vol");if(v){v.value=st.vol;v.dispatchEvent(new Event("input"));}}
   const sel=$("#preset");if(sel&&b&&[...sel.options].some(o=>o.value===b))sel.value=b;
   if(ui.page&&["sound","mod","fx","presets","kit"].includes(ui.page))showPage(ui.page);
+  if(ui.keds&&typeof ui.keds==="object")Object.assign(KEDS,ui.keds);
   SENT[0]=SENT[1]=SENT[2]="";sendSet();refreshAll();dirtyC=true;
+  if(ui.kit&&ui.kit!=="off"){KITS_OPTS();kitSet(ui.kit);}
 };
 }
 __gate(__go);

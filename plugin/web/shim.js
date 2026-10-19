@@ -75,6 +75,7 @@
   };
   function send(m) {
     if (m && m.t === "cyc" && m.d) m = { t: "cyc", ly: m.ly, d: Array.from(m.d) };
+    if (m && m.t === "kit" && Array.isArray(m.k)) m = { t: "kit", k: m.k.map(s => Object.assign({}, s, { cyc: s.cyc ? s.cyc.map(c => c ? Array.from(c) : null) : null })) };
     emit("msg", m);
   }
   B.addEventListener("meters", d => { if (node && node.port.onmessage) node.port.onmessage({ data: d }); });
@@ -85,7 +86,7 @@
     doc: path => ({
       set: async data => {
         const j = JSON.stringify(data);
-        if (path === "state/current") emit("uistate", { name: data.name || "", base: data.base || "", page: data.page || "" });
+        if (path === "state/current") emit("uistate", { name: data.name || "", base: data.base || "", page: data.page || "", kit: data.kit || "off", keds: data.keds || null });
         if (!(await call("dbSet", path, j))) throw { code: "write_failed" };
       },
       delete: async () => { await call("dbDelete", path); }
