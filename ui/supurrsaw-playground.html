@@ -119,7 +119,7 @@ canvas{display:block;max-width:100%}
 .stage .c2{grid-column:span 2!important}.stage .c3{grid-column:span 3!important}.stage .c4{grid-column:span 4!important}.stage .c5{grid-column:span 5!important}.stage .c6{grid-column:span 6!important}.stage .c7{grid-column:span 7!important}.stage .c8{grid-column:span 8!important}.stage .c9{grid-column:span 9!important}
 .stage .r2{grid-row:span 2}
 .stage .card.dm{grid-column:9 / span 4!important;grid-row:1 / span 2}
-.stage #pg-mod .grid{grid-template-rows:minmax(0,2fr) minmax(0,1fr)}
+.stage #pg-mod .grid{grid-template-rows:minmax(0,1.4fr) minmax(0,1fr)}.stage .col.modr{grid-column:9 / span 4!important;grid-row:1 / span 2}.stage .col.modr>.card{overflow:hidden}.menvcw{position:relative;flex:1 1 0;min-width:0}.stage .card.fill>.menvbody{flex:1 1 0;min-height:0}
 .eqp{display:flex;flex-direction:column;gap:5px;min-height:0;flex:1 1 auto}
 .eqp canvas.disp{flex:1 1 90px;min-height:60px;height:auto;cursor:crosshair}
 .eqbar{display:flex;flex-wrap:wrap;gap:3px 5px;align-items:flex-end;justify-content:space-between}
@@ -204,13 +204,13 @@ canvas{display:block;max-width:100%}
 
 
 <section class="page" id="pg-sound"><div class="grid" id="g-sound">
-  <div class="card c3 a-pink" id="dispCard"><h2>Sound display <span class="tabs"><span class="seg" id="dispSeg"><button data-m="spec" class="on">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq">EQ</button><button data-m="sat">Sat</button></span></span></h2><canvas id="scope" class="disp" width="760" height="230" style="height:230px"></canvas><div id="eqS" class="eqp" hidden></div></div>
+  <div class="card c3 a-pink" id="dispCard"><h2>Sound display <span class="tabs"><span class="seg" id="dispSeg"><button data-m="spec" class="on">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq">EQ</button></span></span></h2><canvas id="scope" class="disp" width="760" height="230" style="height:230px"></canvas><div id="eqS" class="eqp" hidden></div></div>
 </div></section>
 
 <section class="page" id="pg-mod" hidden><div class="grid" id="g-mod"></div></section>
 
 <section class="page" id="pg-fx" hidden><div class="grid" id="g-fx">
-  <div class="card c5 a-pink"><h2>Output spectrum <span class="tabs"><span class="seg" id="dispSegFx"><button data-m="spec" class="on">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq">EQ</button><button data-m="sat">Sat</button></span></span></h2><canvas id="scopeFx" class="disp" width="760" height="230" style="height:230px"></canvas></div>
+  <div class="card c5 a-pink"><h2>Output spectrum <span class="tabs"><span class="seg" id="dispSegFx"><button data-m="spec" class="on">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq">EQ</button></span></span></h2><canvas id="scopeFx" class="disp" width="760" height="230" style="height:230px"></canvas></div>
 </div></section>
 
 <div id="dlg" class="dlg" hidden><div class="dbox" role="dialog" aria-modal="true"><h3 id="dTitle"></h3><p id="dMsg"></p><input id="dIn" type="text" maxlength="40"><div class="drow" id="dBtns"></div></div></div>
@@ -1162,7 +1162,7 @@ function select(k,opts,tip){
 }
 function card(title,sub,cls){const c=el("div","card"+(cls?" "+cls:""));c.appendChild(el("h2","",title+(sub?'<span class="sub">'+sub+"</span>":"")));return c;}
 function knobRow(list,opt){const r=el("div","knobs");list.forEach(c=>r.appendChild(knob(c,opt)));return r;}
-function hidpi(cv){const hidden=!cv.offsetParent,r=window.devicePixelRatio||1,w=cv.clientWidth||cv._w||cv.width,h=parseInt(cv.style.height)||cv.clientHeight||cv.height;cv._w=w;const g=cv.getContext("2d");if(hidden){g.setTransform(1,0,0,1,0,0);return {g,w,h,hidden:true};}const W=Math.round(w*r*SCALE),H=Math.round(h*r*SCALE);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}g.setTransform(r*SCALE,0,0,r*SCALE,0,0);return {g,w,h};}
+function hidpi(cv){const hidden=!cv.offsetParent,r=window.devicePixelRatio||1,w=cv.clientWidth||cv._w||cv.width,h=(/px$/.test(cv.style.height)?parseInt(cv.style.height):0)||cv.clientHeight||cv.height;cv._w=w;const g=cv.getContext("2d");if(hidden){g.setTransform(1,0,0,1,0,0);return {g,w,h,hidden:true};}const W=Math.round(w*r*SCALE),H=Math.round(h*r*SCALE);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}g.setTransform(r*SCALE,0,0,r*SCALE,0,0);return {g,w,h};}
 
 /* ---------- pages ---------- */
 const DRAW=[];let BUILD_PAGE="sound",curPage="sound";
@@ -1398,16 +1398,35 @@ function envCard(key,title,cls){
 }
 
 function pitchCard(){
-  const c=card("Pitch envelope","","c5 a-pink");
-  const cv=el("canvas","disp");cv.style.height=SH(90,52);c.appendChild(cv);
+  const c=card("Pitch envelope","drag the dots","c5 a-pink fill");
+  const cw=el("div");cw.style.cssText="position:relative;flex:1 1 0;min-height:90px;margin-bottom:2px";const cv=el("canvas","disp");cv.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;cursor:default";cv.style.height="100%";cw.appendChild(cv);c.appendChild(cw);
+  cv.dataset.tip="Drag the three dots. Left dot: how far the pitch starts above or below the note (Amount). Middle dot: how long it holds before it falls (Hold). Right dot: how fast it settles (Time). The knobs below do the same and add the rest.";
   c.appendChild(knobRow([N("pitchAmt","Amount",-72,72,0.1,"st","Starting pitch offset in semitones. 36 or more gives kick drum sweeps."),N("pitchHold","Hold",0,1,0.005,"s","Time the pitch stays at the start value before it falls."),N("pitchCurve","Curve",0,1,0.01,"","0 is a natural exponential fall, 1 is a straight line down. Straight falls sound like a laser or a kick sweep."),LG("pitchTime","Time",0.002,2,"s","How fast the pitch settles."),N("pitchAttack","Delay",0,0.5,0.005,"s","Wait before the pitch starts to fall."),N("pitchFall","Fall",-24,24,0.1,"st","Slow pitch fall over the note."),LG("pitchFallTime","Fall time",0.05,8,"s","Time of the slow fall.")]));
+  const T=1.2;let R=12,hot=-1,drag=-1;
+  const val=t=>{const pd=Math.max(0,t-P.pitchAttack-P.pitchHold),pt=Math.max(0.001,P.pitchTime);return P.pitchAmt*((1-P.pitchCurve)*Math.exp(-pd/pt)+P.pitchCurve*Math.max(0,1-pd/(3*pt)))-P.pitchFall*(1-Math.exp(-t/Math.max(0.01,P.pitchFallTime)));};
+  const range=()=>Math.max(12,Math.ceil(Math.max(Math.abs(P.pitchAmt),Math.abs(P.pitchFall))*1.15/12)*12);
+  const hs=(w,h)=>{const yy=v=>h/2-v/R*(h/2-12),t1=P.pitchAttack+P.pitchHold,t2=t1+Math.max(0.001,P.pitchTime);return [[8,yy(val(0))],[Math.min(w-8,t1/T*w),yy(val(t1))],[Math.min(w-8,t2/T*w),yy(val(t2))]];};
   function draw(){
-    const {g,w,h,hidden}=hidpi(cv);if(hidden)return;g.clearRect(0,0,w,h);const T=1.2,pts=[];let mx=1;
-    for(let i=0;i<=120;i++){const t=T*i/120,pd=Math.max(0,t-P.pitchAttack-P.pitchHold),pt=Math.max(0.001,P.pitchTime),v=P.pitchAmt*((1-P.pitchCurve)*Math.exp(-pd/pt)+P.pitchCurve*Math.max(0,1-pd/(3*pt)))-P.pitchFall*(1-Math.exp(-t/Math.max(0.01,P.pitchFallTime)));pts.push(v);mx=Math.max(mx,Math.abs(v));}
-    g.strokeStyle="#241c52";g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();
-    g.strokeStyle="#ff7bb1";g.lineWidth=2.8;g.shadowColor="#ff7bb1";g.shadowBlur=8;g.beginPath();pts.forEach((v,i)=>{const x=i/120*w,y=h/2-v/mx*(h/2-6);i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();g.shadowBlur=0;
-    g.fillStyle="#a99fdc";g.font="10px IBM Plex Mono";g.fillText("±"+mx.toFixed(0)+" st  0–"+T+"s",4,10);
+    const {g,w,h,hidden}=hidpi(cv);if(hidden)return;g.clearRect(0,0,w,h);if(drag<0)R=range();
+    g.font="9px IBM Plex Mono";g.fillStyle="#7a6fb5";g.strokeStyle="#241c52";g.lineWidth=1;
+    for(let s=-R;s<=R;s+=R/2){const y=h/2-s/R*(h/2-12);g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();g.fillText((s>0?"+":"")+s+" st",3,y-2);}
+    for(let t=0.2;t<T;t+=0.2){const x=t/T*w;g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke();g.fillText(Math.round(t*1000)+"ms",x+2,h-3);}
+    g.strokeStyle="#4a3d8f";g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();
+    g.strokeStyle="#ff7bb1";g.lineWidth=2.8;g.shadowColor="#ff7bb1";g.shadowBlur=8;g.beginPath();for(let i=0;i<=160;i++){const x=i/160*w,y=h/2-val(T*i/160)/R*(h/2-12);i?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();g.shadowBlur=0;
+    const H=hs(w,h);H.forEach((p,i)=>{g.fillStyle=i===hot||i===drag?"#fff":"#ffd3e4";g.beginPath();g.arc(p[0],p[1],i===hot||i===drag?7:5.5,0,7);g.fill();});
+    g.fillStyle="#a99fdc";g.textAlign="right";g.fillText("start "+P.pitchAmt.toFixed(1)+" st   hold "+Math.round(P.pitchHold*1000)+" ms   time "+Math.round(P.pitchTime*1000)+" ms",w-4,10);g.textAlign="left";
   }
+  const pos=e=>{const r=cv.getBoundingClientRect();return [(e.clientX-r.left)/SCALE,(e.clientY-r.top)/SCALE,r.width/SCALE,r.height/SCALE];};
+  const set=(k,v)=>{setParam(k,v,true);CTRL[k]&&CTRL[k].refresh();};
+  cv.addEventListener("pointerdown",e=>{const [x,y,w,h]=pos(e),H=hs(w,h);let b=-1,bd=14*14;H.forEach((p,i)=>{const dd=(p[0]-x)**2+(p[1]-y)**2;if(dd<bd){bd=dd;b=i;}});if(b<0)return;drag=b;cv.setPointerCapture(e.pointerId);e.preventDefault();draw();});
+  cv.addEventListener("pointermove",e=>{const [x,y,w,h]=pos(e);
+    if(drag<0){const H=hs(w,h);let b=-1,bd=14*14;H.forEach((p,i)=>{const dd=(p[0]-x)**2+(p[1]-y)**2;if(dd<bd){bd=dd;b=i;}});if(b!==hot){hot=b;cv.style.cursor=b<0?"default":(b===0?"ns-resize":"ew-resize");draw();}return;}
+    const t=clamp(x/w*T,0,T);
+    if(drag===0)set("pitchAmt",+clamp((h/2-y)/(h/2-12)*R,-72,72).toFixed(1));
+    else if(drag===1)set("pitchHold",+clamp(t-P.pitchAttack,0,1).toFixed(3));
+    else{const tt=clamp(t-P.pitchAttack-P.pitchHold,0.002,2);set("pitchTime",+tt.toFixed(4));}
+    draw();});
+  const up=()=>{drag=-1;draw();};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);cv.addEventListener("pointerleave",()=>{if(drag<0&&hot>=0){hot=-1;draw();}});
   reg(draw);onChange(k=>{if(k.startsWith("pitch")||k==="all")draw();});return c;
 }
 const LFOSH=[[0,"Sine"],[1,"Triangle"],[2,"Square"],[3,"Saw up"],[6,"Saw down"],[4,"Random square"],[5,"Random round"]];
@@ -1444,8 +1463,8 @@ function menvEncode(a){let s="";for(let i=0;i<MENV_N;i++)s+=Math.round(clamp(a[i
 const MDIVS=["4 bars","2 bars","1 bar","1/2","1/2.","1/2T","1/4","1/4.","1/4T","1/8","1/8.","1/8T","1/16","1/16.","1/16T","1/32"],MBEATS=[16,8,4,2,3,4/3,1,1.5,2/3,0.5,0.75,1/3,0.25,0.375,1/6,0.125];
 function menvCard(n){
   const mp=["menv","menv2","menv3"][n];
-  const c=card("Drawn envelope","draw it, route it in the matrix","c7 a-vio");c.querySelector("h2").appendChild(tabBar("men","Drawn envelope 1, 2 or 3. Each is its own curve with its own length. Send them anywhere in the mod matrix."));
-  const body=el("div","menvbody"),cv=el("canvas","disp");cv.style.cursor="crosshair";cv.style.touchAction="none";cv.style.height=SH(100,92);const side=el("div","menvside");body.appendChild(cv);body.appendChild(side);c.appendChild(body);
+  const c=card("Drawn envelope","draw it, route it in the matrix","c8 a-vio fill");c.querySelector("h2").appendChild(tabBar("men","Drawn envelope 1, 2 or 3. Each is its own curve with its own length. Send them anywhere in the mod matrix."));
+  const body=el("div","menvbody"),cv=el("canvas","disp");cv.style.cursor="crosshair";cv.style.touchAction="none";const side=el("div","menvside");const cw=el("div","menvcw");cv.style.cssText+=";position:absolute;left:0;top:0;width:100%;height:100%";cw.appendChild(cv);body.appendChild(cw);body.appendChild(side);c.appendChild(body);
   const effT=()=>P[mp+"Sync"]?MBEATS[clamp(P[mp+"Div"]|0,0,15)]*60/clamp(P.bpm,20,400):P[mp+"Time"];
   const knobs=knobRow([LG(mp+"Time","Length",0.02,20,"s","How long the drawn curve takes, from note start to its end."),]);
   const tg=toggle(mp+"Loop","Loop","On: the curve repeats while the note is held. Off: it plays once and stays at its last value.");
@@ -1525,7 +1544,7 @@ const MENVDRAWS=[];const MENVDRAW=()=>MENVDRAWS.forEach(f=>f());
 
 /* mod matrix: every routing the engine has, in one grid */
 function matrixCard(){
-  const c=card("Mod matrix","","c9 a-hot");
+  const c=card("Mod matrix","","c8 a-hot");
   const wrap=el("div","mxw"),gr=el("div","mx");gr.style.gridTemplateColumns="96px repeat(23,minmax(48px,1fr))";gr.style.minWidth="1240px";c.classList.add("mxcard");wrap.appendChild(gr);c.appendChild(wrap);
   const DST=["Pitch","Cutoff","Reso","Drive","PWM","Detune","Pan","Volume","Sync 1","Sync 2","Sync 3","Sub","Noise","High pass","Cut 2","Cut 3","Reverb","Delay","Drive stk","Clipper","EQ HPF","EQ LPF","Width"];
   const DID=EN.MX_DST.slice();
@@ -2161,7 +2180,7 @@ function buildPanels(){
   S.appendChild(voiceCard());
   S.appendChild(subCard());
   BUILD_PAGE="mod";const M=$("#g-mod");M.appendChild(matrixCard());
-  const LC=[0,1,2].map(lfoCard),MC=[0,1,2].map(menvCard);LC.forEach(x=>M.appendChild(x));MC.forEach(x=>M.appendChild(x));M.appendChild(pitchCard());
+  const LC=[0,1,2].map(lfoCard),MC=[0,1,2].map(menvCard);const MR=el("div","col modr");MC.forEach(x=>M.appendChild(x));LC.forEach(x=>MR.appendChild(x));MR.appendChild(pitchCard());M.appendChild(MR);
   tabGroup("lfo",LC.map(x=>[x]));tabGroup("men",MC.map(x=>[x]));
   BUILD_PAGE="fx";buildFx($("#g-fx"));
   BUILD_PAGE="presets";const Pg=$("#g-presets");const pc=[el("div","pcol"),el("div","pcol"),el("div","pcol")];
@@ -2490,29 +2509,28 @@ function makeEqPanel(id,big){
   const cb=[],groups=[];
   for(let b=0;b<6;b++){
     const c=el("button","",EQS[b]);c.style.borderColor=EQC[b];c.dataset.tip=EQN[b]+". Click to select it, then use the knobs. Double-click the dot on the display to switch it on or off.";c.onclick=()=>{eqSel=b;eqRefresh();};chips.appendChild(c);cb.push(c);
-    const gp=el("div","eqk");gp.style.display="none";gp.style.flexDirection="row";gp.style.alignItems="flex-end";const wrapK=(lab,node)=>{const d=el("div");d.appendChild(el("div","l",lab));d.appendChild(node);gp.appendChild(d);};
+    const gp=el("div","eqk");gp.style.display="none";gp.style.flexDirection="column";gp.style.alignItems="flex-start";gp.style.gap="4px";
+    const r1=el("div","eqr"),r2=el("div","eqr");[r1,r2].forEach(r=>{r.style.cssText="display:flex;flex-direction:row;align-items:flex-end;gap:2px";});gp.appendChild(r1);if(eqHasG(b))gp.appendChild(r2);
+    const wrapK=(lab,node,row)=>{const d=el("div");d.appendChild(el("div","l",lab));d.appendChild(node);(row||r1).appendChild(d);};
     const lo=EQR[b][0],hi=EQR[b][1];
     wrapK("Freq",knob(LG(eqKey(b,"F"),EQN[b]+" freq",lo,hi,"Hz","Frequency of the "+EQN[b].toLowerCase()+"."),{mini:true}));
     if(eqHasG(b))wrapK("Gain",knob(N(eqKey(b,"G"),EQN[b]+" gain",-EQGR,EQGR,0.1,"dB","Gain of the "+EQN[b].toLowerCase()+", -18 to +18 dB. Near zero the band does nothing."),{mini:true}));
     if(eqHasQ(b))wrapK("Q",knob(LG(eqKey(b,"Q"),EQN[b]+" Q",0.2,10,"","Width of the bell. Low is wide and gentle, high is narrow and surgical."),{mini:true}));
-    const t=toggle(eqKey(b,"On"),"On",EQN[b]+" on or off. The low cut and high cut start off; drag their dot on the display to switch them on.");t.style.marginLeft="4px";gp.appendChild(t);
+    const t=toggle(eqKey(b,"On"),"On",EQN[b]+" on or off. The low cut and high cut start off; drag their dot on the display to switch them on.");t.style.marginLeft="4px";t.style.marginRight="8px";r1.appendChild(t);
     if(eqHasG(b)){
-      const mk=(lab,node)=>{const d=el("div");d.appendChild(el("div","l",lab));d.appendChild(node);gp.appendChild(d);};
-      const sp=el("span");sp.style.cssText="width:1px;align-self:stretch;background:#ffffff1a;margin:0 4px";gp.appendChild(sp);
+      const sp=el("span");sp.style.cssText="width:1px;align-self:stretch;background:#ffffff1a;margin:0 6px 0 2px";r1.appendChild(sp);
+      wrapK("Sat",knob(N(eqKey(b,"Sat"),EQN[b]+" saturation",0,1,0.01,"","Saturation of only this band's area, like the colour bands in Saturn or Pro-Q: the rest of the sound stays clean. 0 is none. It needs signal in that band, so set the band frequency where the sound lives."),{mini:true}));
+      const sd=el("div");sd.style.cssText="display:flex;flex-direction:column;gap:2px";sd.appendChild(el("div","l","Sat type"));sd.appendChild(select(eqKey(b,"SatT"),[[0,"Tube"],[1,"Tape"],[2,"Fuzz"]],"Colour of this band's saturation. Tube: warm, even harmonics. Tape: soft and smooth. Fuzz: lopsided, buzzy and loud. Only heard when Sat is above 0."));r1.appendChild(sd);
+      const mk=(lab,node)=>wrapK(lab,node,r2);
       mk("Dyn",knob(N(eqKey(b,"Dyn"),EQN[b]+" dynamic",-18,18,0.1,"dB","Dynamic EQ. How many dB this band moves when the sound in the band goes past the Thr level. Negative: it cuts when loud (tame a harsh spot, de-ess). Positive: it boosts when loud (upward, adds life). 0 is a normal static band."),{mini:true}));
       mk("Thr",knob(N(eqKey(b,"Thr"),EQN[b]+" threshold",-60,0,0.5,"dB","Level in the band where the dynamic move starts."),{mini:true}));
       mk("Atk",knob(LG(eqKey(b,"Atk"),EQN[b]+" attack",0.5,100,"ms","How fast the dynamic move reacts."),{mini:true}));
       mk("Rel",knob(LG(eqKey(b,"Rel"),EQN[b]+" release",10,1000,"ms","How fast it lets go."),{mini:true}));
       mk("Below",toggle(eqKey(b,"Below"),"Below","Off: the move happens when the band is louder than Thr. On: it happens when the band is quieter than Thr (lift quiet parts, or cut the tail)."));
     }
-    gp.style.flexWrap="wrap";gp.style.rowGap="4px";
     kn.appendChild(gp);groups.push(gp);
   }
-  const sg=el("div","eqk");sg.style.cssText="display:none;flex-direction:row;align-items:flex-end;gap:14px;flex-wrap:wrap";
-  for(let b=1;b<=4;b++){const d=el("div");d.style.cssText="display:flex;flex-direction:column;align-items:center;gap:2px";const t=el("div","l",EQS[b]);t.style.color=EQC[b];d.appendChild(t);
-    d.appendChild(knob(N(eqKey(b,"Sat"),EQN[b]+" saturation",0,1,0.01,"","Saturation of only the "+EQN[b].toLowerCase()+" area, like the colour bands in Saturn or Pro-Q: the rest of the sound stays clean. It needs signal in that band, so set the band frequency where the sound lives."),{mini:true}));
-    d.appendChild(select(eqKey(b,"SatT"),[[0,"Tube"],[1,"Tape"],[2,"Fuzz"]],"Colour of this band's saturation. Tube: warm, even harmonics. Tape: soft and smooth. Fuzz: lopsided, buzzy and loud."));sg.appendChild(d);}
-  const sn=el("div","pill note","Each band saturates only around its own frequency. Move the frequency in the EQ tab.");sg.appendChild(sn);kn.appendChild(sg);
+  const sg=el("div");sg.style.display="none";
   const o={cv,root,cb,groups,sg,chips,id,drag:-1,hover:-1};EQP.push(o);
   const pos=b=>{const w=cv.clientWidth,h=cv.clientHeight;return [fx_(getV(eqKey(b,"F")),w),eqHasG(b)?h/2-getV(eqKey(b,"G"))/EQGR*(h/2-8):h/2];};
   const pt=e=>{const r=cv.getBoundingClientRect();return [(e.clientX-r.left)/r.width*cv.clientWidth,(e.clientY-r.top)/r.height*cv.clientHeight];};
@@ -2526,7 +2544,7 @@ function makeEqPanel(id,big){
   cv.addEventListener("wheel",e=>{const [x,y]=pt(e),b=near(x,y);if(b<0||!eqHasQ(b))return;e.preventDefault();const k=eqKey(b,"Q"),q=clamp(getV(k)*Math.exp(-e.deltaY*0.0012),0.2,10);setParam(k,+q.toFixed(2),true);CTRL[k].refresh();eqSel=b;eqRefresh();},{passive:false});
   return o;
 }
-function eqRefresh(){const sat=mode_==="sat";EQP.forEach(o=>{o.chips.style.display=sat?"none":"";o.sg.style.display=sat?"flex":"none";o.groups.forEach((g,b)=>g.style.display=(!sat&&b===eqSel)?"flex":"none");o.cb.forEach((c,b)=>{c.classList.toggle("sel",b===eqSel);c.style.background=b===eqSel?EQC[b]:"";c.classList.toggle("off",!getV(eqKey(b,"On")));});});}
+function eqRefresh(){const sat=false;EQP.forEach(o=>{o.chips.style.display=sat?"none":"";o.sg.style.display=sat?"flex":"none";o.groups.forEach((g,b)=>g.style.display=(!sat&&b===eqSel)?"flex":"none");o.cb.forEach((c,b)=>{c.classList.toggle("sel",b===eqSel);c.style.background=b===eqSel?EQC[b]:"";c.classList.toggle("off",!getV(eqKey(b,"On")));});});}
 function drawEqOn(o){
   const {g,w,h,hidden}=hidpi(o.cv);if(hidden)return;g.clearRect(0,0,w,h);
   g.strokeStyle="#241c52";g.lineWidth=1;g.fillStyle="#6f64a8";g.font="9px IBM Plex Mono";g.textAlign="left";
@@ -2545,7 +2563,7 @@ function drawEqOn(o){
 let eqOv=null,eqSnd=null,dispKey="";
 function eqInit(){
   eqSnd=makeEqPanel("eqS",false);$("#eqS").appendChild(eqSnd.root);
-  const ov=el("div","card a-pink eqov");ov.hidden=true;ov.innerHTML='<h2>EQ <span class="sub">same EQ as the Sound page</span><span class="tabs"><span class="seg" id="dispSegOv"><button data-m="spec">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq" class="on">EQ</button><button data-m="sat">Sat</button></span></span></h2>';
+  const ov=el("div","card a-pink eqov");ov.hidden=true;ov.innerHTML='<h2>EQ <span class="sub">same EQ as the Sound page</span><span class="tabs"><span class="seg" id="dispSegOv"><button data-m="spec">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq" class="on">EQ</button></span></span></h2>';
   const big=makeEqPanel("eqO",true);ov.appendChild(big.root);$("#g-fx").appendChild(ov);eqOv=ov;eqOv._p=big;
   document.querySelectorAll("#dispSegOv button").forEach(bindSeg);eqRefresh();
 }
