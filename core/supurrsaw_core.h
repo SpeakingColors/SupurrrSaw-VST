@@ -569,6 +569,13 @@ class Engine {
     for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly]; if (q.wave == Wave::Off || q.level <= 0.f) continue;
       if (q.fmAmt > 0.f && q.fmSrc >= 1 && q.fmSrc <= 3) usedAsSrc[q.fmSrc - 1] = true; if (q.amAmt > 0.f && q.amSrc >= 1 && q.amSrc <= 3) usedAsSrc[q.amSrc - 1] = true;
       if ((q.fmAmt > 0.f && q.fmSrc == 4) || (q.amAmt > 0.f && q.amSrc == 4)) anyFmSub = true; if ((q.fmAmt > 0.f && q.fmSrc == 5) || (q.amAmt > 0.f && q.amSrc == 5)) anyFmNz = true; }
+    // per-block tables for the supersaw layers (pan law and spread depend only on settings, so they are not recomputed per sample)
+    float tSp[kLayers][kMaxSaws], tCl[kLayers][kMaxSaws], tCr[kLayers][kMaxSaws]; bool tOn[kLayers][kMaxSaws];
+    for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly];
+      if (!(q.wave == Wave::SuperSaw || q.wave == Wave::SuperSquare || (q.wave == Wave::Custom && q.table && q.table->ready()))) continue;
+      const int nv = std::max(1, std::min(kMaxSaws, q.voices)); const float sideFade = q.cents > 0.f ? 1.f : std::min(1.f, q.detune * 20.f), norm = 1.f / (1.f + (float)(nv - 1) * 0.62f * sideFade);
+      for (int j = 0; j < nv; ++j) { const float sp = sawSpread(j, nv); const bool centre = (nv % 2 == 1 && j == nv / 2); float g = centre ? 1.f : 0.62f * sideFade; g *= norm;
+        const float ang = (sp * p.spread + 1.f) * kPi * 0.25f; tSp[ly][j] = sp; tOn[ly][j] = g > 0.f; tCl[ly][j] = g * std::cos(ang) * 1.414f; tCr[ly][j] = g * std::sin(ang) * 1.414f; } }
     for (int i = 0; i < n; ++i) {
       float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
       if (v.amp.stage == 0) { v.active = false; return; }
@@ -606,14 +613,10 @@ class Engine {
         if (lp.wave == Wave::SuperSaw || lp.wave == Wave::SuperSquare || (lp.wave == Wave::Custom && lp.table && lp.table->ready())) {
           int nv = std::max(1, std::min(kMaxSaws, lp.voices));
           float det = lp.cents > 0.f ? std::exp2(std::max(0.f, lp.cents + md[5] * 50.f) / 1200.f) - 1.f : jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo) + md[5] * 0.5f))) * kMaxDetune * p.detuneRange;
-          float sideFade = lp.cents > 0.f ? 1.f : std::min(1.f, lp.detune * 20.f);  // detune 0 = one clean voice
           float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f + md[4] * 0.45f));
-          float norm = 1.f / (1.f + (float)(nv - 1) * 0.62f * sideFade);
           for (int j = 0; j < nv; ++j) {
-            float sp = sawSpread(j, nv);
-            bool centre = (nv % 2 == 1 && j == nv / 2);
-            float g = centre ? 1.f : 0.62f * sideFade; g *= norm;
-            if (g <= 0.f) continue;
+            if (!tOn[ly][j]) continue;
+            const float sp = tSp[ly][j];
             float d = std::min(0.45f, dt * (1.f + det * sp + v.drift[j]));
             float& ph = v.phase[ly][j];
             float s;
@@ -626,9 +629,7 @@ class Engine {
               s *= 0.8f;
             }
             ph += d; if (ph >= 1.f) ph -= 1.f;
-            float pos = sp * p.spread;  // -1..1
-            float ang = (pos + 1.f) * kPi * 0.25f;
-            lL += g * s * std::cos(ang) * 1.414f; lR += g * s * std::sin(ang) * 1.414f;
+            lL += tCl[ly][j] * s; lR += tCr[ly][j] * s;
           }
         } else if (lp.wave == Wave::Sample && lp.sample && !lp.sample->l.empty()) {
           const Sample& sm = *lp.sample;
