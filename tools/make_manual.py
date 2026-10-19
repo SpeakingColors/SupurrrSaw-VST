@@ -65,10 +65,10 @@ S += [Paragraph("2. The window", H2),
 S += [Paragraph("3. Sound page", H2),
       T([("Layers 1 to 3", "Each layer is Off, Super saw, Super square, Saw, Pulse, Triangle, Sine or Custom wave (drawn in the Wave lab). Detune 0 gives one clean oscillator. "
                            "Under the wave there is hard sync (with its own envelope and LFO), FM and AM from another layer, the sub or noise, and a sample option (clicks, kicks, snares, hats, plucks and more) that can play instead of or beside the wave."),
-          ("Filter 1 to 3", "A type menu (LP6 to LP24, Moog, Jupiter, MS-20, SEM, Acid, HP, BP, Notch, Comb, Formant and more), run in series or parallel. The curve is draggable: pull the points for cutoff and low cut. Each filter has its own envelope."),
+          ("Filter 1 to 3", "A type menu (LP6 to LP24, Moog, Jupiter, MS-20, SEM, Acid, HP, BP, Notch, Comb, Formant and more), run in series or parallel. The curve is draggable: pull the points for cutoff and low cut. The <b>Slope</b> menu sets the side filter (low cut or high cut) from 6 up to 96 dB per octave. Each filter has its own envelope."),
           ("Amp and filter envelopes", "Three of each. On the amp envelopes, <b>Link</b> on means envelope 1 shapes everything; off means envelope 2 and 3 shape layers 2 and 3."),
           ("Voice", "Mono, Poly or Stack, polyphony, glide, drift (slow tiny pitch movement that keeps sounds alive), voice spread and the bass mono frequency below which everything is summed to mono."),
-          ("Sub and noise", "A sub oscillator and high-passed noise, both with their own level; samples can be placed before or after the filter.")], [34 * mm, W - 34 * mm])]
+          ("Sub and noise", "A sub oscillator and high-passed noise, both with their own level; samples can be placed before or after the filter. The <b>Spread</b> tab adds Voices (1 to 5), Detune and Width to both the sub and the noise, for a thick moving sub or a wide airy hiss.")], [34 * mm, W - 34 * mm])]
 
 S += [Paragraph("4. Kit page: drums on the keyboard", H2),
       P("Choose a kit from the <b>Kit</b> menu at the bottom or on the Kit page: 909, Hard, Basic, Trance, House, Bass house, Hardstyle, Happy hardcore, UK hardcore, Reggaeton, Drum and bass, 808. "
@@ -89,7 +89,7 @@ S += [Paragraph("6. FX page", H2),
         "<b>Delay</b> and <b>Reverb</b> have their own mix and tone controls (the reverb has a low cut so the tail stays clean). "
         "The <b>EQ</b> has a low cut, a low shelf, two bells, a high shelf and a high cut. Every band can be a dynamic band (it moves with the signal above a threshold) and can saturate, with 8 saturation types per band. "
         "The curve shows the live movement, and the main <b>Bypass</b> lets you hear the sound with and without the EQ."),
-      P("Mod FX: chorus, flanger and phaser each keep their own knob settings when you switch. Delay and Reverb show what they do to a click (Wave switches the waveform on or off). The Dance master is a 3-band compressor, clipper and limiter with a dry/wet, a mid trim and a width section. The <b>Loud</b> knob in the top bar opens it up.")]
+      P("Mod FX: chorus, flanger and phaser each keep their own knob settings when you switch. Delay and Reverb show what they do to a click and, while you play, a live scrolling waveform of what they output (Wave switches the waveform on or off). The Dance master is a 3-band compressor, clipper and limiter with a dry/wet, a mid trim and a width section. The <b>Loud</b> knob in the top bar opens it up.")]
 
 S += [Paragraph("7. Presets page", H2),
       P("<b>Browse</b> lists everything: filter by sound type (Lead, Bass, Keys, Pad, Pluck, Chord, Brass, Bell, Drum, FX) and by genre. Click the heart to make a favorite and use the <b>Favorites</b> chip to list only those (the arrow buttons then step through favorites only). <b>Re-order</b> shows up and down buttons to move presets inside their group; the arrows next to the preset name follow the same order. <b>Properties</b> renames a preset and sets its type, genres and tags. "

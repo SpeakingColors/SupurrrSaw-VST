@@ -154,6 +154,9 @@ void SupurrEditor::timerCallback()
     for (int i = 0; i < 3; ++i) arr.add (m.gr[i]);
     for (int i = 0; i < 3; ++i) arr.add (m.dm[i]);
     arr.add (m.trips);
+    arr.add (0.f); arr.add (0.f);                         // load, voice cap (page defaults)
+    for (int i = 0; i < 4; ++i) arr.add (0.f);           // EQ live (page computes its own here)
+    for (int i = 0; i < 8; ++i) arr.add (m.wet[i]);
     web->emitEventIfBrowserIsVisible ("meters", juce::var (arr));
     if (m.trips > tripsSeen) { tripsSeen = m.trips; Diagnostics::log ("safety guard reset the engine (count " + juce::String (m.trips) + ")"); }
 

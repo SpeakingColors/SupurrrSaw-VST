@@ -376,14 +376,28 @@ int main(int argc, char** argv) {
     std::printf("effects: flanger, phaser (both polarities), crush and width behave\n");
   }
   { // low cut / high cut: the high pass reaches up to 20 kHz, auxSlope sets 6/12/18/24 dB per octave, highCutHz works next to a highpass filter and is ignored otherwise
-    auto lowE = [&](float hz, int slope) { Params q = baseP(); q.filterMode = FilterMode::LP24; q.cutoff = 18000.f; q.reso = 0.f; q.drive = 0.f; q.envAmt = 0.f; q.noiseLevel = 0.f; q.lowCutHz = hz; q.auxSlope = slope; q.subLevel = 0.f; q.chorusMix = q.delayMix = q.reverbMix = 0.f; q.dmMix = 0.f; auto x = runP(q); float lp = 0; double lo = 0; for (float v : x) { lp += 0.03f * (v - lp); lo += (double)lp * lp; } return lo; };
+    auto lowE = [&](float hz, int slope) { Params q = baseP(); q.filterMode = FilterMode::LP24; q.cutoff = 18000.f; q.reso = 0.f; q.drive = 0.f; q.envAmt = 0.f; q.noiseLevel = 0.f; q.lowCutHz = hz; q.auxSlope = slope; q.subLevel = 0.f; q.chorusMix = q.delayMix = q.reverbMix = 0.f; q.dmMix = 0.f; auto x = runP(q); float l1 = 0, l2 = 0, l3 = 0, l4 = 0; double lo = 0; for (float v : x) { l1 += 0.03f * (v - l1); l2 += 0.03f * (l1 - l2); l3 += 0.03f * (l2 - l3); l4 += 0.03f * (l3 - l4); lo += (double)l4 * l4; } return lo; };
     double e0 = lowE(20.f, 0), e6 = lowE(2500.f, 0), e12 = lowE(2500.f, 1), e18 = lowE(2500.f, 2), e24 = lowE(2500.f, 3); std::printf("low cut 2.5 kHz low band energy: off %.3f, 6 dB %.4f, 12 dB %.5f, 18 dB %.6f, 24 dB %.7f\n", e0, e6, e12, e18, e24);
     CHECK(e6 < e0 * 0.2); CHECK(e12 < e6 * 0.6); CHECK(e18 < e12 * 0.6); CHECK(e24 < e18 * 0.6);
+    double e48 = lowE(2500.f, 4), e96 = lowE(2500.f, 5); std::printf("48 dB %.9f, 96 dB %.12f\n", e48, e96); CHECK(e48 < e24 * 0.6); CHECK(e96 < e24 * 0.6); CHECK(std::isfinite(e96));
     CHECK(lowE(12000.f, 1) < e12); CHECK(lowE(19000.f, 3) < lowE(12000.f, 1));
     auto hiB = [&](FilterMode m, float hc, int slope) { Params q = baseP(); q.filterMode = m; q.cutoff = 300.f; q.reso = 0.f; q.noiseLevel = 0.f; q.highCutHz = hc; q.auxSlope = slope; q.chorusMix = q.delayMix = q.reverbMix = 0.f; return brightness(runP(q)); };
-    double h0 = hiB(FilterMode::HP, 20000.f, 0), h1 = hiB(FilterMode::HP, 2000.f, 1), h2 = hiB(FilterMode::HP, 2000.f, 3), h24 = hiB(FilterMode::HP24, 2000.f, 1); CHECK(h1 < h0 * 0.8); CHECK(h2 <= h1); CHECK(h24 < h0);
+    double h0 = hiB(FilterMode::HP, 20000.f, 0), h1 = hiB(FilterMode::HP, 2000.f, 1), h2 = hiB(FilterMode::HP, 2000.f, 3), h24 = hiB(FilterMode::HP24, 2000.f, 1); CHECK(h1 < h0 * 0.8); CHECK(h2 <= h1); CHECK(h24 < h0); { double h48 = hiB(FilterMode::HP, 2000.f, 4), h96 = hiB(FilterMode::HP, 2000.f, 5); CHECK(h48 < h0 * 0.8); CHECK(h96 < h0 * 0.8); CHECK(std::isfinite(h96)); }
     CHECK(std::fabs(hiB(FilterMode::LP24, 2000.f, 0) - hiB(FilterMode::LP24, 20000.f, 0)) < 1e-9);   // with a low pass filter the high cut is not used
     std::printf("hi/lo cut: slopes steepen, high cut band-limits next to HP and HP24\n");
+  }
+  { // sub and noise: voices, detune and width. Defaults change nothing; width makes left and right differ
+    auto stereoDiff = [&](const Params& q) { std::vector<float> R; auto L = runP(q, &R); double d = 0, e = 1e-12; for (size_t i = 0; i < L.size() && i < R.size(); ++i) { d += (double)(L[i] - R[i]) * (L[i] - R[i]); e += (double)L[i] * L[i]; } return d / e; };
+    Params sb = baseP(); sb.layer[0].level = 0.f; sb.layer[1].level = 0.f; sb.layer[2].level = 0.f; sb.subLevel = 0.8f; sb.noiseLevel = 0.f; sb.chorusMix = sb.delayMix = sb.reverbMix = 0.f; sb.dmMix = 0.f; sb.subPreFilter = true;
+    Params s1 = sb; Params s3 = sb; s3.subVoices = 3; s3.subDetune = 0.5f; Params s3w = s3; s3w.subWidth = 1.f;
+    double d1 = stereoDiff(s1), d3 = stereoDiff(s3), d3w = stereoDiff(s3w); std::printf("sub stereo difference: 1 voice %.6f, 3 voices %.6f, 3 voices wide %.6f\n", d1, d3, d3w);
+    CHECK(d1 < 1e-9); CHECK(d3 < 1e-9); CHECK(d3w > 1e-3);
+    Params sp1 = s1; sp1.subPreFilter = false; Params sp3 = s3w; sp3.subPreFilter = false; CHECK(stereoDiff(sp1) < 1e-9); CHECK(stereoDiff(sp3) > 1e-3);   // post filter path is stereo too
+    Params nz = baseP(); nz.layer[0].level = 0.f; nz.layer[1].level = 0.f; nz.layer[2].level = 0.f; nz.subLevel = 0.f; nz.noiseLevel = 0.8f; nz.noiseHpHz = 2000.f; nz.filterMode = FilterMode::LP24; nz.cutoff = 18000.f; nz.chorusMix = nz.delayMix = nz.reverbMix = 0.f; nz.dmMix = 0.f;
+    Params nw = nz; nw.noiseWidth = 1.f; Params nv = nz; nv.noiseVoices = 4; nv.noiseDetune = 0.5f;
+    double nd0 = stereoDiff(nz), ndw = stereoDiff(nw), ndv = stereoDiff(nv); std::printf("noise stereo difference: default %.6f, wide %.4f, 4 voices %.6f\n", nd0, ndw, ndv); CHECK(nd0 < 1e-9); CHECK(ndw > 0.5); CHECK(ndv < 1e-9);
+    auto xs = runP(nz), xv = runP(nv); double bz = 0, bv = 0; for (float x : xs) bz += std::fabs(x); for (float x : xv) bv += std::fabs(x); CHECK(bz > 0 && bv > 0 && std::fabs(bz - bv) > 1e-6);
+    std::printf("sub and noise: voices, detune and width behave\n");
   }
   { // three LFOs: shapes 0..6 are what they say; LFO 2 and 3 only act through the matrix; their random shapes use a per voice stream, so a retrigger repeats and different notes differ
     CHECK(std::fabs(lfoWave(0, 0.25, 0, 0) - 1.0) < 1e-12 && std::fabs(lfoWave(1, 0.0, 0, 0) - 1.0) < 1e-12 && lfoWave(1, 0.5, 0, 0) == -1.0 && lfoWave(2, 0.1, 0, 0) == 1.0 && lfoWave(2, 0.9, 0, 0) == -1.0 && lfoWave(3, 0.75, 0, 0) == 0.5);

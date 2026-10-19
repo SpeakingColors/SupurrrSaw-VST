@@ -59,7 +59,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
 #define S87_IR(name, lo, hi) m[#name] = [](Params& p, const juce::var& v) { p.name = asIR(v, lo, hi); }
         S87_F(subLevel); S87_I(subOctave); S87_B(subPreFilter); S87_B(mono); S87_I(stackCount); S87_F(stackCents); S87_F(glide);
         S87_F(cutoff); S87_F(reso); S87_F(drive); S87_F(envAmt); S87_F(keyTrack); S87_FR(lowCutHz, 5.f, 20000.f); S87_F(dist); S87_B(distPre);
-        S87_F(noiseLevel); S87_F(noiseHpHz);
+        S87_F(noiseLevel); S87_F(noiseHpHz); S87_IR(subVoices, 1, 5); S87_F(subDetune); S87_F(subWidth); S87_IR(noiseVoices, 1, 5); S87_F(noiseDetune); S87_F(noiseWidth);
         S87_F(pitchAmt); S87_F(pitchTime); S87_F(pitchAttack); S87_F(pitchFall); S87_F(pitchFallTime);
         S87_F(lfoRate); S87_F(lfoPwm); S87_F(lfoPitch); S87_F(lfoCutoff); S87_F(lfoDetune); S87_I(lfoShape); S87_F(lfoPan); S87_F(lfoAmp);
         S87_F(wheelCutoff); S87_F(velCutoff); S87_F(wheelVib); S87_B(phaseReset); S87_F(drift); S87_F(detuneRange);
@@ -76,7 +76,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(sqzAtk); S87_F(sqzRel); S87_F(sqzMakeup);
         S87_F(menvTime); S87_B(menvInv); S87_B(menvLoop); S87_F(lfoDepth); S87_F(lfoFade); S87_F(lfoStart); S87_F(pitchHold); S87_F(pitchCurve);
         // added with the big build: ranges are the ones of the page's knobs
-        S87_FR(highCutHz, 20.f, 20000.f); S87_IR(auxSlope, 0, 3); S87_B(ampLink); S87_IR(fRoute, 0, 1); S87_FR(build, 0.f, 1.f);
+        S87_FR(highCutHz, 20.f, 20000.f); S87_IR(auxSlope, 0, 5); S87_B(ampLink); S87_IR(fRoute, 0, 1); S87_FR(build, 0.f, 1.f);
         S87_IR(modFxType, 0, 2); S87_FR(chorusFb, -0.95f, 0.95f); S87_FR(crushBits, 1.f, 16.f); S87_FR(crushRate, 1.f, 40.f); S87_FR(crushMix, 0.f, 1.f);
         S87_FR(widMid, 0.f, 2.f); S87_FR(widHi, 0.f, 2.f); S87_FR(msMid, 0.f, 1.f); S87_FR(msSide, 0.f, 1.f);
         S87_FR(f2Cut, 20.f, 20000.f); S87_FR(f2Res, 0.f, 1.f); S87_FR(f2Drv, 0.f, 1.5f); S87_F(f2Env); S87_F(f2Key);
