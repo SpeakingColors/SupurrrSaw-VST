@@ -1841,6 +1841,96 @@ function drawIR(kind,g,w,h){
 }
 function irGraph(kind,h){return fxGraph(h,(g,w,hh)=>drawIR(kind,g,w,hh),kind==="rev"?"What the reverb does to a single click: the waveform of its tail (left channel on top, right below) and a line for its level in dB. Reacts to Size, Damp, Pre, Low cut and Width.":"What the delay does to a single click: one stem per repeat (left up, right down) with its level in dB, plus the waveform. Reacts to Time, Sync, Feedback, Damp, Ping-pong and Mix.");}
 const DIVS=["1/1","1/2","1/2.","1/2T","1/4","1/4.","1/4T","1/8","1/8.","1/8T","1/16","1/16.","1/16T","1/32"];
+/* ---------- FX presets: a dropdown on each effect card, factory and your own ---------- */
+const FXPS={
+  mod:{keys:["modFxType","chorusMix","chorusDepth","chorusRate","chorusDelay","chorusWidth","chorusFb"],list:[
+    ["Chorus: Trance 90s Pro 2",{modFxType:0,chorusMix:0.22,chorusDepth:0.5,chorusRate:0.6,chorusDelay:12,chorusWidth:1,chorusFb:0.5}],
+    ["Chorus: Wide and lush",{modFxType:0,chorusMix:0.35,chorusDepth:0.7,chorusRate:0.3,chorusDelay:18,chorusWidth:1,chorusFb:0.3}],
+    ["Chorus: Subtle shimmer",{modFxType:0,chorusMix:0.18,chorusDepth:0.3,chorusRate:0.9,chorusDelay:8,chorusWidth:1,chorusFb:0.2}],
+    ["Flanger: Jet",{modFxType:1,chorusMix:0.4,chorusDepth:0.6,chorusRate:0.25,chorusDelay:6,chorusWidth:1,chorusFb:0.6}],
+    ["Flanger: Slow sweep",{modFxType:1,chorusMix:0.5,chorusDepth:0.8,chorusRate:0.12,chorusDelay:8,chorusWidth:1,chorusFb:0.75}],
+    ["Flanger: Metallic",{modFxType:1,chorusMix:0.45,chorusDepth:0.4,chorusRate:0.5,chorusDelay:3,chorusWidth:1,chorusFb:-0.7}],
+    ["Phaser: Classic",{modFxType:2,chorusMix:0.5,chorusDepth:0.7,chorusRate:0.35,chorusDelay:12,chorusWidth:1,chorusFb:0.5}],
+    ["Phaser: Slow sweep",{modFxType:2,chorusMix:0.55,chorusDepth:0.9,chorusRate:0.15,chorusDelay:12,chorusWidth:1,chorusFb:0.65}],
+    ["Phaser: Fast swirl",{modFxType:2,chorusMix:0.45,chorusDepth:0.5,chorusRate:1.4,chorusDelay:12,chorusWidth:1,chorusFb:0.4}],
+    ["Off",{chorusMix:0}]]},
+  dly:{keys:["delayMix","delaySync","delayDiv","delayTime","delayFb","delayDamp","delayPing"],list:[
+    ["Wide ping lead (435 ms)",{delayMix:0.56,delaySync:false,delayTime:0.435,delayFb:0.34,delayDamp:0.66,delayPing:1}],
+    ["Trance 1/8",{delayMix:0.3,delaySync:true,delayDiv:7,delayFb:0.4,delayDamp:0.5,delayPing:0.5}],
+    ["Dotted 1/8",{delayMix:0.35,delaySync:true,delayDiv:8,delayFb:0.45,delayDamp:0.55,delayPing:0.7}],
+    ["Ping-pong 1/4",{delayMix:0.35,delaySync:true,delayDiv:4,delayFb:0.5,delayDamp:0.45,delayPing:1}],
+    ["Hardcore 1/16 echo",{delayMix:0.22,delaySync:true,delayDiv:10,delayFb:0.3,delayDamp:0.6,delayPing:0.3}],
+    ["Slapback",{delayMix:0.25,delaySync:false,delayTime:0.09,delayFb:0.12,delayDamp:0.4,delayPing:0}],
+    ["Long dark dub",{delayMix:0.4,delaySync:false,delayTime:0.75,delayFb:0.65,delayDamp:0.85,delayPing:0.8}],
+    ["Off",{delayMix:0}]]},
+  rev:{keys:["reverbMix","reverbSize","reverbWidth","reverbLowCutHz","reverbPre","reverbDamp"],list:[
+    ["Trance 90s Pro 2",{reverbMix:0.1,reverbSize:0.67,reverbWidth:0.8,reverbLowCutHz:400,reverbPre:0,reverbDamp:0.25}],
+    ["Small room",{reverbMix:0.12,reverbSize:0.25,reverbWidth:0.7,reverbLowCutHz:200,reverbPre:0,reverbDamp:0.4}],
+    ["Bright plate",{reverbMix:0.18,reverbSize:0.45,reverbWidth:1,reverbLowCutHz:300,reverbPre:5,reverbDamp:0.1}],
+    ["Hall",{reverbMix:0.2,reverbSize:0.7,reverbWidth:0.9,reverbLowCutHz:250,reverbPre:20,reverbDamp:0.3}],
+    ["Big trance hall",{reverbMix:0.25,reverbSize:0.85,reverbWidth:1,reverbLowCutHz:300,reverbPre:30,reverbDamp:0.3}],
+    ["Hoover cathedral",{reverbMix:0.23,reverbSize:1,reverbWidth:1,reverbLowCutHz:290,reverbPre:200,reverbDamp:0.6}],
+    ["Dark wash",{reverbMix:0.3,reverbSize:0.9,reverbWidth:1,reverbLowCutHz:350,reverbPre:40,reverbDamp:0.7}],
+    ["Off",{reverbMix:0}]]},
+  sqz:{keys:["sqzAmt","sqzAtk","sqzRel","sqzMakeup"],list:[
+    ["Light glue",{sqzAmt:0.25,sqzAtk:10,sqzRel:120,sqzMakeup:0}],
+    ["Tight and fast",{sqzAmt:0.5,sqzAtk:0.8,sqzRel:60,sqzMakeup:1}],
+    ["Pump",{sqzAmt:0.6,sqzAtk:2,sqzRel:200,sqzMakeup:1}],
+    ["Heavy glue",{sqzAmt:0.8,sqzAtk:6,sqzRel:300,sqzMakeup:2}],
+    ["Off",{sqzAmt:0}]]},
+  opto:{keys:["optoAmt","optoRel","optoGain"],list:[
+    ["Gentle",{optoAmt:0.3,optoRel:1,optoGain:0}],
+    ["Lead leveller",{optoAmt:0.45,optoRel:1,optoGain:1}],
+    ["Thick",{optoAmt:0.6,optoRel:1.4,optoGain:2}],
+    ["Slow and smooth",{optoAmt:0.5,optoRel:2.2,optoGain:1}],
+    ["Off",{optoAmt:0}]]},
+  ott:{keys:["ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime"],list:[
+    ["Subtle",{ottDepth:0.4,ottMix:0.2,ottLow:0,ottMid:0,ottHigh:0,ottTime:1}],
+    ["Classic",{ottDepth:0.7,ottMix:0.5,ottLow:2,ottMid:0,ottHigh:3,ottTime:1}],
+    ["Smile",{ottDepth:0.6,ottMix:0.4,ottLow:4,ottMid:-2,ottHigh:4,ottTime:1}],
+    ["Max",{ottDepth:0.9,ottMix:0.8,ottLow:3,ottMid:0,ottHigh:4,ottTime:1}],
+    ["Off",{ottMix:0,ottDepth:0}]]},
+  drv:{keys:["drvDrive","drvXs","drvFuzz","drvMix","crushMix","crushBits","crushRate"],list:[
+    ["Warm tube",{drvDrive:0.3,drvXs:0.1,drvFuzz:0,drvMix:1}],
+    ["Transistor bite",{drvDrive:0.2,drvXs:0.5,drvFuzz:0,drvMix:1}],
+    ["Fuzz box",{drvDrive:0.1,drvXs:0.2,drvFuzz:0.7,drvMix:0.8}],
+    ["Hard drive",{drvDrive:0.7,drvXs:0.4,drvFuzz:0.2,drvMix:1}],
+    ["Lo-fi 8 bit",{crushMix:0.6,crushBits:8,crushRate:4}],
+    ["Drive off",{drvDrive:0,drvXs:0,drvFuzz:0}],
+    ["Crush off",{crushMix:0}]]}
+};
+const FXPS_TITLE={"Mod FX":"mod","Delay":"dly","Reverb":"rev","Squeeze":"sqz","Opto leveller":"opto","OTT":"ott","Drive":"drv"};
+const FXU={};   // your own presets per effect: {id:[[name,{...}],...]}
+function fxpsSave(id){try{if(DB)DB.doc("fxpresets/"+id).set({list:(FXU[id]||[]).slice(0,60).map(([n,p])=>({name:n,p:JSON.stringify(p)}))});}catch(e){}}
+function fxpsApply(id,p){const keys=FXPS[id].keys;
+  if(p.modFxType!==undefined)setParam("modFxType",p.modFxType,false);
+  for(const k of keys){if(k!=="modFxType"&&p[k]!==undefined)setParam(k,p[k],false);}
+  for(const k of keys)if(CTRL[k])CTRL[k].refresh();
+  if(id==="mod"&&typeof mfxLast!=="undefined")mfxLast=P.modFxType|0;}
+function fxpsSnap(id){const o={};FXPS[id].keys.forEach(k=>o[k]=P[k]);return o;}
+function fxpsMenu(c,id,ref){
+  const h2=c.querySelector("h2"),s=el("select",ref?ref.className:"");s.style.cssText="max-width:"+(id==="opto"?"78px":"112px")+";min-width:0;font-size:10.5px;padding:2px 4px";h2.style.whiteSpace="nowrap";h2.style.gap="6px";
+  s.dataset.tip="Presets for this effect. Pick one to load its knob settings. Choose Save current to keep your own, they stay in the list.";
+  let applying=false,cur="";
+  const fill=()=>{s.innerHTML="";const add=(p,t,v)=>{const o=document.createElement("option");o.value=v;o.textContent=t;p.appendChild(o);};
+    add(s,"Presets","");
+    const g1=document.createElement("optgroup");g1.label="Factory";FXPS[id].list.forEach(([n],i)=>add(g1,n,"f"+i));s.appendChild(g1);
+    const u=FXU[id]||[];if(u.length){const g2=document.createElement("optgroup");g2.label="Mine";u.forEach(([n],i)=>add(g2,n,"u"+i));s.appendChild(g2);}
+    const g3=document.createElement("optgroup");g3.label="Manage";add(g3,"Save current...","save");if(cur[0]==="u")add(g3,"Delete this preset","del");s.appendChild(g3);s.value=cur;};
+  fill();
+  s.onchange=async()=>{const v=s.value;
+    if(v==="save"){const t=h2.firstChild.textContent.trim();const r=await ask({title:"Save "+t+" preset",msg:"Saves the current "+t+" settings under this name.",input:"My "+t.toLowerCase(),buttons:[{t:"Save",k:"on",def:1},{t:"Cancel"}]});
+      if(r.b==="Save"&&r.v&&r.v.trim()){const n=r.v.trim().slice(0,40),u=FXU[id]||(FXU[id]=[]),i=u.findIndex(x=>x[0]===n);if(i>=0)u[i]=[n,fxpsSnap(id)];else u.push([n,fxpsSnap(id)]);fxpsSave(id);cur="u"+(i>=0?i:u.length-1);}fill();return;}
+    if(v==="del"){const i=+cur.slice(1),u=FXU[id]||[];if(u[i]){const r=await ask({title:"Delete this preset?",msg:"\""+u[i][0]+"\" will be removed from your list.",buttons:[{t:"Delete",k:"danger"},{t:"Keep",k:"on",def:1}]});if(r.b==="Delete"){u.splice(i,1);fxpsSave(id);cur="";}}fill();return;}
+    if(!v){cur="";return;}
+    const p=v[0]==="f"?FXPS[id].list[+v.slice(1)][1]:(FXU[id]||[])[+v.slice(1)][1];if(!p)return;
+    applying=true;fxpsApply(id,p);applying=false;cur=v;fill();};
+  onChange(k=>{if(!applying&&cur&&(FXPS[id].keys.includes(k)||k==="all")){cur="";fill();}});
+  c._fxFill=()=>{fill();};c._fxId=id;
+  const sub=h2.querySelector(".sub");if(sub)sub.remove();
+  const tabs=h2.querySelector(".seg,select:not(:last-child)");
+  h2.appendChild(s);return s;}
+function fxpsAttach(F){const ref=F.querySelector("select");F.querySelectorAll(".card").forEach(c=>{const h=c.querySelector("h2");if(!h||!h.firstChild)return;const id=FXPS_TITLE[h.firstChild.textContent.trim()];if(id)fxpsMenu(c,id,ref);});}
 function buildFx(F){
   // output and limiter
   {const c=card("Output and limiter","","c3 a-pink");c.querySelector("h2").appendChild(toggle("limiter","Limiter","Slow smooth limiter in front of the soft clipper."));
@@ -1897,6 +1987,7 @@ function buildFx(F){
    reg(upd);onChange(k=>{if(["delaySync","delayDiv","bpm","delayTime","all"].includes(k))upd();});waveBtn("dly",c.querySelector("h2"));c.appendChild(irGraph("dly",70));F.appendChild(c);}
   {const c=simpleCard("Reverb",[N("reverbMix","Mix",0,1,0.01,"","Real dry/wet: 0.10 means 10 percent wet."),N("reverbSize","Size",0.1,1,0.01,"","Room size and tail length."),N("reverbWidth","Width",0,1,0.01,"","Stereo width of the tail."),LG("reverbLowCutHz","Low cut",20,800,"Hz","Removes low end from the reverb input."),N("reverbPre","Pre",0,200,1,"ms","Pre-delay: silence before the tail starts. Keeps leads clear."),N("reverbDamp","Damp",0,0.9,0.01,"","How fast the highs die in the tail. More is darker.")],"c3 a-blue");
    waveBtn("rev",c.querySelector("h2"));c.appendChild(irGraph("rev",60));F.appendChild(c);}
+  fxpsAttach(F);
 }
 
 /* ---------- wave lab ---------- */
@@ -3077,6 +3168,7 @@ requestAnimationFrame(loop);
       if(Object.keys(SAVED).length)fillPresetSelect($("#preset").value);
       try{const bs=await DB.collection("banks").get();bs.docs.forEach(d=>{const x=d.data();if(x&&x.bank&&BANKN.includes(x.bank)&&x.slot>=1&&x.slot<=SLOTS&&x.d)(BOV[x.bank]=BOV[x.bank]||{})[x.slot-1]={name:String(x.name||"Init").slice(0,40),tags:Array.isArray(x.tags)?x.tags:[],d:x.d};});renderBank();renderBrowser();}catch(e){}
       try{const kk=await DB.collection("kits").get();kk.docs.forEach(d=>{const x=d.data();if(x&&Array.isArray(x.slots))UKITS[d.id]={name:String(x.name||d.id).slice(0,40),slots:x.slots.map(sanSlot)};});KITS_OPTS();kitRefresh();}catch(e){}
+      try{for(const id of Object.keys(FXPS)){const d=await DB.doc("fxpresets/"+id).get();const x=d&&d.data&&d.data();if(x&&Array.isArray(x.list)){FXU[id]=x.list.map(o=>{try{return [String(o.name).slice(0,40),JSON.parse(o.p)];}catch(e){return null;}}).filter(Boolean);}}document.querySelectorAll(".card").forEach(cc=>cc._fxFill&&cc._fxFill());}catch(e){}
       try{const pf=await DB.doc("prefs/main").get();const x=pf&&pf.data&&pf.data();if(x){if(Array.isArray(x.fav))PREFS.fav=x.fav.filter(v=>typeof v==="string").slice(0,2000);if(x.ord&&typeof x.ord==="object")PREFS.ord=x.ord;fillPresetSelect($("#preset").value);}}catch(e){}
       try{const ws=await DB.collection("waves").get();ws.docs.forEach(d=>{const x=d.data();if(x&&x.cycle)MYWAVES[d.id]={name:x.name||d.id,cycle:x.cycle};});wlFillWaves();}catch(e){}
     }catch(e){}
