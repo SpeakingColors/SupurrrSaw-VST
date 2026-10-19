@@ -1,0 +1,59 @@
+name: build plugin
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+    runs-on: ${{ matrix.os }}
+    name: SupurrSaw (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Windows WebView2 package (static loader, nothing to install for users)
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.1901.177 -OutFile wv2.zip
+          Expand-Archive wv2.zip webview2/Microsoft.Web.WebView2.1.0.1901.177
+
+      - name: Configure
+        shell: bash
+        run: |
+          EXTRA=""
+          if [ "${{ matrix.name }}" = "windows" ]; then EXTRA="-DJUCE_WEBVIEW2_PACKAGE_LOCATION=$GITHUB_WORKSPACE/webview2"; fi
+          cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release $EXTRA
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p out
+          find build/SupurrSaw_artefacts -maxdepth 3 \( -name "*.vst3" -o -name "SupurrSaw" -o -name "SupurrSaw.exe" -o -name "SupurrSaw.app" \) -not -path "*/JuceLibraryCode/*" | while read f; do cp -R "$f" out/; done
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SupurrSaw-${{ matrix.name }}
+          path: out

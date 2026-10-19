@@ -4,7 +4,9 @@
 
 A free, open source supersaw, hoover and acid synth for **Linux, Windows and macOS** (VST3 and standalone app, built from one codebase).
 
-> Status: early. The DSP engine works and is tested offline. The plugin shell and the interface are next.
+> Status: early. The DSP engine works and is tested offline. The plugin (VST3 and standalone) is built by GitHub Actions; its interface is the real SupurrSaw page, not a generic JUCE drawing.
+
+By **Studio 87**.
 
 ## What it does
 
@@ -19,6 +21,19 @@ A free, open source supersaw, hoover and acid synth for **Linux, Windows and mac
 - **Waveform library** (planned): import single-cycle WAVs or draw your own, stored locally.
 - **Presets** as starting points: Hoover, Pick, Pluck, Trance Lead, Talking Lead (more: basses, reese, acid).
 
+## Build the plugin
+
+The plugin is in `plugin/` (JUCE 8). Its window is the SupurrSaw interface from `ui/supurrsaw-playground.html`, shown in a web view, with the fonts bundled so it works offline. The sound comes from the same C++ engine as the tests.
+
+```
+cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+Linux needs the usual JUCE packages plus `libwebkit2gtk-4.1-dev` and `libgtk-3-dev`. Windows uses WebView2 (included in Windows 10 and 11). GitHub Actions builds all three systems on every push: open the **Actions** tab, pick the latest run of **build plugin**, and download the artifact for your system.
+
+Presets, saved waves, exports and the log live in your user folder under `Studio 87/SupurrSaw`. The **Files** button in the plugin opens them.
+
 ## Try the engine today
 
 ```
@@ -29,7 +44,7 @@ g++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp && ./presets_test .   
 
 ## Samples and copyright
 
-The built-in `assets/samples/choir_stab_classic.wav` was made by SpeakingColors and ships with the synth. Third-party sample packs must never be committed; put those in your local waveform library.
+The built-in `assets/samples/choir_stab_classic.wav` was made by Studio 87 and ships with the synth. Third-party sample packs must never be committed; put those in your local waveform library.
 
 ## Licence
 
@@ -44,7 +59,7 @@ Not affiliated with or endorsed by Roland, Korg or any other brand mentioned. Na
 - [Roadmap](ROADMAP.md)
 
 ## Demo MIDI
-`demo-midi/` holds MIDI files made by SpeakingColors for trying presets (A minor, 150 BPM). Play one through two presets:
+`demo-midi/` holds MIDI files made by Studio 87 for trying presets (A minor, 150 BPM). Play one through two presets:
 ```
 g++ -O2 -std=c++17 -o midi_demo tools/midi_demo.cpp
 ./midi_demo demo-midi/Amin_-_Sylenth1_-_JP8080_LEAD_2.mid out.wav 150 55 trance_bass trance_lead

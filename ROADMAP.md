@@ -3,6 +3,9 @@
 Supersaw, hoover and acid synth.
 
 ## Next
+
+- Plugin shell: done in `plugin/` (VST3 + standalone, interface is the real page). Still to check by ear and in hosts: audio, MIDI, Windows and macOS builds from CI.
+- Plugin extras still open: drag a rendered .wav out of the window, host tempo sync, sustain pedal, signed installers (Windows .exe, macOS .pkg, Flatpak).
 - [ ] JUCE plugin shell and standalone on cat-ui, wired to `core/supurrsaw_core.h`
 - [ ] Dance MB section: starts from the Vengeance Dance Master 2 style settings with the low band off, dry/wet at 50%. Thresholds in the mockup were read from a screenshot and are approximate, tune by ear
 - [ ] Pultec-style low end EQ options for basses; Neve, Moog and Sonic Maximizer style options to be researched

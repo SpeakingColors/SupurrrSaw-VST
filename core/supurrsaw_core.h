@@ -1,5 +1,5 @@
 // SupurrSaw DSP core. No JUCE dependency, header only, so it can be tested on its own.
-// Licence: AGPL-3.0-or-later. Author: SpeakingColors
+// Licence: AGPL-3.0-or-later. Author: Studio 87
 #pragma once
 #include <algorithm>
 #include <cmath>
@@ -363,6 +363,7 @@ struct Dynamics {
   float oEnv = 0.f, oFast = 0.f, oSlow = 0.f;
   // squeeze: one-band glue compressor
   float sEnv = 0.f, sGr = 0.f;
+  float gr[3] = {0.f, 0.f, 0.f};   // meters: opto, OTT average and squeeze gain reduction in dB (for the interface)
   // OTT: three bands, each with a level follower; crossovers at 120 Hz and 2.5 kHz
   Lr4 lo[2], hiSplit1[2], midLo[2], hiHp[2], apLo1[2], apLo2[2];
   float bEnv[3] = {0, 0, 0}, bGain[3] = {1, 1, 1};
@@ -417,6 +418,9 @@ struct Dynamics {
       float g = dbToLin(-sGr + 0.5f * (-T) * (1.f - 1.f / R_) + p.sqzMakeup);
       L *= g; R *= g;
     }
+    gr[0] = p.optoAmt > 0.f ? std::max(oFast, 0.8f * oSlow) : 0.f;
+    gr[1] = p.ottMix > 0.f ? 20.f * std::log10((bGain[0] + bGain[1] + bGain[2]) / 3.f + 1e-9f) : 0.f;
+    gr[2] = p.sqzAmt > 0.f ? sGr : 0.f;
   }
 };
 
@@ -477,6 +481,9 @@ class Engine {
   }
   void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) { v.amp.off(); v.fenv.off(); } }
   void allOff() { for (auto& v : voices) v.active = false; }
+  struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}; };
+  Meters meters() const { Meters m = mtr; m.lim = limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = dyn.gr[i]; m.dm[i] = dm.gr[i]; } return m; }
+  void reserve(int maxBlock) { if ((int)subBusL.size() < maxBlock) { subBusL.assign(maxBlock, 0.f); subBusR.assign(maxBlock, 0.f); } }
   int activeVoices() const { int n = 0; for (const auto& v : voices) if (v.active) ++n; return n; }
 
   // adds nothing, overwrites outL/outR
@@ -485,6 +492,7 @@ class Engine {
     if ((int)subBusL.size() < n) { subBusL.assign(n, 0.f); subBusR.assign(n, 0.f); }
     std::fill(subBusL.begin(), subBusL.begin() + n, 0.f); std::fill(subBusR.begin(), subBusR.begin() + n, 0.f); sbL = subBusL.data(); sbR = subBusR.data();
     for (auto& v : voices) if (v.active) renderVoice(v, outL, outR, n);
+    mtr.active = activeVoices();
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
     float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr); bool bad = false;
     for (int i = 0; i < n; ++i) {
@@ -509,6 +517,7 @@ class Engine {
       ++trips; for (auto& v : voices) v = Voice(); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bl = br = bl2 = br2 = limEnv = 0.f;
       for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
     }
+    { float pl = 0.f, pr = 0.f; for (int i = 0; i < n; ++i) { pl = std::max(pl, std::fabs(outL[i])); pr = std::max(pr, std::fabs(outR[i])); } mtr.l = pl; mtr.r = pr; }
   }
 
  private:
@@ -523,6 +532,7 @@ class Engine {
   }
   float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
   int trips = 0;   // how many times the safety guard reset the engine
+  Meters mtr;
   std::vector<float> subBusL, subBusR; float* sbL = nullptr; float* sbR = nullptr;
   float bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05f, limRel = 0.0002f;
 
