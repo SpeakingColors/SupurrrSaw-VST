@@ -36,6 +36,17 @@ textarea{width:100%;min-height:58px;resize:vertical}
 .pages button:hover{color:var(--fg);border-color:var(--pink)}
 .pages button.on{background:linear-gradient(180deg,var(--hot),#a1004a);color:#fff;border-color:var(--hot);box-shadow:0 0 22px #fe006d66}
 .page[hidden]{display:none}
+#g-kit{display:flex!important;flex-direction:column;gap:12px;height:100%;overflow-y:auto;padding-right:4px}#g-kit>.card{flex:0 0 auto;grid-column:auto!important;grid-row:auto!important;overflow:visible}
+.kr{display:grid;grid-template-columns:36px 140px minmax(150px,1.4fr) 140px 84px minmax(120px,1fr) minmax(120px,1fr) auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--inset);margin-bottom:6px}
+.kr.sel{border-color:var(--yel)}.kr.krh{background:none;border:0;padding:0 8px;font-size:11px;color:var(--dim);margin-bottom:2px}
+.kr .pad{width:36px;height:36px;border-radius:9px;border:2px solid #0006;cursor:pointer;font-size:14px}
+.kr input[type=text],.kr select{width:100%}
+.kstrip{position:relative;display:flex;height:84px;user-select:none}
+.kw{flex:1;background:#e9e4f7;border:1px solid #0007;border-radius:0 0 5px 5px;display:flex;align-items:flex-end;justify-content:center;font-size:9px;color:#241c52;cursor:pointer}
+.kb{position:absolute;top:0;height:52px;background:#1a1330;border:1px solid #000;border-radius:0 0 4px 4px;z-index:2;cursor:pointer}
+.twk{display:flex;gap:10px;align-items:center;background:var(--yel);color:#2b2200;padding:5px 14px;font-size:13px;font-weight:600}.twk[hidden]{display:none}
+.twk .btn{color:var(--fg)}
+
 .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;margin-top:12px;grid-auto-flow:dense}
 .grid>.card{grid-column:span 12}
 @media(min-width:1500px){.c2{grid-column:span 2!important}.c3{grid-column:span 3!important}.c4{grid-column:span 4!important}.c5{grid-column:span 5!important}.c6{grid-column:span 6!important}.c7{grid-column:span 7!important}.c8{grid-column:span 8!important}}
@@ -194,7 +205,7 @@ canvas{display:block;max-width:100%}
     <button class="btn sm" id="save" data-tip="Save this patch. Asks before it overwrites anything."><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 3h13l3 3v15H4z"/><path d="M7 3v6h9V3M7 21v-7h10v7"/></svg></button>
   </div>
   <nav class="pages" id="pages">
-  <button data-p="sound" class="on">Sound</button><button data-p="mod">Mod</button><button data-p="fx">FX</button><button data-p="presets">Presets</button>
+  <button data-p="sound" class="on">Sound</button><button data-p="mod">Mod</button><button data-p="fx">FX</button><button data-p="presets">Presets</button><button data-p="kit">Kit</button>
 </nav>
   <span class="grow"></span>
   <div class="topk" id="topk"></div>
@@ -203,11 +214,15 @@ canvas{display:block;max-width:100%}
 </header>
 
 
+<div id="twkBar" class="twk" hidden><span id="twkTxt"></span><span style="flex:1"></span><button class="btn sm" id="twkOk">Put back into kit</button><button class="btn sm" id="twkNo">Cancel</button></div>
+
 <section class="page" id="pg-sound"><div class="grid" id="g-sound">
   <div class="card c3 a-pink" id="dispCard"><h2>Sound display <span class="tabs"><span class="seg" id="dispSeg"><button data-m="spec" class="on">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq">EQ</button></span></span></h2><canvas id="scope" class="disp" width="760" height="230" style="height:230px"></canvas><div id="eqS" class="eqp" hidden></div></div>
 </div></section>
 
 <section class="page" id="pg-mod" hidden><div class="grid" id="g-mod"></div></section>
+
+<section class="page" id="pg-kit" hidden><div class="grid" id="g-kit"></div></section>
 
 <section class="page" id="pg-fx" hidden><div class="grid" id="g-fx">
   <div class="card c5 a-pink"><h2>Output spectrum <span class="tabs"><span class="seg" id="dispSegFx"><button data-m="spec" class="on">Spectrum</button><button data-m="scope">Scope</button><button data-m="eq">EQ</button></span></span></h2><canvas id="scopeFx" class="disp" width="760" height="230" style="height:230px"></canvas></div>
@@ -721,7 +736,7 @@ class SupurrEngine {
   /* drum kit mode: k is null (off) or a list of slots {n: keys that play it, play: key it is played at (null = the key itself), ch: keys it chokes, p: preset}. Each slot is its own small engine, so every drum keeps its own sound and effects. */
   setKit(k) {
     if (!k || !k.length) { this.kit = null; return; }
-    this.kit = k.map(s => { const e = new SupurrEngine(this.sr); e.setParams(loadPreset(s.p)); return { n: s.n, play: s.play == null ? null : s.play, ch: s.ch || [], g: s.g == null ? 1 : s.g, e, hot: 0 }; });
+    this.kit = k.map(s => { const e = new SupurrEngine(this.sr); if (s.full) { e.setParams(s.full); if (s.cyc) s.cyc.forEach((c, i) => { if (c) e.setCycle(i, c); }); } else e.setParams(loadPreset(s.p)); return { n: s.n, play: s.play == null ? null : s.play, ch: s.ch || [], g: s.g == null ? 1 : s.g, e, hot: 0 }; });
     this.kL = new Float64Array(this.subL.length); this.kR = new Float64Array(this.subL.length);
   }
   renderKit(outL, outR, n) {
@@ -2212,6 +2227,7 @@ function buildPanels(){
   pc[0].appendChild(browserCard());pc[1].appendChild(waveLabCard());
   ["notesCard","dangerCard","movesCard","howCard"].forEach(id=>{const e=$("#"+id);if(e)pc[2].appendChild(e);});
   pc[2].querySelector("#movesCard").classList.add("grow");pc.forEach(x=>Pg.appendChild(x));
+  BUILD_PAGE="kit";buildKitPage();
 }
 function refreshAll(){capDirty();if(P&&P.ampLink&&TG.amp&&TG.amp.idx>0)tabSet("amp",0);for(const k in CTRL)CTRL[k].refresh();drawAll();updateDiffInfo();wlSyncFromPatch();renderBrowser();}
 
@@ -2405,7 +2421,7 @@ window.__T={get P(){return P},renderNote,wavBytes,makeZip,crc32};
 const KITS={k909:{name:"909 kit",slots:[[[36,35],"kick_909",36,1,[]],[[37],"rim_drum",60,0.7,[]],[[38,40],"snare_909",60,0.85,[]],[[39],"clap_drum",60,0.85,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.55,[]],[[49,57],"crash_909",60,0.5,[]],[[51,59],"ride_909",60,0.45,[]],[[56],"cowbell_808",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]]]},
  khard:{name:"Hard kit",slots:[[[36],"kick_click_layered",36,1,[]],[[35],"gabber_kick",36,1,[]],[[38,40],"snare_909",60,0.9,[]],[[39],"clap_drum",60,0.9,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.6,[]],[[49,57],"crash_909",60,0.55,[]],[[70],"shaker_drum",60,0.5,[]]]},
  kbasic:{name:"Basic kit",slots:[[[36,35],"kick",36,1,[]],[[37],"rim_drum",60,0.7,[]],[[38,40],"snare",48,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"closed_hat",60,0.5,[46]],[[46],"open_hat",60,0.55,[]],[[49,57],"crash",60,0.5,[]]]}};
-Object.assign(KITS,{ktrance:{name:"Trance",slots:[[[36,35],"kick_punch_drum",36,1,[]],[[38,40],"snare_909",60,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]],[[51,59],"ride_909",60,0.45,[]]]},
+Object.assign(KITS,{knew:{name:"New kit (one kick)",slots:[[[36],"kick_909",36,1,[]]]},ktrance:{name:"Trance",slots:[[[36,35],"kick_punch_drum",36,1,[]],[[38,40],"snare_909",60,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]],[[51,59],"ride_909",60,0.45,[]]]},
  khouse:{name:"House",slots:[[[36,35],"kick_909",36,1,[]],[[38,40],"snare_crack_drum",60,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]],[[56],"cowbell_808",60,0.5,[]]]},
  kbhouse:{name:"Bass house",slots:[[[36,35],"kick_punch_drum",36,1.05,[]],[[38,40],"snare_crack_drum",60,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]]]},
  khstyle:{name:"Hardstyle",slots:[[[36,35],"kick_click_layered",36,1,[]],[[38,40],"snare_crack_drum",60,0.95,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]]]},
@@ -2414,11 +2430,135 @@ Object.assign(KITS,{ktrance:{name:"Trance",slots:[[[36,35],"kick_punch_drum",36,
  kreg:{name:"Reggaeton",slots:[[[36,35],"kick_808_drum",36,1,[]],[[38,40],"snare_crack_drum",60,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]],[[56],"cowbell_808",60,0.5,[]]]},
  kdnb:{name:"Drum and bass",slots:[[[36,35],"kick_punch_drum",36,1,[]],[[38,40],"snare_crack_drum",60,0.9,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]],[[51,59],"ride_909",60,0.45,[]]]},
  k808:{name:"808",slots:[[[36,35],"kick_808_drum",36,1,[]],[[38,40],"snare_909",60,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[37],"rim_drum",60,0.7,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.58,[]],[[49,57],"crash_909",60,0.5,[]],[[56],"cowbell_808",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]]]}});
+/* ===== drum kits: model, editor page, save and load ===== */
 let KITCUR="off";
-const kitDef=id=>KITS[id]&&KITS[id].slots.map(([n,nm,pl,g,ch])=>({n,play:pl,g,ch,p:PRESETS[nm]}));
-function kitSet(id){KITCUR=KITS[id]?id:"off";const s=$("#kitSel");if(s)s.value=KITCUR;send({t:"kit",k:KITCUR==="off"?null:kitDef(KITCUR)});}
+const UKITS={},KEDS={};let TWK=null,KSEL=0,KR=null;
+const nname=n=>NOTEN[((n%12)+12)%12]+(Math.floor(n/12)-2);
+function nparse(s){const m=/^\s*([A-Ga-g])([#b]?)(-?\d)\s*$/.exec(s);if(!m)return NaN;let b={C:0,D:2,E:4,F:5,G:7,A:9,B:11}[m[1].toUpperCase()];if(m[2]==="#")b++;else if(m[2]==="b")b--;return b+12*(+m[3]+2);}
+const keysTxt=a=>a.map(nname).join(", ");
+function keysParse(t){const r=[];String(t).split(/[ ,;]+/).forEach(x=>{if(!x)return;let n=nparse(x);if(isNaN(n)&&/^\d+$/.test(x))n=+x;if(n>=0&&n<=127&&!r.includes(n))r.push(n);});return r;}
+const KCOL=["#ff7bb1","#02ebba","#ffd100","#6cc9f5","#a43dff","#ff9000","#fe27d6","#01fcdc","#774bf9","#feef5e","#fe006d","#bdf9eb"];
+function kitFromDef(d){const sl=d.slots.map(([n,nm,pl,g,ch])=>({name:nice(nm),n:n.slice(),pr:"b:"+nm,full:null,play:pl,g,cut:-1,_ch:ch}));
+  sl.forEach(s=>{if(s._ch&&s._ch.length){s.cut=sl.findIndex(o=>o!==s&&o.n.includes(s._ch[0]));}delete s._ch;});return {name:d.name,slots:sl};}
+function kbase(id){if(KITS[id])return kitFromDef(KITS[id]);if(id.startsWith("u:")&&UKITS[id.slice(2)])return clone(UKITS[id.slice(2)]);return null;}
+const kmodel=id=>id==="off"?null:(KEDS[id]||kbase(id));
+function kedit(id){if(!KEDS[id]){const b=kbase(id);if(!b)return null;KEDS[id]=b;}return KEDS[id];}
+function slotPreset(s){
+  const full=s.full?fromSaved(s.full):(s.pr&&s.pr.startsWith("u:")&&SAVED[s.pr.slice(2)]?fromSaved(SAVED[s.pr.slice(2)].params):null);
+  if(full)return {full,cyc:full.layers.map(l=>l.cycle?decCycle(l.cycle):null)};
+  return {p:PRESETS[(s.pr||"").slice(2)]||PRESETS.kick};
+}
+function kitDef(id){const m=kmodel(id);if(!m)return null;
+  return m.slots.filter(s=>s.n.length).map(s=>Object.assign({n:s.n,play:s.play,g:s.g,ch:s.cut>=0&&m.slots[s.cut]?m.slots[s.cut].n:[]},slotPreset(s)));}
+let ktm=0;
+function kitPush(){clearTimeout(ktm);ktm=setTimeout(()=>{if(KITCUR!=="off")send({t:"kit",k:kitDef(KITCUR)});},180);}
+function kitSet(id){
+  const m=id!=="off"&&kmodel(id);KITCUR=m?id:"off";
+  if(KITCUR!=="off"&&TWK){TWK=null;twkShow();}
+  const s=$("#kitSel");if(s)s.value=KITCUR;const s2=$("#kitSel2");if(s2)s2.value=KITCUR;
+  send({t:"kit",k:m?kitDef(KITCUR):null});kitRefresh();
+}
 window.__kitResend=()=>{if(KITCUR!=="off")send({t:"kit",k:kitDef(KITCUR)});};
-function KITS_OPTS(ks){ks.innerHTML="";[["off","Kit: off"],...Object.keys(KITS).map(k=>[k,KITS[k].name])].forEach(([v,t])=>{const o=el("option","",t);o.value=v;ks.appendChild(o);});}
+function KITS_OPTS(){
+  [$("#kitSel"),$("#kitSel2")].forEach((ks,j)=>{if(!ks)return;ks.innerHTML="";
+    const add=(p,v,t)=>{const o=el("option","",t);o.value=v;p.appendChild(o);};
+    add(ks,"off",j?"Kit off (play the synth)":"Kit: off");
+    Object.keys(KITS).forEach(k=>add(ks,k,KITS[k].name+(KEDS[k]?" *":"")));
+    const us=Object.keys(UKITS);if(us.length){const g=el("optgroup");g.label="Your kits";us.forEach(u=>add(g,"u:"+u,"★ "+UKITS[u].name+(KEDS["u:"+u]?" *":"")));ks.appendChild(g);}
+    ks.value=KITCUR;});
+}
+function twkShow(){const b=$("#twkBar");if(!b)return;b.hidden=!TWK;if(TWK){const m=kmodel(TWK.id),s=m&&m.slots[TWK.i];$("#twkTxt").textContent="Editing the "+(s?s.name:"pad")+" of "+(m?m.name:"the kit")+". Tweak it like any preset, play it on the keyboard, then put it back.";}}
+function kitTweak(i){
+  const id=KITCUR,m=kmodel(id),s=m&&m.slots[i];if(!s)return;
+  const v=s.pr&&((s.pr.startsWith("b:")&&PRESETS[s.pr.slice(2)])||(s.pr.startsWith("u:")&&SAVED[s.pr.slice(2)]))?s.pr:"b:kick";
+  loadPreset(v);
+  if(s.full){P=fromSaved(s.full);BASE=clone(P);sendSet();refreshAll();}
+  CURNAME=s.name;updateDiffInfo();TWK={i,id};twkShow();showPage("sound");
+}
+function kitPutBack(){
+  if(!TWK)return;commitAll();const id=TWK.id,m=kedit(id);if(m&&m.slots[TWK.i]){const q=clone(P);delete q.bpm;m.slots[TWK.i].full=q;}
+  TWK=null;twkShow();KITS_OPTS();kitSet(id);showPage("kit");
+}
+function kitCancel(){if(!TWK)return;const id=TWK.id;TWK=null;twkShow();kitSet(id);showPage("kit");}
+function sanSlot(x){x=x||{};return {name:String(x.name||"Pad").slice(0,40),n:Array.isArray(x.n)?x.n.map(Number).filter(v=>v>=0&&v<=127):[],pr:String(x.pr||"b:kick"),full:x.full&&x.full.layers?x.full:null,play:x.play==null?null:clamp(+x.play,0,127),g:clamp(+x.g||0,0,2),cut:Number.isInteger(x.cut)?x.cut:-1};}
+async function kitSave(as){
+  const id=KITCUR;if(id==="off")return;const m=kmodel(id);let name=m.name;const mine=id.startsWith("u:");
+  if(as||!mine){const r=await ask({title:"Save kit",msg:"Name your kit.",input:mine?name+" copy":name+" copy",buttons:[{t:"Save",k:"on",def:1},{t:"Cancel"}]});if(r.b!=="Save"||!r.v||!r.v.trim())return;name=r.v.trim();}
+  const slug="k-"+slugOf(name);
+  if(UKITS[slug]&&"u:"+slug!==id){const r=await ask({title:"Overwrite this kit?",msg:"A kit called \""+UKITS[slug].name+"\" already exists. Replace it?",buttons:[{t:"Overwrite",k:"danger"},{t:"Cancel",def:1}]});if(r.b!=="Overwrite")return;}
+  const slots=m.slots.map(s=>({name:s.name,n:s.n,pr:s.pr,full:s.full||null,play:s.play,g:s.g,cut:s.cut}));
+  if(!(await dbWrite("kits/"+slug,{name,savedAt:new Date().toISOString(),engine:3,slots},"kit saved")))return;
+  UKITS[slug]={name,slots:clone(slots)};delete KEDS[id];delete KEDS["u:"+slug];
+  KITS_OPTS();kitSet("u:"+slug);
+}
+async function kitDelete(){
+  const id=KITCUR;if(!id.startsWith("u:"))return;const k=id.slice(2);
+  const r=await ask({title:"Delete this kit?",msg:"\""+UKITS[k].name+"\" will be removed from your saved kits. Presets stay.",buttons:[{t:"Delete",k:"danger"},{t:"Keep",k:"on",def:1}]});if(r.b!=="Delete")return;
+  try{if(DB)await DB.doc("kits/"+k).delete();}catch(e){}
+  delete UKITS[k];delete KEDS[id];KITS_OPTS();kitSet("off");
+}
+function kitAud(n){if(n==null)return;noteOn(n,0.85);setTimeout(()=>noteOff(n),170);}
+function kitRefresh(){if(KR)KR();}
+function buildKitPage(){
+  const G=$("#g-kit");if(!G)return;
+  const top=card("Drum kit","","c12 a-pink");G.appendChild(top);
+  const bar=el("div","row");bar.style.cssText="gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px";
+  const ks=el("select");ks.id="kitSel2";ks.style.width="210px";ks.dataset.tip="The kit that plays on the keyboard and MIDI. Pick one to edit it. Edits stay (marked *) until you save or reset.";
+  const nm=el("input");nm.type="text";nm.style.width="190px";nm.placeholder="Kit name";nm.dataset.tip="Name of this kit. Press Save to keep it under this or a new name.";
+  const bSave=el("button","btn sm on","Save");bSave.dataset.tip="Save this kit to your kits. A built-in kit asks for a new name first.";
+  const bAs=el("button","btn sm","Save as ...");const bRes=el("button","btn sm","Reset edits");bRes.dataset.tip="Throw away your edits to this kit.";const bDel=el("button","btn sm","Delete kit");
+  const bNew=el("button","btn sm","New kit");bNew.dataset.tip="Start a new kit with a single kick, then add pads.";
+  [ks,nm,bSave,bAs,bRes,bDel,bNew].forEach(x=>bar.appendChild(x));top.appendChild(bar);
+  const strip=el("div","kstrip");strip.style.marginTop="12px";top.appendChild(strip);
+  top.appendChild(el("div","pill note","Each row is one drum with its own preset. A key can belong to several rows; they play together, so you can layer a kick with a clap. Press Tweak to open a drum in the synth, then put it back."));
+  const list=card("Pads","","c12 a-mint");G.appendChild(list);
+  const body=el("div");list.appendChild(body);
+  KITS_OPTS();
+  ks.onchange=()=>kitSet(ks.value);
+  bSave.onclick=()=>kitSave(false);bAs.onclick=()=>kitSave(true);
+  bRes.onclick=()=>{if(KITCUR!=="off"){delete KEDS[KITCUR];KITS_OPTS();kitSet(KITCUR);}};
+  bDel.onclick=kitDelete;
+  bNew.onclick=()=>{kitSet("knew");};
+  nm.onchange=()=>{const m=kedit(KITCUR);if(m){m.name=nm.value.trim().slice(0,40)||m.name;KITS_OPTS();}};
+  const mark=()=>{KITS_OPTS();};
+  function edit(f){const m=kedit(KITCUR);if(!m)return;f(m);mark();kitPush();kitRefresh();}
+  function drawStrip(m){
+    strip.innerHTML="";const lo=24,hi=84,W=[];for(let n=lo;n<=hi;n++)if(![1,3,6,8,10].includes(n%12))W.push(n);
+    const own=n=>{const j=m.slots.findIndex(s=>s.n.includes(n));return j;};
+    const nk=W.length;
+    W.forEach(n=>{const k=el("div","kw");const j=own(n);if(j>=0){k.style.background=KCOL[j%KCOL.length];k.title=m.slots[j].name+" ("+nname(n)+")";}else k.title=nname(n);
+      if(n%12===0)k.textContent=nname(n);k.onmousedown=()=>{if(j>=0)KSEL=j;kitAud(n);kitRefresh();};strip.appendChild(k);});
+    let wi=0;for(let n=lo;n<=hi;n++){if(![1,3,6,8,10].includes(n%12)){wi++;continue;}
+      const k=el("div","kb");k.style.left=(wi/nk*100-0.3/nk*100)+"%";k.style.width=(0.6/nk*100)+"%";const j=own(n);if(j>=0){k.style.background=KCOL[j%KCOL.length];k.title=m.slots[j].name+" ("+nname(n)+")";}else k.title=nname(n);
+      k.onmousedown=e=>{e.stopPropagation();if(j>=0)KSEL=j;kitAud(n);kitRefresh();};strip.appendChild(k);}
+  }
+  KR=function(){
+    const id=KITCUR,m=kmodel(id);
+    ks.value=id;bDel.hidden=!id.startsWith("u:");bRes.hidden=!KEDS[id];[nm,bSave,bAs,bRes,strip,list].forEach(x=>{if(x)x.hidden=false;});
+    if(!m){nm.hidden=bSave.hidden=bAs.hidden=bRes.hidden=bDel.hidden=true;strip.hidden=true;body.innerHTML="";list.hidden=true;return;}
+    nm.value=m.name;drawStrip(m);body.innerHTML="";
+    const hd=el("div","kr krh");["","Name","Preset","Keys","Plays","Level","Cuts",""].forEach(t=>hd.appendChild(el("span","",t)));body.appendChild(hd);
+    m.slots.forEach((s,i)=>{
+      const r=el("div","kr"+(i===KSEL?" sel":""));
+      const pad=el("button","pad","▶");pad.style.background=KCOL[i%KCOL.length];pad.style.color="#1b1538";pad.dataset.tip="Hear this drum.";pad.onmousedown=()=>{KSEL=i;kitAud(s.n.length?s.n[0]:s.play);};r.appendChild(pad);
+      const name=el("input");name.type="text";name.value=s.name;name.onchange=()=>edit(m=>{m.slots[i].name=name.value.trim().slice(0,40)||"Pad";});r.appendChild(name);
+      const ps=el("select");ps.innerHTML=$("#preset").innerHTML;ps.dataset.tip="The sound of this drum. Any preset works, built-in or yours.";
+      if(s.full){const o=el("option","","Custom (tweaked)");o.value="__c";ps.insertBefore(o,ps.firstChild);ps.value="__c";}else ps.value=s.pr;
+      ps.onchange=()=>{if(ps.value==="__c")return;edit(m=>{m.slots[i].pr=ps.value;m.slots[i].full=null;});};r.appendChild(ps);
+      const ky=el("input");ky.type="text";ky.value=keysTxt(s.n);ky.dataset.tip="Keys that play this drum, like C1, B0. C3 is middle C (note 60).";ky.onchange=()=>{const a=keysParse(ky.value);edit(m=>{m.slots[i].n=a;});};r.appendChild(ky);
+      const pl=el("input");pl.type="text";pl.value=s.play==null?"follow":nname(s.play);pl.dataset.tip="The pitch the drum plays at. Type a note like C1 or C3, or 'follow' so each key plays its own pitch (good for toms).";pl.onchange=()=>{const t=pl.value.trim().toLowerCase();let v=null;if(t&&t!=="follow"&&t!=="key"){v=nparse(t);if(isNaN(v)&&/^\d+$/.test(t))v=+t;if(isNaN(v))v=s.play;}edit(m=>{m.slots[i].play=v;});};r.appendChild(pl);
+      const lw=el("div","row");lw.style.gap="6px";const lv=el("input");lv.type="range";lv.min=0;lv.max=1.5;lv.step=0.05;lv.value=s.g;lv.style.flex="1";const lt=el("span","",s.g.toFixed(2));lt.style.cssText="width:34px;font-size:12px;color:var(--yel)";lv.oninput=()=>{lt.textContent=(+lv.value).toFixed(2);};lv.onchange=()=>edit(m=>{m.slots[i].g=+lv.value;});lw.appendChild(lv);lw.appendChild(lt);lw.dataset.tip="Loudness of this drum in the kit.";r.appendChild(lw);
+      const cu=el("select");cu.dataset.tip="Playing this drum cuts another one short, like a closed hat cutting an open hat.";const o0=el("option","","Cuts nothing");o0.value="-1";cu.appendChild(o0);m.slots.forEach((o,j)=>{if(j!==i){const oo=el("option","","Cuts "+o.name);oo.value=j;cu.appendChild(oo);}});cu.value=String(s.cut>=0&&s.cut<m.slots.length?s.cut:-1);cu.onchange=()=>edit(m=>{m.slots[i].cut=+cu.value;});r.appendChild(cu);
+      const ac=el("div","row");ac.style.gap="6px";const tw=el("button","btn sm","Tweak");tw.dataset.tip="Open this drum in the synth to shape its sound, then put it back in the kit.";tw.onclick=()=>kitTweak(i);const rm=el("button","btn sm","✕");rm.dataset.tip="Remove this pad.";rm.onclick=()=>edit(m=>{m.slots.splice(i,1);m.slots.forEach(q=>{if(q.cut===i)q.cut=-1;else if(q.cut>i)q.cut--;});if(KSEL>=m.slots.length)KSEL=Math.max(0,m.slots.length-1);});ac.appendChild(tw);ac.appendChild(rm);r.appendChild(ac);
+      r.onmousedown=()=>{if(KSEL!==i){KSEL=i;r.parentNode&&[...body.children].forEach((c,j)=>c.classList.toggle("sel",j===i+1));}};
+      body.appendChild(r);
+    });
+    const add=el("button","btn sm","+ Add pad");add.onclick=()=>edit(m=>{const used=new Set();m.slots.forEach(s=>s.n.forEach(x=>used.add(x)));let k=36;while(used.has(k)&&k<96)k++;m.slots.push({name:"New pad",n:[k],pr:"b:kick",full:null,play:60,g:0.8,cut:-1});KSEL=m.slots.length-1;});body.appendChild(add);
+  };
+  $("#twkOk").onclick=kitPutBack;$("#twkNo").onclick=kitCancel;
+  KR();
+}
+
 const DEMOS={};
 {const sel=$("#demo");let grp=null,gname="";
  DEMO.demos.forEach(d=>{DEMOS[d.id]=d.ev;if(d.group!==gname){gname=d.group;grp=el("optgroup");grp.label=gname;sel.appendChild(grp);}const o=el("option","",d.name+" ("+d.bpm+")");o.value=d.id;o.dataset.bpm=d.bpm;if(d.kit)o.dataset.kit=d.kit;grp.appendChild(o);});
@@ -2676,7 +2816,7 @@ buildPanels();buildKbd();
 window.__S87T={sxPreset,sxDecode,slotInfo,slotParams,flatDiff,applyFlat,initParams,factoryBanks,flat,SLOTS,loadPreset,clone,getP:()=>P};
 loadPreset("b:trance_90s","@start");eqInit();capInit();Object.values(CTRL).forEach(c=>{try{c.refresh();}catch(e){}});
 moves=[];dirtyS=false;renderMoves();
-try{const sp=localStorage.getItem("supurrPage");if(sp&&["sound","mod","fx","presets"].includes(sp))showPage(sp);}catch(e){}
+try{const sp=localStorage.getItem("supurrPage");if(sp&&["sound","mod","fx","presets","kit"].includes(sp))showPage(sp);}catch(e){}
 requestAnimationFrame(loop);
 (async function(){
   try{
@@ -2689,6 +2829,7 @@ requestAnimationFrame(loop);
       snap.docs.forEach(d=>{const x=d.data();if(x&&x.params)SAVED[d.id]={name:x.name||d.id,params:x.params,tags:Array.isArray(x.tags)?x.tags:[],type:x.type||"",genres:Array.isArray(x.genres)?x.genres:[]};});
       if(Object.keys(SAVED).length)fillPresetSelect($("#preset").value);
       try{const bs=await DB.collection("banks").get();bs.docs.forEach(d=>{const x=d.data();if(x&&x.bank&&BANKN.includes(x.bank)&&x.slot>=1&&x.slot<=SLOTS&&x.d)(BOV[x.bank]=BOV[x.bank]||{})[x.slot-1]={name:String(x.name||"Init").slice(0,40),tags:Array.isArray(x.tags)?x.tags:[],d:x.d};});renderBank();renderBrowser();}catch(e){}
+      try{const kk=await DB.collection("kits").get();kk.docs.forEach(d=>{const x=d.data();if(x&&Array.isArray(x.slots))UKITS[d.id]={name:String(x.name||d.id).slice(0,40),slots:x.slots.map(sanSlot)};});KITS_OPTS();kitRefresh();}catch(e){}
       try{const ws=await DB.collection("waves").get();ws.docs.forEach(d=>{const x=d.data();if(x&&x.cycle)MYWAVES[d.id]={name:x.name||d.id,cycle:x.cycle};});wlFillWaves();}catch(e){}
     }catch(e){}
     if(window.__plugState&&window.__plugRestore){try{window.__plugRestore(window.__plugState);}catch(e){}}
@@ -2703,7 +2844,7 @@ window.__plugRestore=function(st){
   P=p;BASE=base||clone(p);CURNAME=ui.name||CURNAME;CURBASEKEY=b;touched={};
   if(st.vol!=null){const v=$("#vol");if(v){v.value=st.vol;v.dispatchEvent(new Event("input"));}}
   const sel=$("#preset");if(sel&&b&&[...sel.options].some(o=>o.value===b))sel.value=b;
-  if(ui.page&&["sound","mod","fx","presets"].includes(ui.page))showPage(ui.page);
+  if(ui.page&&["sound","mod","fx","presets","kit"].includes(ui.page))showPage(ui.page);
   SENT[0]=SENT[1]=SENT[2]="";sendSet();refreshAll();dirtyC=true;
 };
 }
