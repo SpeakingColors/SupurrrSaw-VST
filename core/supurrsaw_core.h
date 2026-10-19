@@ -15,7 +15,7 @@ constexpr int kLayers    = 3;
 constexpr float kPi      = 3.14159265358979f;
 
 enum class Wave { Off, SuperSaw, SuperSquare, Saw, Pulse, Tri, Sine, Sample, Custom };
-enum class FilterMode { LP24, LP18, HP, BP };
+enum class FilterMode { LP24, LP18, HP, BP, LP12, LP6 };   // LP12 and LP6 take the earlier taps of the same four pole ladder
 
 // A loaded sample (WAV data already decoded). Shared between layers and voices, read only while playing.
 struct Sample {
@@ -153,6 +153,10 @@ struct Params {
   bool limiter = true;         // slow, smooth peak limiter in front of the clipper
   float limCeil = 0.9f;        // limiter ceiling (linear)
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
+  // Mastering: dynMix scales the whole opto/OTT/squeeze chain; dm* is the dance master chain (3 band compressor, clipper, dry/wet)
+  float lfoDepth = 1.f, lfoFade = 0.f, lfoStart = 0.f;   // LFO master depth, fade-in time (s) and start phase (0..1); shapes: 0 sine, 1 tri, 2 square, 3 saw, 4 sample and hold
+  float pitchHold = 0.f, pitchCurve = 0.f;               // pitch envelope: hold before the fall (s), 0 = exponential fall, 1 = linear fall
+  float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmHigh = 0.f;
   // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random.
   // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
   float mx[8][14] = {};
@@ -226,7 +230,7 @@ struct Filter {
   float process(float x, FilterMode m, float cutoffHz, float reso, float drive, float sr) {
     float fc = std::min(cutoffHz, 0.45f * sr);
     float g = std::tan(kPi * fc / sr);
-    if (m == FilterMode::LP24 || m == FilterMode::LP18) {
+    if (m == FilterMode::LP24 || m == FilterMode::LP18 || m == FilterMode::LP12 || m == FilterMode::LP6) {
       float G = g / (1.f + g), G2 = G * G, G4 = G2 * G2;
       float k = 3.95f * reso;
       float S = G2 * G * s[0] / (1.f + g) + G2 * s[1] / (1.f + g) + G * s[2] / (1.f + g) + s[3] / (1.f + g);
@@ -240,7 +244,7 @@ struct Filter {
       float u = in - k * y4;
       float y[4]; float xi = u;
       for (int i = 0; i < 4; ++i) { float v = G * (xi - s[i]); y[i] = v + s[i]; s[i] = y[i] + v; xi = y[i]; }
-      return (m == FilterMode::LP24) ? y[3] : y[2];
+      return (m == FilterMode::LP24) ? y[3] : (m == FilterMode::LP18 ? y[2] : (m == FilterMode::LP12 ? y[1] : y[0]));
     }
     float R = 0.5f * (1.f - 0.95f * reso) + 0.02f;
     float hp = (x - (2.f * R + g) * z1 - z2) / (1.f + 2.f * R * g + g * g);
@@ -256,7 +260,7 @@ struct Voice {
   float phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
   float gl = 0.f; float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
-  float rnd = 0.f; float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
+  float rnd = 0.f, sh = 0.f; float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   float lfoPhase = 0.f, t = 0.f, stackCents = 0.f, stackGain = 1.f;
   EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
 };
@@ -401,20 +405,55 @@ struct Dynamics {
   }
 };
 
+struct Master {
+  float sr = 48000.f, env[3] = {0, 0, 0}, gn[3] = {1, 1, 1}, gr[3] = {0, 0, 0}, xl = 0.f, xr = 0.f, outL = 0.f, outR = 0.f;
+  Lr4 lo[2], hi1[2], midLo[2], hiHp[2], ap1[2], ap2[2];
+  void prepare(float s) {
+    sr = s; for (int i = 0; i < 3; ++i) { env[i] = 0.f; gn[i] = 1.f; gr[i] = 0.f; } xl = xr = 0.f;
+    for (int c = 0; c < 2; ++c) { lo[c].set(false, 150.f, sr); hi1[c].set(true, 150.f, sr); midLo[c].set(false, 3000.f, sr); hiHp[c].set(true, 3000.f, sr); ap1[c].set(false, 3000.f, sr); ap2[c].set(true, 3000.f, sr); }
+  }
+  static float coef(float seconds, float sr) { return 1.f - std::exp(-1.f / std::max(1.f, seconds * sr)); }
+  static float lncosh(float u) { float a = std::fabs(u); return a + std::log1p(std::exp(-2.f * a)) - 0.6931471805599453f; }
+  static float clip(float x, float prev, float c) { float d = x - prev; if (std::fabs(d) < 1e-5f) return c * std::tanh(0.5f * (x + prev) / c); return c * c * (lncosh(x / c) - lncosh(prev / c)) / d; }
+  void process(const Params& p, float L, float R) {
+    const float mix = p.dmMix;
+    if (!(mix > 0.f)) { gr[0] = gr[1] = gr[2] = 0.f; outL = L; outR = R; return; }
+    float in[2] = {L, R}, band[2][3];
+    for (int c = 0; c < 2; ++c) {
+      float low = lo[c].tick(in[c]), rest = hi1[c].tick(in[c]), mid = midLo[c].tick(rest), high = hiHp[c].tick(rest);
+      band[c][0] = ap1[c].tick(low) + ap2[c].tick(low); band[c][1] = mid; band[c][2] = high;
+    }
+    const float atk[3] = {0.014f, 0.007f, 0.0025f}, rel[3] = {0.16f, 0.09f, 0.05f}, T0[3] = {-9.f, -10.f, -12.f}, trim[3] = {p.dmLow, 0.f, p.dmHigh};
+    const float R_ = 1.5f + 3.5f * p.dmDrive; float wl = 0.f, wr = 0.f;
+    for (int b = 0; b < 3; ++b) {
+      float pk = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
+      env[b] += (pk > env[b] ? coef(atk[b], sr) : coef(rel[b], sr)) * (pk - env[b]);
+      float T = T0[b] - 12.f * p.dmDrive, over = linToDb(env[b]) - T, knee = 8.f, g;
+      if (over <= -knee * 0.5f) g = 0.f; else if (over >= knee * 0.5f) g = over * (1.f - 1.f / R_); else { float x = over + knee * 0.5f; g = (1.f - 1.f / R_) * x * x / (2.f * knee); }
+      gn[b] += (dbToLin(-g + 0.85f * (-T) * (1.f - 1.f / R_) + trim[b] * 6.f) - gn[b]) * 0.2f; gr[b] = g;
+      wl += band[0][b] * gn[b]; wr += band[1][b] * gn[b];
+    }
+    const float dl0 = band[0][0] + band[0][1] + band[0][2], dr0 = band[1][0] + band[1][1] + band[1][2];
+    const float gc = 1.f + p.dmClip * 1.2f, c = 0.85f, a = wl * gc, b2 = wr * gc;
+    const float yl = clip(a, xl, c), yr = clip(b2, xr, c); xl = a; xr = b2;
+    outL = dl0 * (1.f - mix) + yl * mix; outR = dr0 * (1.f - mix) + yr * mix;
+  }
+};
+
 class Engine {
  public:
   Params p;
-  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); }
+  void prepare(double sampleRate) { sr = (float)sampleRate; for (auto& v : voices) v = Voice(); bl = br = 0.f; bl2 = br2 = 0.f; limEnv = 0.f; limAtk = 1.f - std::exp(-1.f / (0.0004f * sr)); limRel = 1.f - std::exp(-1.f / (0.12f * sr)); fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); }
   void noteOn(int note, float vel) {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;
       for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
-      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
+      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->sh = v->rnd; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
     }
     const int n = p.mono ? 1 : std::max(1, std::min(4, p.stackCount));   // Stack mode plays several detuned copies per key
     for (int k = 0; k < n; ++k) {
       Voice* v = allocVoice();
-      *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->age = ++clock;
+      *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->sh = v->rnd; v->age = ++clock;
       v->stackCents = n > 1 ? ((float)k / (float)(n - 1) * 2.f - 1.f) * p.stackCents : 0.f; v->stackGain = 1.f / std::sqrt((float)n);
       for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.f : rng.next();
       v->amp.on(); v->fenv.on();
@@ -428,17 +467,21 @@ class Engine {
   // adds nothing, overwrites outL/outR
   void render(float* outL, float* outR, int n) {
     for (int i = 0; i < n; ++i) outL[i] = outR[i] = 0.f;
+    if ((int)subBusL.size() < n) { subBusL.assign(n, 0.f); subBusR.assign(n, 0.f); }
+    std::fill(subBusL.begin(), subBusL.begin() + n, 0.f); std::fill(subBusR.begin(), subBusR.begin() + n, 0.f); sbL = subBusL.data(); sbR = subBusR.data();
     for (auto& v : voices) if (v.active) renderVoice(v, outL, outR, n);
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
     float a = 1.f - std::exp(-2.f * kPi * std::max(10.f, p.bassMonoHz) / sr);
     for (int i = 0; i < n; ++i) {
       fx.process(p, outL[i], outR[i]);
-      dyn.process(p, outL[i], outR[i]);
-      bl += a * (outL[i] - bl); bl2 += a * (bl - bl2);
-      br += a * (outR[i] - br); br2 += a * (br - br2);
+      const float fl = outL[i], fr = outR[i]; float dl = fl, dr = fr;
+      dyn.process(p, dl, dr);
+      dl = fl + (dl - fl) * p.dynMix; dr = fr + (dr - fr) * p.dynMix;
+      bl += a * (dl - bl); bl2 += a * (bl - bl2);
+      br += a * (dr - br); br2 += a * (br - br2);
       float m = 0.5f * (bl2 + br2);
-      float l = outL[i] - bl2 + m, r = outR[i] - br2 + m;
-      float xl = l * p.master, xr = r * p.master;
+      dm.process(p, dl - bl2 + m, dr - br2 + m);
+      float xl = (dm.outL + sbL[i]) * p.master, xr = (dm.outR + sbR[i]) * p.master;
       if (p.limiter) {   // feed-forward peak limiter, 0.4 ms attack, 120 ms release; overshoots are caught by the smooth clipper
         float pk = std::max(std::fabs(xl), std::fabs(xr));
         limEnv += (pk > limEnv ? limAtk : limRel) * (pk - limEnv);
@@ -458,7 +501,8 @@ class Engine {
     }
     return v;
   }
-  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; Dynamics dyn; uint64_t clock = 0;
+  float sr = 48000.f; Voice voices[kMaxVoices]; Rng rng; Fx fx; Dynamics dyn; Master dm; uint64_t clock = 0;
+  std::vector<float> subBusL, subBusR; float* sbL = nullptr; float* sbR = nullptr;
   float bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05f, limRel = 0.0002f;
 
   // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.
@@ -484,10 +528,12 @@ class Engine {
     for (int i = 0; i < n; ++i) {
       float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
       if (v.amp.stage == 0) { v.active = false; return; }
-      v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.f) v.lfoPhase -= 1.f;
-      float lfo = p.lfoShape == 1 ? 4.f * std::fabs(v.lfoPhase - 0.5f) - 1.f : (p.lfoShape == 2 ? (v.lfoPhase < 0.5f ? 1.f : -1.f) : std::sin(2.f * kPi * v.lfoPhase));
+      v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.f) { v.lfoPhase -= 1.f; v.sh = 2.f * rng.next() - 1.f; }
+      float lph = v.lfoPhase + p.lfoStart; if (lph >= 1.f) lph -= 1.f;
+      float lfo = (p.lfoShape == 1 ? 4.f * std::fabs(lph - 0.5f) - 1.f : (p.lfoShape == 2 ? (lph < 0.5f ? 1.f : -1.f) : (p.lfoShape == 3 ? 2.f * lph - 1.f : (p.lfoShape == 4 ? v.sh : std::sin(2.f * kPi * lph))))) * p.lfoDepth * (p.lfoFade > 0.f ? std::min(1.f, v.t / p.lfoFade) : 1.f);
       float pAtt = p.pitchAttack > 0.f ? std::min(1.f, v.t / p.pitchAttack) : 1.f;
-      float pitchEnv = p.pitchAmt * pAtt * std::exp(-std::max(0.f, v.t - p.pitchAttack) / std::max(0.001f, p.pitchTime)) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
+      const float pd = std::max(0.f, v.t - p.pitchAttack - p.pitchHold), pt = std::max(0.001f, p.pitchTime);
+      float pitchEnv = p.pitchAmt * pAtt * ((1.f - p.pitchCurve) * std::exp(-pd / pt) + p.pitchCurve * std::max(0.f, 1.f - pd / (3.f * pt))) - p.pitchFall * (1.f - std::exp(-v.t / std::max(0.01f, p.pitchFallTime)));
       v.t += invSr;
       if (v.gl != 0.f) { v.gl *= std::exp(-invSr / std::max(0.001f, p.glide)); if (std::fabs(v.gl) < 1e-4f) v.gl = 0.f; }
       if ((int)(v.t * sr) % 512 == 0)
@@ -617,9 +663,9 @@ class Engine {
         v.hpL += a * (L - v.hpL); v.hpR += a * (R - v.hpR); L -= v.hpL; R -= v.hpR;
         if (!p.distPre) distort(L, R);
       }
-      if (!p.subPreFilter) addSub(v, L, R, invSr, subL);
+      float subS = 0.f; if (!p.subPreFilter && subL > 0.f) { float t2l = 0.f, t2r = 0.f; addSub(v, t2l, t2r, invSr, subL); subS = t2l; }
       float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f * v.stackGain * (1.f - p.lfoAmp * 0.5f * (1.f - lfo)) * (mxn ? std::max(0.f, 1.f + md[7]) : 1.f);
-      oL[i] += L * g; oR[i] += R * g;
+      oL[i] += L * g; oR[i] += R * g; if (subS != 0.f) { sbL[i] += subS * g; sbR[i] += subS * g; }
     }
   }
 };

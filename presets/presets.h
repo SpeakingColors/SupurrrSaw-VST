@@ -266,6 +266,37 @@ inline void accessBass(Params& p) {
   p.amp = {0.001f, 0.1f, 1.f, 0.09f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.master = 1.29f;
 }
 
+
+// Drums. Noise plus a pitch-swept tone, shaped by the envelopes. Play them around C2 to C3 (the kick pitch follows the key).
+inline void drumBase(Params& p) { p = Params(); p.dmMix = 0.f; p.layer[0].wave = Wave::Off; p.layer[1].wave = Wave::Off; p.layer[2].wave = Wave::Off; p.spread = 0.f; p.bassMonoHz = 20.f; p.cutoff = 18000.f; p.reso = 0.f; p.lowCutHz = 20.f; }
+inline void kick(Params& p) {
+  drumBase(p);
+  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.9f;
+  p.pitchAmt = 36.f; p.pitchTime = 0.035f; p.pitchCurve = 0.f;
+  p.cutoff = 5000.f; p.dist = 0.25f; p.lowCutHz = 25.f; p.amp = {0.001f, 0.32f, 0.f, 0.08f}; p.master = 0.84f;
+}
+inline void snare(Params& p) {
+  drumBase(p);
+  p.layer[0].wave = Wave::Tri; p.layer[0].level = 0.55f; p.layer[0].octave = 1;
+  p.pitchAmt = 10.f; p.pitchTime = 0.03f; p.noiseLevel = 1.8f; p.noiseHpHz = 1400.f;
+  p.cutoff = 11000.f; p.dist = 0.12f; p.lowCutHz = 110.f; p.amp = {0.001f, 0.17f, 0.f, 0.06f}; p.reverbMix = 0.08f; p.reverbSize = 0.35f; p.master = 0.89f;
+}
+inline void closedHat(Params& p) {
+  drumBase(p);
+  p.noiseLevel = 2.f; p.noiseHpHz = 7000.f; p.filterMode = FilterMode::HP; p.cutoff = 6500.f; p.reso = 0.25f; p.lowCutHz = 300.f;
+  p.amp = {0.001f, 0.05f, 0.f, 0.03f}; p.master = 1.6f;
+}
+inline void openHat(Params& p) {
+  drumBase(p);
+  p.noiseLevel = 2.f; p.noiseHpHz = 6500.f; p.filterMode = FilterMode::HP; p.cutoff = 6000.f; p.reso = 0.3f; p.lowCutHz = 300.f;
+  p.amp = {0.001f, 0.28f, 0.05f, 0.22f}; p.master = 1.44f;
+}
+inline void crash(Params& p) {
+  drumBase(p);
+  p.noiseLevel = 2.f; p.noiseHpHz = 3500.f; p.filterMode = FilterMode::HP; p.cutoff = 2800.f; p.reso = 0.35f; p.lowCutHz = 250.f;
+  p.amp = {0.002f, 1.6f, 0.f, 1.2f}; p.chorusMix = 0.25f; p.reverbMix = 0.15f; p.reverbSize = 0.6f; p.master = 0.9f;
+}
+
 inline bool byName(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
   else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p);
@@ -274,6 +305,7 @@ inline bool byName(const std::string& n, Params& p) {
   else if (n == "gigi_lead") gigiLead(p); else if (n == "alexf_lead") alexFLead(p); else if (n == "mgmt_lead") mgmtLead(p); else if (n == "pendulum_lead") pendulumLead(p);
   else if (n == "nightcall_keys") nightCallKeys(p); else if (n == "freeway_bass") freewayBass(p);
   else if (n == "brejcha_bass") brejchaBass(p); else if (n == "feellove_bass") feelLoveBass(p); else if (n == "nboy_303") nboy303(p); else if (n == "spaghetti_bass") spaghettiBass(p); else if (n == "access_bass") accessBass(p);
+  else if (n == "kick") kick(p); else if (n == "snare") snare(p); else if (n == "closed_hat") closedHat(p); else if (n == "open_hat") openHat(p); else if (n == "crash") crash(p);
   else return false;
   return true;
 }

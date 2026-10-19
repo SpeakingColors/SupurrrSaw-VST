@@ -14,7 +14,9 @@ static void writeWav(const std::string& fn, const std::vector<float>& l, const s
   fclose(f);
 }
 struct Result { std::vector<float> l, r; double peak = 0, rms = 0; bool nan = false; };
+static bool gDmOff = true;   // most tests measure the oscillators, so the dance master chain is bypassed unless a test turns it on
 static Result render(Engine& e, int note, float hold, float total) {
+  if (gDmOff) e.p.dmMix = 0.f;
   Result res; e.prepare(48000); e.noteOn(note, 0.9f); float lb[64], rb[64]; size_t N = (size_t)(total * 48000); double s2 = 0;
   for (size_t pos = 0; pos < N; pos += 64) {
     if (pos >= (size_t)(hold * 48000) && pos < (size_t)(hold * 48000) + 64) e.noteOff(note);
@@ -171,6 +173,20 @@ int main(int argc, char** argv) {
     for (int d : {0, 1, 2, 5, 6, 7, 11, 12, 13}) { if (std::fabs(rms(4, d, 0.8f) - base) > 1e-6) ++changed; }
     std::printf("mod matrix: %d of 9 wheel destinations changed the sound\n", changed); CHECK(changed == 9);
     for (int sidx = 0; sidx < 8; ++sidx) for (int d = 0; d < 14; ++d) CHECK(std::isfinite(rms(sidx, d, 1.f)));
+  }
+  { // dance master chain: louder at the same ceiling, never above the limiter, no NaN, sub stays clean
+    auto meas = [&](float mix, float sub) { Params q; presets::byName("trance_lead", q); q.dmMix = mix; q.subLevel = sub; Engine e; e.prepare(48000); e.p = q; float L[512], R[512]; double s2 = 0; int cnt = 0; float pk = 0;
+      for (int k : {48, 55, 60, 64}) e.noteOn(k, 0.9f); for (int b = 0; b < 190; ++b) { e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); if (b > 60) { s2 += (double)L[i] * L[i]; ++cnt; pk = std::max(pk, std::fabs(L[i])); } } }
+      return std::make_pair(10.0 * std::log10(s2 / cnt), pk); };
+    auto d0 = meas(0.f, 0.f), d1 = meas(0.4f, 0.f), d2 = meas(1.f, 0.f);
+    std::printf("dance master: rms %+.1f dB at mix 0.4, %+.1f dB at mix 1 (peaks %.2f %.2f %.2f)\n", d1.first - d0.first, d2.first - d0.first, d0.second, d1.second, d2.second);
+    CHECK(d1.first > d0.first + 1.0 && d2.first > d1.first); CHECK(d2.second <= 1.f);
+    auto s0 = meas(0.4f, 0.f), s1 = meas(0.4f, 0.4f); CHECK(s1.first > s0.first - 0.5);
+  }
+  { // drums: each one is finite, stays under the ceiling and dies away
+    for (const char* nm : {"kick", "snare", "closed_hat", "open_hat", "crash"}) { Params q; CHECK(presets::byName(nm, q)); Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0, tail = 0;
+      e.noteOn(48, 1.f); for (int b = 0; b < 190; ++b) { if (b == 47) e.noteOff(48); e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); if (b > 180) tail = std::max(tail, std::fabs(L[i])); } }
+      CHECK(pk > 0.3f && pk <= 1.f); CHECK(tail < 0.01f); }
   }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
