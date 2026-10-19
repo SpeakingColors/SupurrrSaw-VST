@@ -1,0 +1,26 @@
+SupurrSaw by Studio 87: install on macOS
+========================================
+
+This build is for Apple silicon Macs (M1 or newer).
+
+What is in this zip
+  SupurrSaw.vst3   the plugin
+  SupurrSaw.app    the standalone app
+  SupurrSaw_Manual.pdf   short manual
+  LICENSE          AGPL-3.0-or-later
+
+1. Allow the files to open (they are not signed yet)
+   Open Terminal, type  xattr -cr   then a space, drag SupurrSaw.vst3 into the Terminal window, press Enter.
+   Do the same for SupurrSaw.app. This removes the "downloaded from the internet" block.
+
+2. Install the plugin
+   Copy SupurrSaw.vst3 into  ~/Library/Audio/Plug-Ins/VST3/
+   (in Finder: Go menu, hold Option, Library). Restart your DAW or rescan plugins.
+
+3. Or run the standalone app
+   Double click SupurrSaw.app. If macOS still refuses, right click it, choose Open, then Open again.
+
+Your presets, saved waves, exports and the log are kept in your user folder under Studio 87/SupurrSaw.
+The Files button inside the plugin opens them.
+
+Free and open source. Source code and help: https://github.com/SpeakingColors/SupurrrSaw-VST

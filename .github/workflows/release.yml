@@ -1,0 +1,112 @@
+name: release
+# Click Run workflow (Actions tab), type a version like 0.2.0, and it builds Linux, Windows and macOS,
+# zips each with an install note and the manual, and publishes a GitHub release with the three zips.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number, digits only, for example 0.2.0"
+        required: true
+        default: "0.2.0"
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Version looks right
+        env:
+          V: ${{ inputs.version }}
+        run: |
+          echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::Version must look like 1.2.3"; exit 1; }
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.name }}
+    env:
+      VER: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Windows WebView2 package (static loader, nothing to install for users)
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.1901.177 -OutFile wv2.zip
+          Expand-Archive wv2.zip webview2/Microsoft.Web.WebView2.1.0.1901.177
+
+      - name: Set the version (this build only)
+        shell: bash
+        run: sed -i.bak "s/project(SupurrSaw VERSION [0-9.]*/project(SupurrSaw VERSION $VER/" plugin/CMakeLists.txt && grep -n "^project" plugin/CMakeLists.txt
+
+      - name: Configure
+        shell: bash
+        run: |
+          EXTRA=""
+          if [ "${{ matrix.name }}" = "windows" ]; then EXTRA="-DJUCE_WEBVIEW2_PACKAGE_LOCATION=$GITHUB_WORKSPACE/webview2"; fi
+          cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release $EXTRA
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Pack
+        shell: bash
+        run: |
+          D="SupurrSaw_v${VER}_${{ matrix.name }}"
+          mkdir -p "$D"
+          find build/SupurrSaw_artefacts -maxdepth 3 \( -name "*.vst3" -o -name "SupurrSaw" -o -name "SupurrSaw.exe" -o -name "SupurrSaw.app" \) -not -path "*/JuceLibraryCode/*" | while read f; do cp -R "$f" "$D/"; done
+          cp "release/INSTALL_${{ matrix.name }}.txt" "$D/INSTALL.txt"
+          cp docs/SupurrSaw_Manual.pdf "$D/SupurrSaw_Manual.pdf"
+          cp LICENSE "$D/LICENSE"
+          ls -la "$D"
+          test -d "$D/SupurrSaw.vst3" || { echo "::error::no SupurrSaw.vst3 was built"; exit 1; }
+          if [ "${{ matrix.name }}" = "windows" ]; then
+            pwsh -Command "Compress-Archive -Path '$D' -DestinationPath '$D.zip'"
+          else
+            zip -r -y -q "$D.zip" "$D"
+          fi
+          ls -la "$D.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.name }}
+          path: SupurrSaw_v${{ inputs.version }}_${{ matrix.name }}.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    env:
+      VER: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: zips
+          pattern: zip-*
+          merge-multiple: true
+      - name: Create the release
+        run: |
+          ls -la zips
+          gh release create "v$VER" zips/*.zip --target "$GITHUB_SHA" --title "SupurrSaw v$VER" --notes-file release/NOTES.md

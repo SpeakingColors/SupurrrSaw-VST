@@ -4,7 +4,7 @@
 
 A free, open source supersaw, hoover and acid synth for **Linux, Windows and macOS** (VST3 and standalone app, built from one codebase).
 
-> Status: early. The DSP engine works and is tested offline. The plugin (VST3 and standalone) is built by GitHub Actions; its interface is the real SupurrSaw page, not a generic JUCE drawing.
+> Status: first release candidate. The engine is tested offline, and the VST3 and standalone are built for Linux, Windows and macOS (Apple silicon) by GitHub Actions. Not signed yet, see the install notes in each release zip.
 
 By **Studio 87**.
 
@@ -16,10 +16,13 @@ By **Studio 87**.
 - **Hoover:** pitch envelope dive, PWM and an LFO on the pulse width and on the detune.
 - **Hard sync** with a sweepable slave (envelope and LFO) for talking leads.
 - **Noise** with its own high-pass, and **distortion before or after the filter** (screech).
-- **Acid:** 18 dB and 24 dB ladder filters, plus HP and BP. A piano roll sequencer with accent, slide and tie is planned.
+- **Acid:** 18 dB and 24 dB ladder filters, plus HP and BP, an acid mode and a second filter.
 - **Mono safe:** low frequencies are summed to mono, and the engine checks the mono sum.
-- **Waveform library** (planned): import single-cycle WAVs or draw your own, stored locally.
-- **Presets** as starting points: Hoover, Pick, Pluck, Trance Lead, Talking Lead (more: basses, reese, acid).
+- **Mod matrix, three LFOs and drawn envelopes**, wave lab with single-cycle waves you draw yourself.
+- **FX:** drive and crush, mod FX (chorus, flanger and phaser, each remembers its own settings), delay, reverb, opto leveller, OTT, squeeze, dance master, limiter. The displays show what each one does.
+- **Kit mode:** play drum kits from the keyboard (built-in genre kits, edit your own on the Kit page).
+- **180+ presets** in banks A to G (128 slots each), with favorites, your own order, search and tags.
+- **Factory banks:** `presets/factory/` holds SysEx files with the factory banks A to D. Import them on the Presets page (Banks, Import .syx) to get the factory sounds back after you overwrite a bank, or use **Restore factory** on the same page.
 
 ## Build the plugin
 

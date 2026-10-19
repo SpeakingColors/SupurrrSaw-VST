@@ -86,7 +86,7 @@
     doc: path => ({
       set: async data => {
         const j = JSON.stringify(data);
-        if (path === "state/current") emit("uistate", { name: data.name || "", base: data.base || "", page: data.page || "", kit: data.kit || "off", keds: data.keds || null });
+        if (path === "state/current") emit("uistate", { name: data.name || "", base: data.base || "", page: data.page || "", kit: data.kit || "off", keds: data.keds || null, mfx: data.mfx || null });
         if (!(await call("dbSet", path, j))) throw { code: "write_failed" };
       },
       delete: async () => { await call("dbDelete", path); }

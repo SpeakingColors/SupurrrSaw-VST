@@ -1,0 +1,26 @@
+SupurrSaw by Studio 87: install on Linux
+========================================
+
+What is in this zip
+  SupurrSaw.vst3   the plugin (a folder, keep it as it is)
+  SupurrSaw        the standalone app
+  SupurrSaw_Manual.pdf   short manual
+  LICENSE          AGPL-3.0-or-later
+
+1. Install the plugin
+   Copy the whole SupurrSaw.vst3 folder into  ~/.vst3/
+   (create the folder if it does not exist). Restart your DAW or rescan plugins.
+   If your DAW runs as a Flatpak it may look in its own folder instead; see your DAW's documentation.
+
+2. Or run the standalone app
+   Open a terminal in this folder and run:  ./SupurrSaw
+   If it says permission denied, run  chmod +x SupurrSaw  first.
+
+3. One thing the system needs
+   The window is a web view, so the GTK 3 and WebKitGTK 4.1 libraries must be installed
+   (package names: libwebkit2gtk-4.1-0 on Debian or Ubuntu, webkit2gtk4.1 on Fedora).
+
+Your presets, saved waves, exports and the log are kept in your user folder under Studio 87/SupurrSaw.
+The Files button inside the plugin opens them.
+
+Free and open source. Source code and help: https://github.com/SpeakingColors/SupurrrSaw-VST
