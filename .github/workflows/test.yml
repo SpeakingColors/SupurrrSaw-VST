@@ -3,6 +3,7 @@ on: [push, pull_request]
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -12,8 +13,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
-          c++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp
-          ./presets_test out
+          c++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp 2> build.log || { echo "::error::$(tail -c 700 build.log | tr '\n' ' ')"; exit 1; }
+          ./presets_test out > test.log 2>&1 || { echo "::error::$(tail -c 700 test.log | tr '\n' ' ')"; exit 1; }
+          tail -n 3 test.log
       - name: Build the demo renderer
         shell: bash
         run: c++ -O2 -std=c++17 -o demo tools/demo.cpp
