@@ -231,10 +231,12 @@ inline void funkBass(Params& p) {
 inline void daftFunk(Params& p) {
   p = Params();
   p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.5f; p.layer[0].level = 1.0f;
-  p.filterMode = FilterMode::BP; p.cutoff = 224.f; p.reso = 0.65f; p.keyTrack = 0.5f; p.drive = 1.34f;
-  p.envAmt = 0.6f; p.fenv = {0.09f, 4.0f, 0.f, 0.11f};            // 30% of the filter range = about 3 octaves
-  p.dist = 0.7f; p.amp = {0.001f, 1.f, 1.f, 0.05f}; p.spread = 0.f; p.drift = 0.21f; p.master = 0.66f;
-  p.dmMix = 0.84f; p.dmDrive = 0.74f; p.dmClip = 0.71f; p.dmLow = 0.22f; p.dmHigh = 0.5f;
+  // Values fitted by measurement: band-pass lead whose average spectrum peaks near 1.3 kHz and falls about 10 dB per octave above it,
+  // opens in about 80 ms, then closes slowly (fitted against a demo recording of the sound, timbre only).
+  p.filterMode = FilterMode::BP; p.cutoff = 268.f; p.reso = 0.22f; p.keyTrack = 0.3f; p.drive = 1.47f;
+  p.envAmt = 0.86f; p.fenv = {0.077f, 3.2f, 0.015f, 0.11f, 0.f, -0.365f, -0.4f};
+  p.dist = 0.9f; p.amp = {0.001f, 1.f, 1.f, 0.05f}; p.spread = 0.f; p.drift = 0.21f; p.master = 0.6f;
+  p.dmMix = 0.7f; p.dmDrive = 0.74f; p.dmClip = 1.0f; p.dmLow = 1.0f; p.dmHigh = -0.5f;
 }
 
 // Da Funk, fatter: same lead plus a quiet second pulse a hair out of tune and an octave-up edge for bite, high-passed
@@ -244,10 +246,10 @@ inline void daftFunkFat(Params& p) {
   daftFunk(p);
   p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.42f; p.layer[1].level = 0.45f; p.layer[1].cents = 0.f; p.layer[1].tune = 7.f;
   p.layer[2].wave = Wave::Saw; p.layer[2].octave = 1; p.layer[2].level = 0.18f;
-  p.reso = 0.7f; p.lowCutHz = 140.f;
+  p.lowCutHz = 140.f;
   p.chorusMix = 0.22f; p.chorusDepth = 0.35f; p.chorusRate = 0.35f; p.chorusWidth = 1.f;
   p.reverbMix = 0.08f; p.reverbSize = 0.35f; p.reverbWidth = 0.9f; p.reverbLowCutHz = 300.f;
-  p.master = 0.6f;
+  p.master = 0.5f;
 }
 
 // Classic hoover (recipe 1): two saws (second +2 octaves), triangle sub, 4-voice unison 36 cents, pitch envelope that rises 8 semitones then falls, long release.
