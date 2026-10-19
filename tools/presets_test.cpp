@@ -131,6 +131,39 @@ int main(int argc, char** argv) {
       for (int k = 0; k < 12; ++k) { e.noteOn(48 + k, 0.8f); e.render(L, R, 256); }
       int act = e.activeVoices(); std::printf("polyphony %d: %d voices sounding after 12 notes\n", cap, act); CHECK(act == (cap == 12 ? 12 : 4)); }
   }
+  { // drive keeps the level: filter Drive 0 -> 1 changes RMS by less than 2 dB on a lead, a bass and a talking lead
+    for (const char* n : {"hoover_classic", "talking_lead", "access_bass", "sandstorm_lead"}) { double r[2];
+      for (int k = 0; k < 2; ++k) { Params q; presets::byName(n, q); q.master = 0.3f; q.dist = 0.f; q.drive = k ? 1.f : 0.f; Engine e; e.prepare(48000); e.p = q; Result x = render(e, 57, 1.0f, 1.2f); r[k] = x.rms; }
+      double d = 20 * std::log10(r[1] / r[0]); std::printf("%-14s drive 1 vs 0: %+.2f dB\n", n, d); CHECK(std::fabs(d) < 2.0); }
+  }
+  { // stack mode: three copies per key, level stays close to a single voice
+    Params q; presets::byName("trance_lead", q); q.stackCount = 3; Engine e; e.prepare(48000); e.p = q; float L[256], R[256]; e.noteOn(60, 0.8f); e.render(L, R, 256);
+    CHECK(e.activeVoices() == 3);
+    double r[2]; for (int k = 0; k < 2; ++k) { Params z; presets::byName("trance_lead", z); z.stackCount = k ? 3 : 1; z.master = 0.5f; Engine g; g.prepare(48000); g.p = z; Result x = render(g, 60, 1.0f, 1.2f); r[k] = x.rms; }
+    double d = 20 * std::log10(r[1] / r[0]); std::printf("stack 3 vs 1: %+.2f dB\n", d); CHECK(std::fabs(d) < 3.0);
+    CHECK(e.p.mono == false);
+  }
+  { // custom cycle: a saw drawn as a cycle plays about as loud as the built-in saw and stays bounded and finite up high
+    auto tbl = std::make_shared<WaveTable>(); std::vector<float> cyc(1000); for (int i = 0; i < 1000; ++i) cyc[i] = 2.f * i / 1000.f - 1.f; tbl->setCycle(cyc.data(), 1000); CHECK(tbl->ready());
+    double rr[2]; for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = k ? Wave::Custom : Wave::SuperSaw; e.p.layer[0].table = tbl; e.p.layer[0].voices = 1; e.p.layer[0].detune = 0.f; e.p.layer[0].level = 1.f; e.p.cutoff = 18000.f; e.p.master = 0.5f;
+      Result r = render(e, 60, 1.0f, 1.2f); CHECK(!r.nan); rr[k] = r.rms; }
+    double d = 20 * std::log10(rr[1] / rr[0]); std::printf("custom saw vs saw: %+.2f dB\n", d); CHECK(std::fabs(d) < 2.5);
+    Engine e; e.p.layer[0].wave = Wave::Custom; e.p.layer[0].table = tbl; e.p.layer[0].voices = 7; e.p.layer[0].detune = 0.6f; e.p.cutoff = 18000.f; Result hi = render(e, 108, 0.5f, 0.6f); CHECK(!hi.nan && hi.peak < 1.0);
+  }
+  { // delay sync: the time follows the tempo
+    Params q; q.delaySync = true; q.bpm = 120.f; q.delayDiv = 4; CHECK(std::fabs(delaySeconds(q) - 0.5f) < 1e-5f);
+    q.delayDiv = 7; CHECK(std::fabs(delaySeconds(q) - 0.25f) < 1e-5f); q.bpm = 150.f; CHECK(std::fabs(delaySeconds(q) - 0.2f) < 1e-5f);
+    q.delaySync = false; q.delayTime = 0.51f; CHECK(std::fabs(delaySeconds(q) - 0.51f) < 1e-5f);
+  }
+  { // dynamics: opto turns a loud tone down, OTT lifts a quiet tone, nothing blows up
+    auto tone = [&](float amp, int which) { Dynamics d; d.prepare(48000); Params q; if (which == 1) q.optoAmt = 0.8f; if (which == 2) { q.ottMix = 1.f; q.ottDepth = 1.f; } if (which == 3) q.sqzAmt = 0.8f;
+      double s2 = 0; int n = 0; for (int i = 0; i < 48000 * 3; ++i) { float x = amp * std::sin(2.f * kPi * 440.f * i / 48000.f), l = x, r = x; d.process(q, l, r); CHECK(l == l); if (i > 48000) { s2 += (double)l * l; ++n; } } return std::sqrt(s2 / n) / amp; };
+    double a0 = tone(0.5f, 0), a1 = tone(0.5f, 1); std::printf("opto on 0.5 tone: %+.2f dB\n", 20 * std::log10(a1 / a0)); CHECK(a1 < a0 * 1.2);
+    double q0 = tone(0.003f, 2); std::printf("OTT on a -50 dB tone: %+.2f dB gain\n", 20 * std::log10(q0 / 0.7071)); CHECK(q0 > 0.7071 * 1.4);
+    double s1 = tone(0.5f, 3); std::printf("squeeze on 0.5 tone: %+.2f dB\n", 20 * std::log10(s1 / a0)); CHECK(s1 < a0 * 1.5 && s1 > 0.3 * a0);
+    for (const char* n : {"hoover", "access_bass"}) { Params q; presets::byName(n, q); q.master = 2.f; q.optoAmt = 1.f; q.ottMix = 1.f; q.ottDepth = 1.f; q.sqzAmt = 1.f; Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0;
+      for (int k : {48, 55, 60, 64}) e.noteOn(k, 1.f); for (int b = 0; b < 60; ++b) { e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); } } CHECK(pk <= 1.f); }
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }

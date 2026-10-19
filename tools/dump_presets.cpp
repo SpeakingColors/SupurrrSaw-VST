@@ -3,7 +3,7 @@
 #include "../presets/presets.h"
 #include <cstdio>
 using namespace supurr;
-static const char* W[] = {"Off", "SuperSaw", "SuperSquare", "Saw", "Pulse", "Tri", "Sine", "Sample"};
+static const char* W[] = {"Off", "SuperSaw", "SuperSquare", "Saw", "Pulse", "Tri", "Sine", "Sample", "Custom"};
 static const char* FM[] = {"LP24", "LP18", "HP", "BP"};
 int main() {
   const char* names[] = {"hoover", "hoover_classic", "hoover_prodigy", "pick", "pluck", "trance_lead", "talking_lead", "daft_funk", "trance_bass", "funk_bass", "freeway_bass",
@@ -20,7 +20,7 @@ int main() {
     std::printf("\"ampA\":%g,\"ampD\":%g,\"ampS\":%g,\"ampR\":%g,\"fenvA\":%g,\"fenvD\":%g,\"fenvS\":%g,\"fenvR\":%g,", p.amp.a, p.amp.d, p.amp.s, p.amp.r, p.fenv.a, p.fenv.d, p.fenv.s, p.fenv.r);
     std::printf("\"pitchAmt\":%g,\"pitchTime\":%g,\"pitchAttack\":%g,\"pitchFall\":%g,\"pitchFallTime\":%g,\"lfoRate\":%g,\"lfoPwm\":%g,\"lfoPitch\":%g,\"lfoCutoff\":%g,\"lfoDetune\":%g,\"lfoShape\":%d,\"lfoPan\":%g,\"lfoAmp\":%g,\"wheelCutoff\":%g,\"phaseReset\":%s,\"drift\":%g,\"detuneRange\":%g,\"spread\":%g,\"bassMonoHz\":%g,",
       p.pitchAmt, p.pitchTime, p.pitchAttack, p.pitchFall, p.pitchFallTime, p.lfoRate, p.lfoPwm, p.lfoPitch, p.lfoCutoff, p.lfoDetune, p.lfoShape, p.lfoPan, p.lfoAmp, p.wheelCutoff, p.phaseReset ? "true" : "false", p.drift, p.detuneRange, p.spread, p.bassMonoHz);
-    std::printf("\"chorusMix\":%g,\"chorusDepth\":%g,\"chorusRate\":%g,\"delayMix\":%g,\"delayTime\":%g,\"delayFb\":%g,\"reverbMix\":%g,\"reverbSize\":%g,\"reverbWidth\":%g,\"reverbLowCutHz\":%g,\"master\":%g,\"clipKnee\":%g,\"limiter\":%s,\"modWheel\":%g}}",
-      p.chorusMix, p.chorusDepth, p.chorusRate, p.delayMix, p.delayTime, p.delayFb, p.reverbMix, p.reverbSize, p.reverbWidth, p.reverbLowCutHz, p.master, p.clipKnee, p.limiter ? "true" : "false", p.modWheel);
+    std::printf("\"chorusMix\":%g,\"chorusDepth\":%g,\"chorusRate\":%g,\"delayMix\":%g,\"delayTime\":%g,\"delayFb\":%g,\"reverbMix\":%g,\"reverbSize\":%g,\"reverbWidth\":%g,\"reverbLowCutHz\":%g,\"master\":%g,\"clipKnee\":%g,\"limiter\":%s,\"modWheel\":%g,\"stackCount\":%d,\"stackCents\":%g,\"velCutoff\":%g,\"wheelVib\":%g,\"delaySync\":%s,\"delayDiv\":%d,\"bpm\":%g,\"optoAmt\":%g,\"ottDepth\":%g,\"ottMix\":%g,\"sqzAmt\":%g,\"limCeil\":%g,\"polyphony\":%d}}",
+      p.chorusMix, p.chorusDepth, p.chorusRate, p.delayMix, p.delayTime, p.delayFb, p.reverbMix, p.reverbSize, p.reverbWidth, p.reverbLowCutHz, p.master, p.clipKnee, p.limiter ? "true" : "false", p.modWheel, p.stackCount, p.stackCents, p.velCutoff, p.wheelVib, p.delaySync ? "true" : "false", p.delayDiv, p.bpm, p.optoAmt, p.ottDepth, p.ottMix, p.sqzAmt, p.limCeil, p.polyphony);
   }
   std::printf("\n}\n"); return 0; }

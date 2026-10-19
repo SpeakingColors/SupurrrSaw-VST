@@ -18,7 +18,7 @@ inline void hoover(Params& p) {
   p.detuneRange = 1.4f; p.lfoRate = 6.5f; p.lfoPwm = 0.7f; p.lfoDetune = 0.35f;
   p.pitchAmt = 12.f; p.pitchTime = 0.09f;
   p.cutoff = 3500.f; p.reso = 0.3f; p.drive = 0.5f; p.dist = 0.14f; p.lowCutHz = 45.f;   // weight comes from the stacks and soft drive into the filter, not from hard distortion
-  p.master = 0.56f; p.amp = {0.002f, 0.5f, 0.85f, 0.25f}; p.spread = 0.85f; p.chorusMix = 0.4f; p.reverbMix = 0.04f; p.reverbSize = 0.5f;
+  p.master = 0.52f; p.amp = {0.002f, 0.5f, 0.85f, 0.25f}; p.spread = 0.85f; p.chorusMix = 0.4f; p.reverbMix = 0.04f; p.reverbSize = 0.5f;
 }
 
 // Pick (makina / Afrojack style blip, like a synth water bubble): a square and a saw, pitch rising into the note
@@ -31,7 +31,7 @@ inline void pick(Params& p) {
   p.filterMode = FilterMode::LP24; p.cutoff = 500.f; p.reso = 0.55f; p.drive = 0.3f; p.envAmt = 0.5f; p.fenv = {0.001f, 0.2f, 0.f, 0.1f};
   p.dist = 0.5f; p.distPre = true; p.lowCutHz = 100.f;
   p.amp = {0.001f, 0.32f, 0.f, 0.15f}; p.spread = 0.3f; p.delayMix = 0.12f; p.delayTime = 0.18f; p.delayFb = 0.3f;
-  p.master = 1.19f;
+  p.master = 0.87f;
 }
 
 // Pluck: short and tight. The pitch envelope is only a tiny transient at the start.
@@ -43,7 +43,7 @@ inline void pluck(Params& p) {
   p.subLevel = 0.2f; p.subWave = Wave::Tri; p.subOctave = -1;
   p.pitchAmt = 1.5f; p.pitchTime = 0.008f;
   p.cutoff = 700.f; p.reso = 0.25f; p.envAmt = 0.6f; p.fenv = {0.001f, 0.22f, 0.f, 0.1f}; p.drive = 0.2f; p.dist = 0.08f;
-  p.master = 0.77f; p.amp = {0.001f, 0.25f, 0.f, 0.1f}; p.spread = 0.85f; p.chorusMix = 0.2f; p.reverbMix = 0.08f;
+  p.master = 0.72f; p.amp = {0.001f, 0.25f, 0.f, 0.1f}; p.spread = 0.85f; p.chorusMix = 0.2f; p.reverbMix = 0.08f;
 }
 
 // Trance lead: super saws detuned hard, very light high-passed noise behind, filter envelope.
@@ -56,7 +56,7 @@ inline void tranceLead(Params& p) {
   p.subLevel = 0.18f; p.subWave = Wave::Tri; p.subOctave = -1;
   p.detuneRange = 1.3f; p.noiseLevel = 0.09f; p.noiseHpHz = 5000.f;
   p.cutoff = 1900.f; p.reso = 0.12f; p.drive = 0.25f; p.dist = 0.05f; p.envAmt = 0.5f; p.fenv = {0.004f, 0.6f, 0.55f, 0.5f}; p.lowCutHz = 80.f;
-  p.master = 0.97f; p.amp = {0.004f, 0.8f, 0.85f, 0.45f}; p.spread = 1.f; p.chorusMix = 0.3f; p.delayMix = 0.08f; p.delayTime = 0.28f; p.delayFb = 0.3f; p.reverbMix = 0.07f; p.reverbSize = 0.6f;
+  p.master = 0.96f; p.amp = {0.004f, 0.8f, 0.85f, 0.45f}; p.spread = 1.f; p.chorusMix = 0.3f; p.delayMix = 0.08f; p.delayTime = 0.28f; p.delayFb = 0.3f; p.reverbMix = 0.07f; p.reverbSize = 0.6f;
 }
 
 // Talking lead (Daft Punk style): a sync oscillator whose slave pitch is swept by an LFO and the envelope, follows the
@@ -68,7 +68,7 @@ inline void talkingLead(Params& p) {
   p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 9; p.layer[1].detune = 0.45f; p.layer[1].level = 0.45f; p.layer[1].octave = -1;   // sub-octave body
   p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 9; p.layer[2].detune = 0.6f;  p.layer[2].level = 0.3f;                          // fat unison at pitch
   p.lfoRate = 4.5f; p.cutoff = 5000.f; p.reso = 0.2f; p.envAmt = 0.2f; p.fenv = {0.002f, 0.4f, 0.6f, 0.3f}; p.drive = 0.25f; p.dist = 0.5f;
-  p.master = 0.49f; p.amp = {0.003f, 0.6f, 0.85f, 0.25f}; p.spread = 0.8f; p.chorusMix = 0.2f; p.delayMix = 0.08f; p.reverbMix = 0.02f;
+  p.master = 0.48f; p.amp = {0.003f, 0.6f, 0.85f, 0.25f}; p.spread = 0.8f; p.chorusMix = 0.2f; p.delayMix = 0.08f; p.reverbMix = 0.02f;
 }
 
 // Rolling trance bass: saw + sub, short and punchy, mono and centred, sits under offbeat patterns.
@@ -78,7 +78,7 @@ inline void tranceBass(Params& p) {
   p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.45f; p.layer[1].level = 0.3f; p.layer[1].tune = 6.f;
   p.subLevel = 0.5f; p.subWave = Wave::Sine; p.subOctave = -1;
   p.cutoff = 380.f; p.reso = 0.25f; p.envAmt = 0.55f; p.fenv = {0.001f, 0.16f, 0.1f, 0.08f}; p.drive = 0.3f; p.dist = 0.15f; p.lowCutHz = 28.f;
-  p.amp = {0.002f, 0.2f, 0.55f, 0.07f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.master = 0.56f;
+  p.amp = {0.002f, 0.2f, 0.55f, 0.07f}; p.spread = 0.f; p.bassMonoHz = 200.f; p.master = 0.52f;
 }
 
 // Funky / groovy bass: square + saw, resonant filter with a quick envelope pluck, triangle sub, tracks the keyboard.
@@ -88,7 +88,7 @@ inline void funkBass(Params& p) {
   p.layer[1].wave = Wave::Saw; p.layer[1].level = 0.4f; p.layer[1].octave = -1;
   p.subLevel = 0.35f; p.subWave = Wave::Tri; p.subOctave = -1;
   p.filterMode = FilterMode::LP24; p.cutoff = 250.f; p.reso = 0.45f; p.envAmt = 0.75f; p.keyTrack = 0.4f; p.fenv = {0.001f, 0.2f, 0.05f, 0.1f}; p.drive = 0.35f; p.dist = 0.2f; p.lowCutHz = 30.f;
-  p.amp = {0.001f, 0.28f, 0.35f, 0.08f}; p.spread = 0.f; p.bassMonoHz = 220.f; p.master = 0.70f;
+  p.amp = {0.001f, 0.28f, 0.35f, 0.08f}; p.spread = 0.f; p.bassMonoHz = 220.f; p.master = 0.67f;
 }
 
 // ---- Recipes (from Syntorial's published patch recipes, translated to this engine; percentages are knob positions) ----
@@ -196,7 +196,7 @@ inline void pendulumLead(Params& p) {
   p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 7; p.layer[0].detune = 0.5f; p.layer[0].octave = 1; p.layer[0].level = 0.71f;
   p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 7; p.layer[1].detune = 0.5f; p.layer[1].level = 0.29f;
   p.cutoff = 6450.f; p.reso = 0.28f; p.drive = 0.17f; p.amp = {0.001f, 0.1f, 1.f, 0.73f}; p.spread = 1.f;
-  p.chorusMix = 0.41f; p.reverbMix = 0.37f; p.reverbSize = 0.99f; p.reverbLowCutHz = 530.f; p.master = 1.77f;
+  p.chorusMix = 0.41f; p.reverbMix = 0.37f; p.reverbSize = 0.99f; p.reverbLowCutHz = 530.f; p.master = 1.73f;
 }
 
 // Kavinsky "Nightcall" keys: poly saw with 2-voice unison, noise, resonant low-pass with a long envelope that closes slowly, chorus and reverb.
@@ -254,7 +254,7 @@ inline void spaghettiBass(Params& p) {
   p.layer[0].wave = Wave::Sine; p.layer[0].octave = 1; p.layer[0].level = 0.71f; p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.71f;
   p.cutoff = 59.f; p.drive = 0.5f; p.envAmt = 0.64f; p.fenv = {0.001f, 0.171f, 0.14f, 0.09f};
   p.pitchAmt = 7.f; p.pitchTime = 0.01f; p.dist = 0.71f;
-  p.amp = {0.001f, 0.1f, 1.f, 0.09f}; p.spread = 0.2f; p.bassMonoHz = 200.f; p.chorusMix = 0.26f; p.reverbMix = 0.18f; p.reverbSize = 0.3f; p.master = 0.45f;
+  p.amp = {0.001f, 0.1f, 1.f, 0.09f}; p.spread = 0.2f; p.bassMonoHz = 200.f; p.chorusMix = 0.26f; p.reverbMix = 0.18f; p.reverbSize = 0.3f; p.master = 0.42f;
 }
 
 // Martin Garrix "Access" bass: three-voice saw, resonant low-pass with key tracking, a fast volume LFO for the rhythmic gating (the recipe has two LFOs, this has one at 1/16), mod wheel on cutoff.
