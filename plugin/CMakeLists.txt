@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 FetchContent_Declare(juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 8.0.8
+    GIT_TAG 8.0.16-security
     GIT_SHALLOW TRUE)
 # offline or local copy: cmake -DFETCHCONTENT_SOURCE_DIR_JUCE=/path/to/JUCE
 FetchContent_MakeAvailable(juce)
