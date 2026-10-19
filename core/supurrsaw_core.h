@@ -204,6 +204,7 @@ struct Params {
   float ottLow = 0.f, ottMid = 0.f, ottHigh = 0.f, ottTime = 1.f;   // band trims in dB, speed scale
   float sqzAtk = 4.f, sqzRel = 90.f, sqzMakeup = 0.f;        // ms, ms, dB
   // 6 band EQ at the end of the chain (before the output gain): low cut, low shelf, two bells, high shelf, high cut
+  bool eqBypass = false;   // main EQ bypass: skips all bands, dynamics and saturation
   bool eq1On = false, eq2On = true, eq3On = true, eq4On = true, eq5On = true, eq6On = false;
   float eq1F = 30.f, eq2F = 120.f, eq2G = 0.f, eq3F = 500.f, eq3G = 0.f, eq3Q = 1.f, eq4F = 3000.f, eq4G = 0.f, eq4Q = 1.f, eq5F = 9000.f, eq5G = 0.f, eq6F = 18000.f;
   float drvDrive = 0.f, drvXs = 0.f, drvFuzz = 0.f, drvMix = 1.f;   // colour stack on the voice sum, before the effects (Drive, Transistor, Fuzz)
@@ -472,7 +473,14 @@ inline void eqCoef(EqType type, double f, double g, double q, double sr, double*
 }
 inline double lcosh(double x) { const double a = std::fabs(x); return a > 15 ? a - 0.693147 : std::log(std::cosh(x)); }
 inline double adaaTanh(double v, double v1) { const double d = v - v1; return std::fabs(d) < 1e-4 ? std::tanh(0.5 * (v + v1)) : (lcosh(v) - lcosh(v1)) / d; }   // antiderivative anti-aliased tanh
-static const double kSatDr[3] = {7, 4.5, 16}, kSatBias[3] = {0.3, 0, 0.55}, kSatOut[3] = {1, 1, 0.85};
+// saturation types: 0 Tube, 1 Tape, 2 Fuzz, 3 Soft, 4 Hard clip, 5 Fold, 6 Diode, 7 Warm
+static const double kSatDr[8] = {7, 4.5, 16, 3, 6, 5, 5, 2.5}, kSatBias[8] = {0.3, 0, 0.55, 0, 0, 0, 0.8, 0.5}, kSatOut[8] = {1, 1, 0.85, 1, 0.9, 0.9, 0.9, 1};
+inline double satF(int t, double v) { return t == 4 ? (v > 1 ? 1.0 : v < -1 ? -1.0 : v) : t == 5 ? std::sin(v) : std::tanh(v); }
+inline double satAD(int t, double v, double v1) {
+  const double d = v - v1;
+  if (t == 4) { auto F = [](double x) { const double a = std::fabs(x); return a <= 1 ? 0.5 * x * x : a - 0.5; }; return std::fabs(d) < 1e-4 ? satF(4, 0.5 * (v + v1)) : (F(v) - F(v1)) / d; }
+  if (t == 5) return std::fabs(d) < 1e-4 ? std::sin(0.5 * (v + v1)) : (std::cos(v1) - std::cos(v)) / d;
+  return adaaTanh(v, v1); }
 struct EqStage {
   double sr = 48000.0, z[24] = {}, co[30] = {}, bz[24] = {}, bco[30] = {}; bool act[6] = {}, any = false, need = false; double oL = 0., oR = 0.;
   std::vector<double> key; unsigned char dyn[6] = {}, satT[6] = {}, below[6] = {}; double sat[6] = {}, nrm[6] = {}, env[6] = {}, gcur[6] = {}, f[6] = {}, g0[6] = {}, q[6] = {}, thr[6] = {}, rng[6] = {}, ac[6] = {}, rc[6] = {}, u1[12] = {}, dc[12] = {}; unsigned ctr = 0;
@@ -482,7 +490,7 @@ struct EqStage {
     const bool on[6] = {p.eq1On, p.eq2On, p.eq3On, p.eq4On, p.eq5On, p.eq6On}; const double fr[6] = {p.eq1F, p.eq2F, p.eq3F, p.eq4F, p.eq5F, p.eq6F}, gn[6] = {0, p.eq2G, p.eq3G, p.eq4G, p.eq5G, 0}, qq[6] = {0.7071, 0.7071, p.eq3Q, p.eq4Q, 0.7071, 0.7071};
     const double dy[6] = {0, p.eq2Dyn, p.eq3Dyn, p.eq4Dyn, p.eq5Dyn, 0}, th[6] = {0, p.eq2Thr, p.eq3Thr, p.eq4Thr, p.eq5Thr, 0}, at[6] = {0, p.eq2Atk, p.eq3Atk, p.eq4Atk, p.eq5Atk, 0}, rl[6] = {0, p.eq2Rel, p.eq3Rel, p.eq4Rel, p.eq5Rel, 0};
     const double sa[6] = {0, p.eq2Sat, p.eq3Sat, p.eq4Sat, p.eq5Sat, 0}, st[6] = {0, (double)p.eq2SatT, (double)p.eq3SatT, (double)p.eq4SatT, (double)p.eq5SatT, 0}; const bool bl[6] = {false, p.eq2Below, p.eq3Below, p.eq4Below, p.eq5Below, false};
-    std::vector<double> k; k.reserve(48); for (int b = 0; b < 6; ++b) { k.push_back(on[b]); k.push_back(fr[b]); k.push_back(gn[b]); k.push_back(qq[b]); k.push_back(dy[b]); k.push_back(th[b]); k.push_back(at[b]); k.push_back(rl[b]); k.push_back(bl[b]); k.push_back(sa[b]); k.push_back(st[b]); }
+    std::vector<double> k; k.reserve(48); for (int b = 0; b < 6; ++b) { k.push_back(on[b]); k.push_back(fr[b]); k.push_back(gn[b]); k.push_back(qq[b]); k.push_back(dy[b]); k.push_back(th[b]); k.push_back(at[b]); k.push_back(rl[b]); k.push_back(bl[b]); k.push_back(sa[b]); k.push_back(st[b]); } k.push_back(p.eqBypass);
     if (k == key) return;
     key = k;
     static const EqType t[6] = {EqType::HP, EqType::LS, EqType::PK, EqType::PK, EqType::HS, EqType::LP}; bool anyB = false, needB = false;
@@ -492,10 +500,10 @@ struct EqStage {
       if (a) { anyB = true; if (!dn) gcur[b] = g; else if (gcur[b] == 0 && !env[b]) gcur[b] = g; eqCoef(t[b], fr[b], gcur[b], qq[b], sr, &co[b * 5]); }
       if (dn || sat[b] > 0) { needB = true; const EqType bt = b == 1 ? EqType::LP : (b == 4 ? EqType::HP : EqType::BP); eqCoef(bt, fr[b], 0, b == 1 || b == 4 ? 0.7071 : std::max(0.5, qq[b]), sr, &bco[b * 5]); }
       if (dn) { thr[b] = th[b]; rng[b] = dy[b]; ac[b] = 1 - std::exp(-1 / std::max(1.0, at[b] * 0.001 * sr)); rc[b] = 1 - std::exp(-1 / std::max(1.0, rl[b] * 0.001 * sr)); below[b] = bl[b] ? 1 : 0; }
-      if (sat[b] > 0) { const int ty = std::max(0, std::min(2, (int)st[b])); satT[b] = (unsigned char)ty; const double dr = 1 + sat[b] * kSatDr[ty], r = 0.25, y = std::tanh(dr * r + kSatBias[ty]) - std::tanh(kSatBias[ty]); nrm[b] = y > 1e-6 ? r / y * kSatOut[ty] : 1; } }
-    any = anyB; need = needB; }
+      if (sat[b] > 0) { const int ty = std::max(0, std::min(7, (int)st[b])); satT[b] = (unsigned char)ty; const double dr = 1 + sat[b] * kSatDr[ty], r = 0.25, y = satF(ty, dr * r + kSatBias[ty]) - satF(ty, kSatBias[ty]); nrm[b] = y > 1e-6 ? r / y * kSatOut[ty] : 1; } }
+    any = anyB && !p.eqBypass; need = needB; }
   double satOne(int b, double c, int ch) { const int t = satT[b]; const double dr = 1 + sat[b] * kSatDr[t], bi = kSatBias[t], v = dr * c + bi; const int i = b * 2 + ch; const double v1 = u1[i]; u1[i] = v;
-    double y = (adaaTanh(v, v1) - std::tanh(bi)) * nrm[b]; const double mix = std::min(1.0, sat[b] * 5); y = c + (y - c) * mix; dc[i] += 0.0008 * (y - dc[i]); return y - dc[i]; }
+    double y = (satAD(t, v, v1) - satF(t, bi)) * nrm[b]; const double mix = std::min(1.0, sat[b] * 5); y = c + (y - c) * mix; dc[i] += 0.0008 * (y - dc[i]); return y - dc[i]; }
   void process(double L, double R) {
     if (!any) { oL = L; oR = R; return; }
     double l = L, r = R; const bool tick = need && ((++ctr & 15u) == 0);

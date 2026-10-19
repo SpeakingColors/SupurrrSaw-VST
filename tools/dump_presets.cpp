@@ -44,6 +44,7 @@ int main() {
       for (int i = 0; i < 4; ++i) { char k[24]; const Adsr& e = *E[i]; const double v[7] = {e.a, e.d, e.s, e.r, e.ca, e.cd, e.cr}; const char* sfx[7] = {"A", "D", "S", "R", "CA", "CD", "CR"}; for (int j = 0; j < 7; ++j) { std::snprintf(k, sizeof k, "%s%s", EN[i], sfx[j]); F(k, v[j]); } }
       
       #define EQX(n) F("eq" #n "Dyn", p.eq##n##Dyn); F("eq" #n "Thr", p.eq##n##Thr); F("eq" #n "Atk", p.eq##n##Atk); F("eq" #n "Rel", p.eq##n##Rel); Bo("eq" #n "Below", p.eq##n##Below); F("eq" #n "Sat", p.eq##n##Sat); F("eq" #n "SatT", p.eq##n##SatT);
+      Bo("eqBypass", p.eqBypass);
       EQX(2) EQX(3) EQX(4) EQX(5)
       #undef EQX
       Params dflt; const float* M[3] = {p.menv, p.menv2, p.menv3}; const char* MN[3] = {"menvData", "menv2Data", "menv3Data"};

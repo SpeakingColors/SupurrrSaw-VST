@@ -178,7 +178,7 @@ canvas{display:block;max-width:100%}
 .dlg{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:50}.dlg[hidden]{display:none}
 .dbox{background:#150f33;border:1px solid var(--mint);border-radius:14px;padding:18px 20px;width:min(420px,92vw);box-shadow:0 10px 40px #000a}
 .dbox h3{margin:0 0 8px;font-family:Fredoka,sans-serif;letter-spacing:1px;color:var(--mint)}.dbox p{margin:0 0 12px;color:var(--fg);line-height:1.5;font-size:13.5px}
-.dbox input{width:100%;margin-bottom:12px;box-sizing:border-box}.drow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.dbox.wide{width:min(680px,94vw);max-height:94vh;overflow:visible}.dbox input{width:100%;margin-bottom:12px;box-sizing:border-box}.drow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .btn.danger{background:var(--hot);border-color:var(--hot);color:#fff}
 </style>
 
@@ -329,6 +329,7 @@ function defaultParams() {
     menv2Data: "", menv2Pts: "", menv2Time: 0.5, menv2Inv: false, menv2Loop: false, menv2Sync: false, menv2Div: 6, menv3Data: "", menv3Pts: "", menv3Time: 0.5, menv3Inv: false, menv3Loop: false, menv3Sync: false, menv3Div: 6,
     nzSmp: "Off", nzSmpPitch: 0, nzSmpVol: 1, smpPost: false };
   for (const k of ["amp2", "amp3", "fenv2", "fenv3"]) ENV_KEYS.forEach((e, i) => { o[k + e] = ENV_DEF[i]; });
+  o.eqBypass = false;
   for (const n of [2, 3, 4, 5]) { o["eq" + n + "Dyn"] = 0; o["eq" + n + "Thr"] = -24; o["eq" + n + "Atk"] = 10; o["eq" + n + "Rel"] = 120; o["eq" + n + "Below"] = false; o["eq" + n + "Sat"] = 0; o["eq" + n + "SatT"] = 0; }
   for (const k of MX_KEYS) o[k] = 0;
   return o;
@@ -510,12 +511,16 @@ function eqCoef(type, f, g, q, sr) {
   return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
 }
 function eqMag(co, f, sr) { const w = 2 * kPi * f / sr, c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w), nr = co[0] + co[1] * c1 + co[2] * c2, ni = -(co[1] * s1 + co[2] * s2), dr = 1 + co[3] * c1 + co[4] * c2, di = -(co[3] * s1 + co[4] * s2); return Math.sqrt((nr * nr + ni * ni) / (dr * dr + di * di)); }
-const EQ_KEYS = ["eq1On", "eq1F", "eq2On", "eq2F", "eq2G", "eq3On", "eq3F", "eq3G", "eq3Q", "eq4On", "eq4F", "eq4G", "eq4Q", "eq5On", "eq5F", "eq5G", "eq6On", "eq6F"];
+const EQ_KEYS = ["eqBypass", "eq1On", "eq1F", "eq2On", "eq2F", "eq2G", "eq3On", "eq3F", "eq3G", "eq3Q", "eq4On", "eq4F", "eq4G", "eq4Q", "eq5On", "eq5F", "eq5G", "eq6On", "eq6F"];
 const EQ_XS = ["Dyn", "Thr", "Atk", "Rel", "Below", "Sat", "SatT"];
 for (const n of [2, 3, 4, 5]) for (const e of EQ_XS) EQ_KEYS.push("eq" + n + e);
 const lcosh = x => { const a = Math.abs(x); return a > 15 ? a - 0.693147 : Math.log(Math.cosh(x)); };
 const adaaTanh = (v, v1) => { const d = v - v1; return Math.abs(d) < 1e-4 ? Math.tanh(0.5 * (v + v1)) : (lcosh(v) - lcosh(v1)) / d; };
-const SAT_DR = [7, 4.5, 16], SAT_BIAS = [0.3, 0, 0.55], SAT_OUT = [1, 1, 0.85];
+/* saturation types: 0 Tube, 1 Tape, 2 Fuzz, 3 Soft, 4 Hard clip, 5 Fold, 6 Diode, 7 Warm (gentle, even harmonics) */
+const SAT_DR = [7, 4.5, 16, 3, 6, 5, 5, 2.5], SAT_BIAS = [0.3, 0, 0.55, 0, 0, 0, 0.8, 0.5], SAT_OUT = [1, 1, 0.85, 1, 0.9, 0.9, 0.9, 1], SAT_N = 8;
+const satF = (t, v) => t === 4 ? (v > 1 ? 1 : v < -1 ? -1 : v) : t === 5 ? Math.sin(v) : Math.tanh(v);
+const satAD = (t, v, v1) => { if (t === 4) { const F = x => { const a = Math.abs(x); return a <= 1 ? 0.5 * x * x : a - 0.5; }, d = v - v1; return Math.abs(d) < 1e-4 ? satF(4, 0.5 * (v + v1)) : (F(v) - F(v1)) / d; }
+  if (t === 5) { const d = v - v1; return Math.abs(d) < 1e-4 ? Math.sin(0.5 * (v + v1)) : (Math.cos(v1) - Math.cos(v)) / d; } return adaaTanh(v, v1); };
 class EqStage {
   constructor(sr) { this.sr = sr; this.z = new Float64Array(24); this.co = new Float64Array(30); this.act = [false, false, false, false, false, false]; this.key = ""; this.any = false; this.o = [0, 0];
     this.bz = new Float64Array(24); this.bco = new Float64Array(30); this.dyn = new Uint8Array(6); this.sat = new Float64Array(6); this.satT = new Uint8Array(6); this.nrm = new Float64Array(6); this.env = new Float64Array(6); this.gcur = new Float64Array(6);
@@ -530,10 +535,11 @@ class EqStage {
       if (a) { any = true; if (!dyn) this.gcur[b] = g; else if (this.gcur[b] === 0 && !this.env[b]) this.gcur[b] = g; const c = eqCoef(EQ_TYPES[b], f, this.gcur[b], q, this.sr); for (let j = 0; j < 5; j++) this.co[b * 5 + j] = c[j]; }
       if (dyn || this.sat[b] > 0) { need = true; const bt = b === 1 ? "lp" : (b === 4 ? "hp" : "bp"), c = eqCoef(bt, f, 0, b === 1 || b === 4 ? 0.7071 : Math.max(0.5, q), this.sr); for (let j = 0; j < 5; j++) this.bco[b * 5 + j] = c[j]; }
       if (dyn) { this.thr[b] = p["eq" + n + "Thr"]; this.rng[b] = p["eq" + n + "Dyn"]; this.ac[b] = 1 - Math.exp(-1 / Math.max(1, p["eq" + n + "Atk"] * 0.001 * this.sr)); this.rc[b] = 1 - Math.exp(-1 / Math.max(1, p["eq" + n + "Rel"] * 0.001 * this.sr)); this.below[b] = p["eq" + n + "Below"] ? 1 : 0; }
-      if (this.sat[b] > 0) { const t = Math.max(0, Math.min(2, p["eq" + n + "SatT"] | 0)); this.satT[b] = t; const dr = 1 + this.sat[b] * SAT_DR[t], r = 0.25, y = Math.tanh(dr * r + SAT_BIAS[t]) - Math.tanh(SAT_BIAS[t]); this.nrm[b] = y > 1e-6 ? r / y * SAT_OUT[t] : 1; } }
-    this.any = any; this.need = need; }
+      if (this.sat[b] > 0) { const t = Math.max(0, Math.min(SAT_N - 1, p["eq" + n + "SatT"] | 0)); this.satT[b] = t; const dr = 1 + this.sat[b] * SAT_DR[t], r = 0.25, y = satF(t, dr * r + SAT_BIAS[t]) - satF(t, SAT_BIAS[t]); this.nrm[b] = y > 1e-6 ? r / y * SAT_OUT[t] : 1; } }
+    this.any = any && !p.eqBypass; this.byp = !!p.eqBypass; this.need = need; }
+  live() { const lv = this.lv || (this.lv = [0, 0, 0, 0]); for (let b = 1; b <= 4; b++) lv[b - 1] = this.dyn[b] && this.act[b] && !this.byp ? this.gcur[b] - this.g0[b] : 0; return lv; }
   satOne(b, c, ch) { const t = this.satT[b], dr = 1 + this.sat[b] * SAT_DR[t], bi = SAT_BIAS[t], v = dr * c + bi, i = b * 2 + ch, v1 = this.u1[i]; this.u1[i] = v;
-    let y = (adaaTanh(v, v1) - Math.tanh(bi)) * this.nrm[b]; const mix = Math.min(1, this.sat[b] * 5); y = c + (y - c) * mix; this.dc[i] += 0.0008 * (y - this.dc[i]); return y - this.dc[i]; }
+    let y = (satAD(t, v, v1) - satF(t, bi)) * this.nrm[b]; const mix = Math.min(1, this.sat[b] * 5); y = c + (y - c) * mix; this.dc[i] += 0.0008 * (y - this.dc[i]); return y - this.dc[i]; }
   process(L, R) {
     if (!this.any) { this.o[0] = L; this.o[1] = R; return; }
     const z = this.z, co = this.co, bz = this.bz, bco = this.bco; let l = L, r = R; const tick = this.need && (++this.ctr & 15) === 0;
@@ -987,7 +993,7 @@ function sendSet(){send({t:"set",p:clone(P)});syncCycles();}
 
 /* ---------- audio ---------- */
 let ctx=null,node=null,outGain=null,ana=null,fb=null,audioMode="off";
-const meter={l:0,r:0,act:0,lim:0,gr:[0,0,0],dm:[0,0,0],trips:0,load:0,cap:15};
+const meter={l:0,r:0,act:0,lim:0,gr:[0,0,0],dm:[0,0,0],trips:0,load:0,cap:15,eqd:[0,0,0,0]};
 function send(m){if(typeof capHook==="function")capHook(m);if(audioMode==="worklet")node.port.postMessage(m);else if(audioMode==="script")applyMsg(fb,m);}
 async function startAudio(){
   if(ctx){if(ctx.state!=="running"&&!userStopped)ctx.resume();return;}
@@ -996,16 +1002,16 @@ async function startAudio(){
   outGain=ctx.createGain();outGain.gain.value=+$("#vol").value;outGain.connect(ctx.destination);
   ana=ctx.createAnalyser();ana.fftSize=16384;ana.smoothingTimeConstant=0.82;outGain.connect(ana);
   try{
-    const src=ENGINE_SRC+"\n"+applyMsg.toString()+"\nclass SPN extends AudioWorkletProcessor{constructor(){super();this.e=new SupurrEngine(sampleRate);this.e.setParams(defaultParams());this.c=0;this.port.onmessage=m=>applyMsg(this.e,m.data);}process(i,o){var out=o[0],L=out[0],R=out[1]||out[0];this.e.render(L,R,L.length);if(++this.c%4===0)this.port.postMessage([this.e.meterL,this.e.meterR,this.e.activeCount,this.e.limEnv,this.e.gr[0],this.e.gr[1],this.e.gr[2],this.e.dmgr[0],this.e.dmgr[1],this.e.dmgr[2],this.e.trips,this.e.load,this.e.nvCap]);return true;}}\nregisterProcessor('supurr',SPN);";
+    const src=ENGINE_SRC+"\n"+applyMsg.toString()+"\nclass SPN extends AudioWorkletProcessor{constructor(){super();this.e=new SupurrEngine(sampleRate);this.e.setParams(defaultParams());this.c=0;this.port.onmessage=m=>applyMsg(this.e,m.data);}process(i,o){var out=o[0],L=out[0],R=out[1]||out[0];this.e.render(L,R,L.length);if(++this.c%4===0)this.port.postMessage([this.e.meterL,this.e.meterR,this.e.activeCount,this.e.limEnv,this.e.gr[0],this.e.gr[1],this.e.gr[2],this.e.dmgr[0],this.e.dmgr[1],this.e.dmgr[2],this.e.trips,this.e.load,this.e.nvCap].concat(this.e.eq.live()));return true;}}\nregisterProcessor('supurr',SPN);";
     const url=URL.createObjectURL(new Blob([src],{type:"application/javascript"}));
     await ctx.audioWorklet.addModule(url);
     node=new AudioWorkletNode(ctx,"supurr",{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
-    node.port.onmessage=e=>{const d=e.data;meter.l=d[0];meter.r=d[1];meter.act=d[2];meter.lim=d[3];meter.gr[0]=d[4];meter.gr[1]=d[5];meter.gr[2]=d[6];meter.dm[0]=d[7];meter.dm[1]=d[8];meter.dm[2]=d[9];meter.load=d[11]||0;meter.cap=d[12]||15;if(d[10]>meter.trips){meter.trips=d[10];setStatus("safety guard reset the engine",true);}};
+    node.port.onmessage=e=>{const d=e.data;meter.l=d[0];meter.r=d[1];meter.act=d[2];meter.lim=d[3];meter.gr[0]=d[4];meter.gr[1]=d[5];meter.gr[2]=d[6];meter.dm[0]=d[7];meter.dm[1]=d[8];meter.dm[2]=d[9];meter.load=d[11]||0;meter.cap=d[12]||15;meter.eqd[0]=d[13]||0;meter.eqd[1]=d[14]||0;meter.eqd[2]=d[15]||0;meter.eqd[3]=d[16]||0;if(d[10]>meter.trips){meter.trips=d[10];setStatus("safety guard reset the engine",true);}};
     node.connect(outGain);audioMode="worklet";
   }catch(err){
     fb=new EN.SupurrEngine(ctx.sampleRate);fb.setParams(EN.defaultParams());
     node=ctx.createScriptProcessor(2048,0,2);
-    node.onaudioprocess=e=>{const L=e.outputBuffer.getChannelData(0),R=e.outputBuffer.getChannelData(1);fb.render(L,R,L.length);meter.l=fb.meterL;meter.r=fb.meterR;meter.act=fb.activeCount;meter.lim=fb.limEnv;meter.gr=fb.gr;meter.dm=fb.dmgr;meter.load=fb.load;meter.cap=fb.nvCap;if(fb.trips>meter.trips){meter.trips=fb.trips;setStatus("safety guard reset the engine",true);}};
+    node.onaudioprocess=e=>{const L=e.outputBuffer.getChannelData(0),R=e.outputBuffer.getChannelData(1);fb.render(L,R,L.length);meter.l=fb.meterL;meter.r=fb.meterR;meter.act=fb.activeCount;meter.lim=fb.limEnv;meter.gr=fb.gr;meter.dm=fb.dmgr;meter.load=fb.load;meter.cap=fb.nvCap;meter.eqd=fb.eq.live();if(fb.trips>meter.trips){meter.trips=fb.trips;setStatus("safety guard reset the engine",true);}};
     node.connect(outGain);audioMode="script";
   }
   SENT[0]=SENT[1]=SENT[2]="";sendSet();
@@ -2254,13 +2260,13 @@ function uniqueName(n){let i=2,m=n;while(SAVED[slugOf(m)])m=n+" "+i++;return m;}
 function curProps(){const t=tagsOfKey(CURBASEKEY);return {type:t.type||"",genres:[...t.genres],tags:[...(t.user||[])]};}
 function propsDialog({title,msg,name,type,genres,tags,ok}){
   return new Promise(res=>{
-    const d=el("div","dlg"),bx=el("div","dbox");d.appendChild(bx);const sel=new Set(genres||[]);
+    const d=el("div","dlg"),bx=el("div","dbox wide");d.appendChild(bx);const sel=new Set(genres||[]);
     bx.appendChild(el("h3","",title));if(msg)bx.appendChild(el("p","",msg));
     const nm=el("input");nm.type="text";nm.maxLength=40;nm.value=name||"";nm.placeholder="Name";bx.appendChild(nm);
     const lt=el("div","bhead","Type");lt.style.margin="0 0 4px";bx.appendChild(lt);
     const ts=el("select");ts.style.cssText="width:100%;margin-bottom:10px";[["","(none)"],...TYPES.map(t=>[t,t])].forEach(([v,t])=>{const o=el("option","",t);o.value=v;ts.appendChild(o);});ts.value=type||"";bx.appendChild(ts);
     const lg=el("div","bhead","Genre (pick any)");lg.style.margin="0 0 4px";bx.appendChild(lg);
-    const gc=el("div","chips");gc.style.cssText="max-height:86px;overflow-y:auto;margin-bottom:10px";GENRES.forEach(g=>{const b=el("button","chip"+(sel.has(g)?" on":""),g);b.onclick=()=>{sel.has(g)?sel.delete(g):sel.add(g);b.classList.toggle("on",sel.has(g));};gc.appendChild(b);});bx.appendChild(gc);
+    const gc=el("div","chips");gc.style.cssText="margin-bottom:10px";GENRES.forEach(g=>{const b=el("button","chip"+(sel.has(g)?" on":""),g);b.onclick=()=>{sel.has(g)?sel.delete(g):sel.add(g);b.classList.toggle("on",sel.has(g));};gc.appendChild(b);});bx.appendChild(gc);
     const lk=el("div","bhead","Your own tags, comma separated");lk.style.margin="0 0 4px";bx.appendChild(lk);
     const tg=el("input");tg.type="text";tg.value=(tags||[]).join(", ");tg.placeholder="warm, wide, my best";bx.appendChild(tg);
     const bt=el("div","drow");bx.appendChild(bt);
@@ -2268,7 +2274,7 @@ function propsDialog({title,msg,name,type,genres,tags,ok}){
     const kd=e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();done(null);}else if(e.key==="Enter"&&e.target.tagName==="INPUT"){e.preventDefault();e.stopPropagation();go();}e.stopPropagation();};
     const go=()=>{const n=nm.value.trim();if(!n)return;done({name:n.slice(0,40),type:ts.value,genres:[...sel],tags:tg.value.split(",").map(x=>x.trim().slice(0,24)).filter(Boolean).slice(0,8)});};
     const b1=el("button","btn on",ok||"Save");b1.onclick=go;const b2=el("button","btn","Cancel");b2.onclick=()=>done(null);bt.appendChild(b1);bt.appendChild(b2);
-    document.addEventListener("keydown",kd,true);$("#dlg").parentNode.appendChild(d);nm.focus();nm.select();
+    d.addEventListener("dblclick",e=>{if(e.target===d)done(null);});document.addEventListener("keydown",kd,true);$("#dlg").parentNode.appendChild(d);nm.focus();nm.select();
   });
 }
 async function editProps(){
@@ -2500,13 +2506,14 @@ function drawScopeOn(cv,id){
 const EQN=["Low cut","Low shelf","Bell 1","Bell 2","High shelf","High cut"],EQS=["LC","LS","B1","B2","HS","HC"],EQC=["#ff7bb1","#ffd100","#02ebba","#6cc9f5","#a43dff","#fe91e8"];
 const EQR=[[20,20000],[20,5000],[40,12000],[100,18000],[200,20000],[20,20000]],EQGR=18;let eqSel=2;
 const eqKey=(b,f)=>"eq"+(b+1)+f,eqHasG=b=>b>=1&&b<=4,eqHasQ=b=>b===2||b===3;
-function eqCurve(f){let m=1;for(let b=0;b<6;b++){if(!getV(eqKey(b,"On")))continue;const g=eqHasG(b)?getV(eqKey(b,"G")):0;if(eqHasG(b)&&Math.abs(g)<0.01)continue;m*=EN.eqMag(EN.eqCoef(EN.EQ_TYPES[b],getV(eqKey(b,"F")),g,eqHasQ(b)?getV(eqKey(b,"Q")):0.7071,48000),f,48000);}return 20*Math.log10(Math.max(m,1e-5));}
+function eqCurve(f){if(getV("eqBypass"))return 0;let m=1;for(let b=0;b<6;b++){if(!getV(eqKey(b,"On")))continue;let g=eqHasG(b)?getV(eqKey(b,"G")):0;if(eqHasG(b)&&audioMode!=="off"&&getV(eqKey(b,"Dyn")))g+=meter.eqd[b-1]||0;if(eqHasG(b)&&Math.abs(g)<0.01)continue;m*=EN.eqMag(EN.eqCoef(EN.EQ_TYPES[b],getV(eqKey(b,"F")),g,eqHasQ(b)?getV(eqKey(b,"Q")):0.7071,48000),f,48000);}return 20*Math.log10(Math.max(m,1e-5));}
 const EQP=[];
 function makeEqPanel(id,big){
   const root=el("div","eqp");const cv=el("canvas","disp");if(big)cv.style.height="auto";else{cv.style.height=SH(120,84);cv.style.flex="0 0 auto";}
   cv.dataset.tip="EQ, the same on the Sound and FX pages. Drag a dot: left and right is frequency, up and down is gain. Scroll over a bell dot to change its width (Q). Double-click a dot to switch the band on or off. The coloured fill shows what the EQ does, the pink area behind is the live sound after the EQ.";
   root.appendChild(cv);const bar=el("div","eqbar"),chips=el("div","eqchips"),kn=el("div","eqk");bar.appendChild(chips);bar.appendChild(kn);root.appendChild(bar);
   const cb=[],groups=[];
+  {const by=toggle("eqBypass","Bypass","Bypass the whole EQ (all bands, dynamics and saturation) to compare with and without. The curve greys out while it is bypassed.");by.style.marginLeft="6px";by.style.alignSelf="center";chips.appendChild(by);}
   for(let b=0;b<6;b++){
     const c=el("button","",EQS[b]);c.style.borderColor=EQC[b];c.dataset.tip=EQN[b]+". Click to select it, then use the knobs. Double-click the dot on the display to switch it on or off.";c.onclick=()=>{eqSel=b;eqRefresh();};chips.appendChild(c);cb.push(c);
     const gp=el("div","eqk");gp.style.display="none";gp.style.flexDirection="column";gp.style.alignItems="flex-start";gp.style.gap="4px";
@@ -2520,7 +2527,7 @@ function makeEqPanel(id,big){
     if(eqHasG(b)){
       const sp=el("span");sp.style.cssText="width:1px;align-self:stretch;background:#ffffff1a;margin:0 6px 0 2px";r1.appendChild(sp);
       wrapK("Sat",knob(N(eqKey(b,"Sat"),EQN[b]+" saturation",0,1,0.01,"","Saturation of only this band's area, like the colour bands in Saturn or Pro-Q: the rest of the sound stays clean. 0 is none. It needs signal in that band, so set the band frequency where the sound lives."),{mini:true}));
-      const sd=el("div");sd.style.cssText="display:flex;flex-direction:column;gap:2px";sd.appendChild(el("div","l","Sat type"));sd.appendChild(select(eqKey(b,"SatT"),[[0,"Tube"],[1,"Tape"],[2,"Fuzz"]],"Colour of this band's saturation. Tube: warm, even harmonics. Tape: soft and smooth. Fuzz: lopsided, buzzy and loud. Only heard when Sat is above 0."));r1.appendChild(sd);
+      const sd=el("div");sd.style.cssText="display:flex;flex-direction:column;gap:2px";sd.appendChild(el("div","l","Sat type"));sd.appendChild(select(eqKey(b,"SatT"),[[0,"Tube"],[1,"Tape"],[2,"Fuzz"],[3,"Soft"],[4,"Hard clip"],[5,"Fold"],[6,"Diode"],[7,"Warm"]],"Colour of this band's saturation. Tube: warm, even harmonics. Tape: soft and smooth. Fuzz: lopsided, buzzy and loud. Soft: clean symmetric rounding. Hard clip: flat-topped, aggressive. Fold: the wave folds back on itself, metallic and bright. Diode: lopsided and edgy. Warm: gentle, mostly even harmonics. Only heard when Sat is above 0."));r1.appendChild(sd);
       const mk=(lab,node)=>wrapK(lab,node,r2);
       mk("Dyn",knob(N(eqKey(b,"Dyn"),EQN[b]+" dynamic",-18,18,0.1,"dB","Dynamic EQ. How many dB this band moves when the sound in the band goes past the Thr level. Negative: it cuts when loud (tame a harsh spot, de-ess). Positive: it boosts when loud (upward, adds life). 0 is a normal static band."),{mini:true}));
       mk("Thr",knob(N(eqKey(b,"Thr"),EQN[b]+" threshold",-60,0,0.5,"dB","Level in the band where the dynamic move starts."),{mini:true}));
@@ -2553,10 +2560,11 @@ function drawEqOn(o){
   const Y=d=>h/2-d/EQGR*(h/2-8);g.textAlign="right";
   for(const d of [-12,-6,0,6,12]){const y=Y(d);g.strokeStyle=d===0?"#4b3f99":"#241c52";g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();g.fillStyle="#9d92cf";g.fillText((d>0?"+":"")+d+" dB",w-3,y-2);}
   g.beginPath();g.moveTo(0,Y(0));let first=true;const pts=[];for(let x=0;x<=w;x+=2){const d=clamp(eqCurve(x_f(x,w)),-EQGR-6,EQGR+6);pts.push([x,Y(d)]);g.lineTo(x,Y(d));}
-  g.lineTo(w,Y(0));g.closePath();g.fillStyle="rgba(2,235,186,.22)";g.fill();
-  g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.strokeStyle="#02ebba";g.lineWidth=2.2;g.stroke();g.lineWidth=1;
+  g.lineTo(w,Y(0));g.closePath();g.fillStyle=getV("eqBypass")?"rgba(150,140,200,.10)":"rgba(2,235,186,.22)";g.fill();
+  g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.strokeStyle=getV("eqBypass")?"#6f64a8":"#02ebba";g.lineWidth=2.2;g.stroke();g.lineWidth=1;if(getV("eqBypass")){g.fillStyle="#ffd100";g.font="bold 10px IBM Plex Mono";g.textAlign="left";g.fillText("EQ BYPASSED",8,12);}
   for(let b=0;b<6;b++){const on=!!getV(eqKey(b,"On")),x=fx_(getV(eqKey(b,"F")),w),y=eqHasG(b)?Y(getV(eqKey(b,"G"))):Y(0);
     g.beginPath();g.arc(x,y,b===eqSel?7:5.5,0,7);if(on){g.fillStyle=EQC[b];g.fill();}else{g.fillStyle="#140e2b";g.fill();g.setLineDash([2,2]);}g.strokeStyle=EQC[b];g.lineWidth=b===eqSel?2.5:1.6;g.stroke();g.setLineDash([]);g.lineWidth=1;
+    if(eqHasG(b)&&on&&getV(eqKey(b,"Dyn"))&&audioMode!=="off"&&!getV("eqBypass")){const off=meter.eqd[b-1]||0;if(Math.abs(off)>0.05){const y2=Y(getV(eqKey(b,"G"))+off);g.beginPath();g.arc(x,y2,4,0,7);g.fillStyle="#fff";g.fill();g.strokeStyle=EQC[b];g.lineWidth=1.5;g.beginPath();g.moveTo(x,y);g.lineTo(x,y2);g.stroke();g.lineWidth=1;}}
     if(b===eqSel){const fv=getV(eqKey(b,"F")),t=EQS[b]+" "+(fv>=1000?(fv/1000).toFixed(fv>=10000?1:2)+"k":Math.round(fv))+"Hz"+(eqHasG(b)?" "+(getV(eqKey(b,"G"))>0?"+":"")+getV(eqKey(b,"G")).toFixed(1)+"dB":"")+(eqHasQ(b)?" Q"+getV(eqKey(b,"Q")).toFixed(1):"");g.font="10px IBM Plex Mono";g.textAlign=x>w/2?"right":"left";g.fillStyle="#fff";g.fillText(t,x+(x>w/2?-10:10),clamp(y-10,12,h-14));}}
   g.textAlign="left";
 }

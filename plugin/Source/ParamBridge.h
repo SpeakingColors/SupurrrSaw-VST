@@ -69,7 +69,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(reverbMix); S87_F(reverbSize); S87_F(reverbWidth); S87_F(reverbLowCutHz);
         S87_F(master); S87_F(clipKnee); S87_B(limiter); S87_F(limCeil); S87_I(polyphony); S87_F(modWheel);
         S87_F(dynMix); S87_F(dmMix); S87_F(dmDrive); S87_F(dmClip); S87_F(dmLow); S87_F(dmMid); S87_F(dmHigh); S87_F(drvDrive); S87_F(drvXs); S87_F(drvFuzz); S87_F(drvMix);
-        S87_B(eq1On); S87_F(eq1F); S87_B(eq2On); S87_F(eq2F); S87_F(eq2G); S87_B(eq3On); S87_F(eq3F); S87_F(eq3G); S87_F(eq3Q);
+        S87_B(eqBypass); S87_B(eq1On); S87_F(eq1F); S87_B(eq2On); S87_F(eq2F); S87_F(eq2G); S87_B(eq3On); S87_F(eq3F); S87_F(eq3G); S87_F(eq3Q);
         S87_B(eq4On); S87_F(eq4F); S87_F(eq4G); S87_F(eq4Q); S87_B(eq5On); S87_F(eq5F); S87_F(eq5G); S87_B(eq6On); S87_F(eq6F);
         S87_F(chorusDelay); S87_F(chorusWidth); S87_F(delayDamp); S87_F(delayPing); S87_F(reverbPre); S87_F(reverbDamp);
         S87_F(optoGain); S87_F(optoRel); S87_F(ottLow); S87_F(ottMid); S87_F(ottHigh); S87_F(ottTime);
@@ -85,10 +85,10 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_FR(lfo3Rate, 0.05f, 30.f); S87_IR(lfo3Shape, 0, 6); S87_FR(lfo3Depth, 0.f, 1.f); S87_FR(lfo3Fade, 0.f, 5.f); S87_FR(lfo3Start, 0.f, 1.f);
         S87_F(menv2Time); S87_B(menv2Inv); S87_B(menv2Loop); S87_F(menv3Time); S87_B(menv3Inv); S87_B(menv3Loop); S87_B(menvSync); S87_B(menv2Sync); S87_B(menv3Sync); S87_IR(menvDiv, 0, 15); S87_IR(menv2Div, 0, 15); S87_IR(menv3Div, 0, 15);
         S87_FR(nzSmpPitch, -24.f, 24.f); S87_FR(nzSmpVol, 0.f, 1.5f); S87_B(smpPost);
-        S87_FR(eq2Dyn, -18.f, 18.f); S87_FR(eq2Thr, -60.f, 0.f); S87_FR(eq2Atk, 0.5f, 100.f); S87_FR(eq2Rel, 10.f, 1000.f); S87_B(eq2Below); S87_FR(eq2Sat, 0.f, 1.f); S87_IR(eq2SatT, 0, 2);
-        S87_FR(eq3Dyn, -18.f, 18.f); S87_FR(eq3Thr, -60.f, 0.f); S87_FR(eq3Atk, 0.5f, 100.f); S87_FR(eq3Rel, 10.f, 1000.f); S87_B(eq3Below); S87_FR(eq3Sat, 0.f, 1.f); S87_IR(eq3SatT, 0, 2);
-        S87_FR(eq4Dyn, -18.f, 18.f); S87_FR(eq4Thr, -60.f, 0.f); S87_FR(eq4Atk, 0.5f, 100.f); S87_FR(eq4Rel, 10.f, 1000.f); S87_B(eq4Below); S87_FR(eq4Sat, 0.f, 1.f); S87_IR(eq4SatT, 0, 2);
-        S87_FR(eq5Dyn, -18.f, 18.f); S87_FR(eq5Thr, -60.f, 0.f); S87_FR(eq5Atk, 0.5f, 100.f); S87_FR(eq5Rel, 10.f, 1000.f); S87_B(eq5Below); S87_FR(eq5Sat, 0.f, 1.f); S87_IR(eq5SatT, 0, 2);
+        S87_FR(eq2Dyn, -18.f, 18.f); S87_FR(eq2Thr, -60.f, 0.f); S87_FR(eq2Atk, 0.5f, 100.f); S87_FR(eq2Rel, 10.f, 1000.f); S87_B(eq2Below); S87_FR(eq2Sat, 0.f, 1.f); S87_IR(eq2SatT, 0, 7);
+        S87_FR(eq3Dyn, -18.f, 18.f); S87_FR(eq3Thr, -60.f, 0.f); S87_FR(eq3Atk, 0.5f, 100.f); S87_FR(eq3Rel, 10.f, 1000.f); S87_B(eq3Below); S87_FR(eq3Sat, 0.f, 1.f); S87_IR(eq3SatT, 0, 7);
+        S87_FR(eq4Dyn, -18.f, 18.f); S87_FR(eq4Thr, -60.f, 0.f); S87_FR(eq4Atk, 0.5f, 100.f); S87_FR(eq4Rel, 10.f, 1000.f); S87_B(eq4Below); S87_FR(eq4Sat, 0.f, 1.f); S87_IR(eq4SatT, 0, 7);
+        S87_FR(eq5Dyn, -18.f, 18.f); S87_FR(eq5Thr, -60.f, 0.f); S87_FR(eq5Atk, 0.5f, 100.f); S87_FR(eq5Rel, 10.f, 1000.f); S87_B(eq5Below); S87_FR(eq5Sat, 0.f, 1.f); S87_IR(eq5SatT, 0, 7);
 #undef S87_FR
 #undef S87_IR
 #undef S87_F
