@@ -32,6 +32,8 @@ int main(int argc, char** argv) {
   std::string dir = argc > 1 ? argv[1] : ".";
   struct P { const char* name; void (*fn)(Params&); int note; float hold, total; };
   P list[] = {{"hoover", presets::hoover, 57, 1.2f, 2.5f}, {"pick", presets::pick, 69, 0.15f, 1.0f}, {"pluck", presets::pluck, 69, 0.2f, 1.2f},
+              {"epiano_dx", presets::epianoDx, 60, 1.0f, 3.0f}, {"epiano_wurly", presets::epianoWurly, 60, 1.0f, 2.5f}, {"piano", presets::piano, 60, 1.5f, 4.0f}, {"felt_piano", presets::feltPiano, 60, 1.5f, 4.0f}, {"organ", presets::organ, 60, 1.5f, 2.5f}, {"clav", presets::clav, 60, 0.4f, 1.5f},
+              {"strings", presets::strings, 60, 2.5f, 4.5f}, {"warm_pad", presets::warmPad, 60, 3.0f, 5.5f}, {"glass_pad", presets::glassPad, 60, 3.0f, 6.0f}, {"choir", presets::choir, 64, 2.5f, 4.5f}, {"bell", presets::bell, 72, 0.5f, 5.0f}, {"brass", presets::brass, 55, 1.2f, 2.5f},
               {"trance_lead", presets::tranceLead, 69, 1.5f, 3.0f}, {"trance_hybrid", presets::tranceHybrid, 69, 1.5f, 3.0f}, {"trance_90s", presets::trance90s, 69, 1.5f, 3.0f}, {"talking_lead", presets::talkingLead, 64, 1.5f, 3.0f},
               {"daft_funk", presets::daftFunk, 64, 3.0f, 4.5f}, {"hoover_classic", presets::hooverClassic, 57, 1.5f, 3.5f}, {"hoover_prodigy", presets::hooverProdigy, 57, 1.5f, 2.5f},
               {"better_off_alone", presets::betterOffAlone, 69, 1.5f, 3.0f}, {"gimme_lead", presets::gimmeLead, 69, 1.0f, 2.5f}, {"levels_lead", presets::levelsLead, 69, 1.0f, 2.5f}, {"sandstorm_lead", presets::sandstormLead, 69, 2.0f, 3.5f},
@@ -166,6 +168,19 @@ int main(int argc, char** argv) {
     double s1 = tone(0.5f, 3); std::printf("squeeze on 0.5 tone: %+.2f dB\n", 20 * std::log10(s1 / a0)); CHECK(s1 < a0 * 1.5 && s1 > 0.3 * a0);
     for (const char* n : {"hoover", "access_bass"}) { Params q; presets::byName(n, q); q.master = 2.f; q.optoAmt = 1.f; q.ottMix = 1.f; q.ottDepth = 1.f; q.sqzAmt = 1.f; Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0;
       for (int k : {48, 55, 60, 64}) e.noteOn(k, 1.f); for (int b = 0; b < 60; ++b) { e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); } } CHECK(pk <= 1.f); }
+  }
+  { // FM and AM: every source changes the sound and stays finite, a modulator layer at level 0 is silent by itself but still modulates
+    auto tone = [&](int fmSrc, float fmAmt, int amSrc, float amAmt, float lvl1) { Params q; q.dmMix = 0.f; q.layer[0].wave = Wave::Sine; q.layer[0].level = 0.7f; q.layer[0].fmSrc = fmSrc; q.layer[0].fmAmt = fmAmt; q.layer[0].amSrc = amSrc; q.layer[0].amAmt = amAmt;
+      q.layer[1].wave = Wave::Sine; q.layer[1].level = lvl1; q.layer[1].octave = 1; q.subLevel = 0.f; q.cutoff = 18000.f; q.noiseLevel = 0.f;
+      Engine e; e.prepare(48000); e.p = q; e.noteOn(57, 0.8f); float L[4800], R[4800]; e.render(L, R, 4800); std::vector<float> o(L, L + 4800); for (float x : o) CHECK(x == x); return o; };
+    auto diff = [&](const std::vector<float>& a, const std::vector<float>& b) { double d = 0; for (size_t i = 0; i < a.size(); ++i) d += std::fabs(a[i] - b[i]); return d / a.size(); };
+    auto base = tone(0, 0.f, 0, 0.f, 0.f);
+    CHECK(diff(base, tone(2, 0.6f, 0, 0.f, 0.f)) > 0.005);   // FM from layer 2 (level 0, silent modulator)
+    CHECK(diff(base, tone(4, 0.6f, 0, 0.f, 0.f)) > 0.005);   // FM from sub
+    CHECK(diff(base, tone(5, 0.6f, 0, 0.f, 0.f)) > 0.005);   // FM from noise
+    CHECK(diff(base, tone(0, 0.f, 2, 0.8f, 0.f)) > 0.005);   // AM from layer 2
+    CHECK(diff(base, tone(0, 0.f, 4, 0.8f, 0.f)) > 0.005);   // AM from sub
+    std::printf("fm/am: all sources change the sound\n");
   }
   { // mod matrix: every destination reacts to a source that is active, and nothing blows up
     auto rms = [&](int src, int dst, float amt) { Params q; q.layer[0].wave = Wave::SuperSaw; q.layer[0].level = 0.7f; q.cutoff = 1500.f; q.modWheel = 1.f; q.mx[src][dst] = amt;

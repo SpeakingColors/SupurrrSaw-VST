@@ -84,6 +84,113 @@ inline void trance90s(Params& p) {
   p.master = 0.9f; p.amp = {0.002f, 0.5f, 0.7f, 0.3f}; p.spread = 0.9f; p.chorusMix = 0.2f; p.delayMix = 0.1f; p.delayTime = 0.214f; p.delayFb = 0.3f; p.reverbMix = 0.1f; p.reverbSize = 0.65f; p.reverbLowCutHz = 400.f;
 }
 
+// ---- keys, pianos, pads and strings (approximations built from the synth's own parts; FM from a second layer makes the bell and tine sounds) ----
+// DX style electric piano: sine carrier frequency modulated by a sine at the same pitch (mellow tine), a faint octave-up layer for the attack ping.
+inline void epianoDx(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.7f; p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.18f;
+  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.f;                                                  // modulator only, silent
+  p.layer[2].wave = Wave::Sine; p.layer[2].octave = 2; p.layer[2].level = 0.06f; p.layer[2].fmSrc = 2; p.layer[2].fmAmt = 0.1f;   // tine
+  p.cutoff = 5200.f; p.reso = 0.05f; p.envAmt = 0.35f; p.keyTrack = 0.3f; p.velCutoff = 0.25f; p.fenv = {0.001f, 0.6f, 0.2f, 0.3f}; p.lowCutHz = 60.f;
+  p.master = 0.9f; p.amp = {0.002f, 1.8f, 0.12f, 0.35f}; p.lfoRate = 4.2f; p.lfoPan = 0.18f; p.spread = 0.8f;
+  p.chorusMix = 0.35f; p.chorusDepth = 0.35f; p.reverbMix = 0.12f; p.reverbSize = 0.6f; p.reverbLowCutHz = 250.f;
+}
+// Wurlitzer style: reedy pulse and triangle with a little drive and a quick bark on the attack.
+inline void epianoWurly(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.38f; p.layer[0].level = 0.45f;
+  p.layer[1].wave = Wave::Tri; p.layer[1].level = 0.5f; p.layer[1].octave = 0;
+  p.cutoff = 2400.f; p.reso = 0.12f; p.envAmt = 0.45f; p.keyTrack = 0.35f; p.velCutoff = 0.3f; p.fenv = {0.001f, 0.35f, 0.15f, 0.25f}; p.drive = 0.15f; p.dist = 0.1f; p.lowCutHz = 70.f;
+  p.master = 0.9f; p.amp = {0.002f, 1.2f, 0.1f, 0.3f}; p.lfoRate = 5.f; p.lfoAmp = 0.12f; p.chorusMix = 0.2f; p.reverbMix = 0.1f;
+}
+// Piano: a bright saw and a triangle one octave down, a fast filter decay that follows velocity, long decay with no sustain.
+inline void piano(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.4f; p.layer[0].tune = 3.f;
+  p.layer[1].wave = Wave::Tri; p.layer[1].level = 0.5f; p.layer[1].tune = -3.f;
+  p.layer[2].wave = Wave::Sine; p.layer[2].octave = 1; p.layer[2].level = 0.12f;
+  p.cutoff = 2200.f; p.reso = 0.04f; p.envAmt = 0.55f; p.keyTrack = 0.55f; p.velCutoff = 0.45f; p.fenv = {0.001f, 0.9f, 0.1f, 0.3f}; p.lowCutHz = 55.f;
+  p.master = 0.9f; p.amp = {0.002f, 3.0f, 0.04f, 0.5f}; p.spread = 0.6f; p.reverbMix = 0.14f; p.reverbSize = 0.55f; p.reverbLowCutHz = 250.f; p.chorusMix = 0.08f;
+}
+// Felt piano: softer and darker.
+inline void feltPiano(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Tri; p.layer[0].level = 0.7f;
+  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.35f; p.layer[1].octave = 1;
+  p.cutoff = 1500.f; p.envAmt = 0.4f; p.keyTrack = 0.4f; p.velCutoff = 0.3f; p.fenv = {0.002f, 0.7f, 0.1f, 0.3f}; p.lowCutHz = 50.f;
+  p.master = 1.2f; p.amp = {0.004f, 2.5f, 0.06f, 0.6f}; p.reverbMix = 0.2f; p.reverbSize = 0.65f; p.reverbLowCutHz = 200.f; p.chorusMix = 0.1f;
+}
+// Drawbar organ: 8', 4' and 2 2/3' sine drawbars plus a sub, a little key click drive and a rotary-style chorus.
+inline void organ(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.6f;
+  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.4f; p.layer[1].octave = 1;
+  p.layer[2].wave = Wave::Sine; p.layer[2].level = 0.3f; p.layer[2].octave = 1; p.layer[2].tune = 702.f;
+  p.subLevel = 0.35f; p.subWave = Wave::Sine; p.subOctave = -1;
+  p.cutoff = 9000.f; p.dist = 0.12f; p.drive = 0.1f; p.lowCutHz = 40.f;
+  p.master = 0.26f; p.amp = {0.004f, 0.05f, 1.f, 0.06f}; p.chorusMix = 0.5f; p.chorusRate = 6.f; p.chorusDepth = 0.5f; p.reverbMix = 0.1f; p.spread = 0.5f;
+}
+// Clavinet: narrow pulse, very short filter decay that follows the key.
+inline void clav(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.25f; p.layer[0].level = 0.6f;
+  p.layer[1].wave = Wave::Saw; p.layer[1].level = 0.25f; p.layer[1].octave = 1;
+  p.cutoff = 1200.f; p.reso = 0.25f; p.envAmt = 0.8f; p.keyTrack = 0.5f; p.velCutoff = 0.4f; p.fenv = {0.001f, 0.18f, 0.f, 0.1f}; p.lowCutHz = 90.f; p.filterMode = FilterMode::LP12;
+  p.master = 1.5f; p.amp = {0.001f, 0.4f, 0.05f, 0.12f}; p.reverbMix = 0.04f;
+}
+// String section: three detuned super saws, slow attack, gentle filter, ensemble chorus and a wide hall.
+inline void strings(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 7; p.layer[0].cents = 10.f; p.layer[0].level = 0.45f; p.layer[0].pan = -0.15f;
+  p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 7; p.layer[1].cents = 14.f; p.layer[1].level = 0.45f; p.layer[1].pan = 0.15f; p.layer[1].tune = 6.f;
+  p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 5; p.layer[2].cents = 8.f; p.layer[2].level = 0.25f; p.layer[2].octave = -1;
+  p.cutoff = 4200.f; p.reso = 0.05f; p.envAmt = 0.15f; p.keyTrack = 0.4f; p.fenv = {0.3f, 0.6f, 0.8f, 0.5f}; p.lowCutHz = 110.f; p.drift = 0.2f;
+  p.master = 1.4f; p.amp = {0.35f, 0.5f, 0.9f, 0.55f}; p.spread = 1.f; p.chorusMix = 0.5f; p.chorusDepth = 0.4f; p.reverbMix = 0.25f; p.reverbSize = 0.8f; p.reverbLowCutHz = 300.f;
+}
+// Warm pad: triangle and soft saws, slow, slightly moving filter.
+inline void warmPad(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 5; p.layer[0].cents = 9.f; p.layer[0].level = 0.4f;
+  p.layer[1].wave = Wave::Tri; p.layer[1].level = 0.5f; p.layer[1].octave = -1;
+  p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 5; p.layer[2].cents = 12.f; p.layer[2].level = 0.25f; p.layer[2].tune = -7.f;
+  p.cutoff = 1500.f; p.reso = 0.12f; p.envAmt = 0.3f; p.fenv = {1.2f, 1.f, 0.6f, 1.f}; p.lfoRate = 0.15f; p.lfoCutoff = 0.25f; p.lowCutHz = 90.f; p.drift = 0.3f;
+  p.master = 0.85f; p.amp = {1.1f, 0.8f, 0.9f, 1.6f}; p.spread = 1.f; p.chorusMix = 0.55f; p.chorusRate = 0.4f; p.reverbMix = 0.35f; p.reverbSize = 0.85f; p.reverbLowCutHz = 250.f;
+}
+// Glass pad: FM sines give a bright bell-like body that slowly opens.
+inline void glassPad(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.5f; p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.22f;
+  p.layer[1].wave = Wave::Sine; p.layer[1].octave = 1; p.layer[1].level = 0.f; p.layer[1].tune = 5.f;
+  p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 5; p.layer[2].cents = 7.f; p.layer[2].level = 0.18f; p.layer[2].octave = 1;
+  p.cutoff = 5000.f; p.envAmt = 0.2f; p.fenv = {1.5f, 1.f, 0.7f, 1.f}; p.lowCutHz = 120.f; p.lfoRate = 0.3f; p.lfoPan = 0.3f;
+  p.master = 1.3f; p.amp = {0.8f, 0.8f, 0.85f, 1.8f}; p.spread = 1.f; p.chorusMix = 0.4f; p.reverbMix = 0.4f; p.reverbSize = 0.9f; p.reverbLowCutHz = 300.f; p.delayMix = 0.12f; p.delayTime = 0.43f; p.delayFb = 0.4f;
+}
+// Choir: saws through a band pass filter for a vowel colour.
+inline void choir(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 5; p.layer[0].cents = 8.f; p.layer[0].level = 0.7f;
+  p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.4f; p.layer[1].level = 0.3f; p.layer[1].tune = 4.f;
+  p.filterMode = FilterMode::BP; p.cutoff = 1100.f; p.reso = 0.35f; p.keyTrack = 0.5f; p.envAmt = 0.1f; p.fenv = {0.4f, 0.5f, 0.8f, 0.6f}; p.lowCutHz = 100.f; p.lfoRate = 5.2f; p.lfoPitch = 0.12f;
+  p.master = 1.1f; p.amp = {0.45f, 0.5f, 0.9f, 0.7f}; p.spread = 0.9f; p.chorusMix = 0.4f; p.reverbMix = 0.35f; p.reverbSize = 0.85f; p.reverbLowCutHz = 250.f;
+}
+// Bell: inharmonic FM (a modulator a fifth above one octave up), long ring, no sustain.
+inline void bell(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.6f; p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.3f;
+  p.layer[1].wave = Wave::Sine; p.layer[1].octave = 1; p.layer[1].tune = 702.f; p.layer[1].level = 0.f;
+  p.layer[2].wave = Wave::Sine; p.layer[2].octave = 2; p.layer[2].level = 0.1f;
+  p.cutoff = 9000.f; p.envAmt = 0.2f; p.keyTrack = 0.3f; p.fenv = {0.001f, 1.5f, 0.f, 0.5f}; p.lowCutHz = 100.f;
+  p.master = 0.9f; p.amp = {0.001f, 3.5f, 0.f, 1.f}; p.reverbMix = 0.25f; p.reverbSize = 0.75f; p.reverbLowCutHz = 300.f;
+}
+// Analog brass: saws with a filter swell on the attack.
+inline void brass(Params& p) {
+  p = Params();
+  p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 5; p.layer[0].cents = 9.f; p.layer[0].level = 0.55f;
+  p.layer[1].wave = Wave::Saw; p.layer[1].level = 0.35f; p.layer[1].tune = 6.f;
+  p.cutoff = 1300.f; p.reso = 0.1f; p.envAmt = 0.6f; p.keyTrack = 0.3f; p.velCutoff = 0.3f; p.fenv = {0.09f, 0.4f, 0.55f, 0.25f}; p.lowCutHz = 90.f;
+  p.master = 0.9f; p.amp = {0.04f, 0.3f, 0.85f, 0.15f}; p.spread = 0.8f; p.chorusMix = 0.25f; p.reverbMix = 0.12f;
+}
+
 // Talking lead (Daft Punk style): a sync oscillator whose slave pitch is swept by an LFO and the envelope, follows the
 // note played (higher notes open the sync more) and the mod wheel, so it "talks". Saturated, almost dry.
 inline void talkingLead(Params& p) {
@@ -325,6 +432,9 @@ inline void crash(Params& p) {
 inline bool byName(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
   else if (n == "trance_hybrid") tranceHybrid(p); else if (n == "trance_90s") trance90s(p);
+  else if (n == "epiano_dx") epianoDx(p); else if (n == "epiano_wurly") epianoWurly(p); else if (n == "piano") piano(p); else if (n == "felt_piano") feltPiano(p);
+  else if (n == "organ") organ(p); else if (n == "clav") clav(p); else if (n == "strings") strings(p); else if (n == "warm_pad") warmPad(p); else if (n == "glass_pad") glassPad(p);
+  else if (n == "choir") choir(p); else if (n == "bell") bell(p); else if (n == "brass") brass(p);
   else if (n == "talking_lead") talkingLead(p); else if (n == "trance_bass") tranceBass(p); else if (n == "funk_bass") funkBass(p);
   else if (n == "daft_funk") daftFunk(p); else if (n == "hoover_classic") hooverClassic(p); else if (n == "hoover_prodigy") hooverProdigy(p);
   else if (n == "better_off_alone") betterOffAlone(p); else if (n == "gimme_lead") gimmeLead(p); else if (n == "levels_lead") levelsLead(p); else if (n == "sandstorm_lead") sandstormLead(p);

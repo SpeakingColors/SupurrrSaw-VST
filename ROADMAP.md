@@ -18,6 +18,11 @@ Supersaw, hoover and acid synth.
 - [ ] Plugin only: **drag a note out as a .wav** to the DAW arranger (render the held note offline with the current patch, then start a native drag of the temporary file). The playground already exports a note as a .wav inside a .zip, with the same offline render
 - [ ] Plugin only: **diagnostics log**. Rolling text log (plugin version, sample rate, buffer size, host, voice and CPU peaks, safety guard resets, errors) capped at 1 MB, oldest lines dropped. Stored in the per-user data folder (the install folder is often read only, so it is not used), with **Open log folder** and **Copy diagnostics** buttons to paste into a GitHub issue. No audio, no personal data and nothing is sent automatically
 - [ ] Plugin only: **Audio on** kill switch as in the playground (silences the engine, keeps the UI alive, restart with one click)
+- [x] FM and AM per layer: source (other layer, sub or noise) plus depth; a modulator layer can sit at level 0 and stay silent. Not in the mod matrix yet (the matrix would need extra destination columns for FM depth)
+- [x] Presets: piano, felt piano, E-piano DX, E-piano Wurly, organ, clav, strings, warm pad, glass pad, choir, bell, brass
+- [x] Drawn envelope Invert option (sidechain shape drives Volume with a positive amount)
+- [ ] EQ stage for the notch and dip moves (300-500 Hz, 3-4 kHz) from the trance supersaw recipe
+- [ ] Tune the new keys, pads and strings by ear (FM index cannot decay over time yet: needs an FM depth destination in the matrix)
 - [ ] Screech tools from the Airwave manual: feedback oscillator, X-Mod, ring mod
 - [ ] Shared FX rack (catfx from cat-ui) once the plugin shell exists
 - [ ] Presets to be tuned by ear; sync aliasing is only first-order band limited, add oversampling

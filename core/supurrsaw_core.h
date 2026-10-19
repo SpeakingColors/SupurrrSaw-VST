@@ -90,6 +90,10 @@ struct LayerParams {
   float lfoPitchCents = 0.f;   // LFO vibrato on this layer only, in cents
   float syncKey = 0.f;         // semitones added per octave above/below middle C (the sync opens more or less by note)
   float syncWheel = 0.f;       // semitones added at full mod wheel (automate or play it live)
+  int fmSrc = 0;               // frequency modulation source: 0 none, 1..3 layer 1..3, 4 sub, 5 noise
+  float fmAmt = 0.f;           // 0..1 depth (frequency deviation up to 3x the layer's own frequency)
+  int amSrc = 0;               // amplitude modulation source, same list
+  float amAmt = 0.f;           // 0..1; 1 is ring modulation, lower keeps some of the carrier
   std::shared_ptr<const Sample> sample;
   std::shared_ptr<const WaveTable> table;   // used by Wave::Custom (an imported or drawn cycle, played as a super stack)
 };
@@ -167,7 +171,7 @@ struct Params {
   // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random, drawn mod envelope.
   // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
   float mx[9][14] = {};   // row 8 is the drawn mod envelope
-  float menv[64]; float menvTime = 0.5f; bool menvLoop = false;   // drawn modulation envelope (0..1 over menvTime seconds, one shot or loop)
+  float menv[64]; float menvTime = 0.5f; bool menvLoop = false, menvInv = false;   // drawn modulation envelope (0..1 over menvTime seconds, one shot or loop)
   Params() { for (int i = 0; i < 64; ++i) menv[i] = std::exp(-4.f * (float)i / 63.f); }
 };
 
@@ -271,6 +275,7 @@ struct Voice {
   float gl = 0.f; float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
   float rnd = 0.f, sh = 0.f; float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   float lfoPhase = 0.f, t = 0.f, stackCents = 0.f, stackGain = 1.f;
+  float lyOut[kLayers] = {}, fmSubPh = 0.f, nzRaw = 0.f;   // last sample of each layer, FM/AM sources
   EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
 };
 
@@ -541,6 +546,10 @@ class Engine {
     int mxs[126], mxd[126]; float mxv[126]; int mxn = 0;   // sparse list of the non-zero matrix cells
     for (int a = 0; a < 9; ++a) for (int b = 0; b < 14; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
     float md[14] = {}, sv[9];
+    bool usedAsSrc[kLayers] = {}, anyFmSub = false, anyFmNz = false;
+    for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly]; if (q.wave == Wave::Off || q.level <= 0.f) continue;
+      if (q.fmAmt > 0.f && q.fmSrc >= 1 && q.fmSrc <= 3) usedAsSrc[q.fmSrc - 1] = true; if (q.amAmt > 0.f && q.amSrc >= 1 && q.amSrc <= 3) usedAsSrc[q.amSrc - 1] = true;
+      if ((q.fmAmt > 0.f && q.fmSrc == 4) || (q.amAmt > 0.f && q.amSrc == 4)) anyFmSub = true; if ((q.fmAmt > 0.f && q.fmSrc == 5) || (q.amAmt > 0.f && q.amSrc == 5)) anyFmNz = true; }
     for (int i = 0; i < n; ++i) {
       float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
       if (v.amp.stage == 0) { v.active = false; return; }
@@ -560,16 +569,20 @@ class Engine {
         for (int k = 0; k < 14; ++k) md[k] = 0.f;
         sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = std::max(-2.f, std::min(2.f, pitchEnv / 12.f)); sv[4] = p.modWheel;
         sv[5] = std::max(-2.f, std::min(2.f, (float)(v.note - 60) / 24.f)); sv[6] = v.vel; sv[7] = v.rnd;
-        { const float T = std::max(0.02f, p.menvTime); float x = v.t / T; if (p.menvLoop) x -= std::floor(x); else if (x > 1.f) x = 1.f; const float fp = x * 63.f; const int i0 = std::min(62, (int)fp); sv[8] = p.menv[i0] + (p.menv[i0 + 1] - p.menv[i0]) * (fp - (float)i0); }
+        { const float T = std::max(0.02f, p.menvTime); float x = v.t / T; if (p.menvLoop) x -= std::floor(x); else if (x > 1.f) x = 1.f; const float fp = x * 63.f; const int i0 = std::min(62, (int)fp); sv[8] = p.menv[i0] + (p.menv[i0 + 1] - p.menv[i0]) * (fp - (float)i0); if (p.menvInv) sv[8] = 1.f - sv[8]; }
         for (int k = 0; k < mxn; ++k) md[mxd[k]] += sv[mxs[k]] * mxv[k];
       }
       float L = 0.f, R = 0.f;
+      float srcV[6] = {0.f, v.lyOut[0], v.lyOut[1], v.lyOut[2], 0.f, 0.f};
+      if (anyFmSub) { srcV[4] = std::sin(2.f * kPi * v.fmSubPh); v.fmSubPh += 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f) * invSr; if (v.fmSubPh >= 1.f) v.fmSubPh -= 1.f; }
+      if (anyFmNz) { v.nzRaw = 2.f * rng.next() - 1.f; srcV[5] = v.nzRaw; }
       for (int ly = 0; ly < kLayers; ++ly) {
         const LayerParams& lp = p.layer[ly];
-        if (lp.wave == Wave::Off || lp.level <= 0.f) continue;
+        if (lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.f; continue; }
         float semis = (float)(v.note - 69) + v.gl + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo + v.stackCents * 0.01f + p.wheelVib * p.modWheel * 0.01f * lfo + md[0] * 12.f;
         float f = 440.f * std::exp2(semis / 12.f);
-        float dt = std::min(0.45f, f * invSr);
+        float fmF = 1.f; if (lp.fmAmt > 0.f && lp.fmSrc >= 1 && lp.fmSrc <= 5 && lp.fmSrc != ly + 1) fmF = std::max(0.02f, 1.f + lp.fmAmt * 3.f * srcV[lp.fmSrc]);
+        float dt = std::min(0.45f, f * invSr * fmF);
         float lL = 0.f, lR = 0.f;
         if (lp.wave == Wave::SuperSaw || lp.wave == Wave::SuperSquare || (lp.wave == Wave::Custom && lp.table && lp.table->ready())) {
           int nv = std::max(1, std::min(kMaxSaws, lp.voices));
@@ -652,6 +665,8 @@ class Engine {
           }
           lL = lR = s;
         }
+        v.lyOut[ly] = 0.5f * (lL + lR);
+        if (lp.amAmt > 0.f && lp.amSrc >= 1 && lp.amSrc <= 5 && lp.amSrc != ly + 1) { const float am = 1.f - lp.amAmt + lp.amAmt * srcV[lp.amSrc]; lL *= am; lR *= am; }
         float pg = (std::min(1.f, std::max(-1.f, lp.pan + p.lfoPan * lfo + md[6])) + 1.f) * kPi * 0.25f;
         L += lp.level * lL * std::cos(pg) * 1.414f; R += lp.level * lR * std::sin(pg) * 1.414f;
       }
