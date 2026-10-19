@@ -377,6 +377,91 @@ inline void cowbell808(Params& p) {
 }
 
 // ---------- registry ----------
+
+// ---------- FX: risers, sweeps, downlifters, impacts (recipes round 3). Times are in seconds; stretch the envelope to fit 4 or 8 bars. ----------
+inline void noiseWashDown(Params& p) {   // white noise, LP12 closes from about 13 kHz to 450 Hz while it fades, 100 percent wet chorus keeps the centre free for the kick
+  p = Params();
+  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::LP12; p.cutoff = 450.f; p.reso = 0.12f; p.envAmt = 1.f; p.fenv = {0.001f, 3.5f, 0.f, 3.5f, 0.f, 0.f, 0.f};
+  p.amp = {0.001f, 3.5f, 0.f, 3.5f, 0.f, -0.2f, -0.2f};   // release as long as the decay, so even a short tap plays the whole downlifter
+  p.spread = 1.f; p.chorusMix = 1.f; p.chorusDepth = 0.6f; p.chorusWidth = 1.f; p.lowCutHz = 150.f;
+  p.delayMix = 0.3f; p.delaySync = true; p.delayDiv = 4; p.delayFb = 0.45f; p.bpm = 140.f; p.delayPing = 1.f; p.master = 0.8f;
+}
+inline void clubCrushWash(Params& p) {   // white noise rising over about 7 s, a ramp LFO pumps it on every quarter note (140 BPM) to leave room for the kick
+  p = Params();
+  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::LP12; p.cutoff = 400.f; p.reso = 0.12f; p.envAmt = 1.f; p.fenv = {7.f, 0.1f, 1.f, 0.3f, 0.f, 0.f, -0.4f};
+  p.amp = {1.f, 0.1f, 1.f, 0.6f}; p.lfoShape = 3; p.lfoRate = 2.333f; p.lfoAmp = 0.8f; p.spread = 1.f; p.chorusMix = 0.6f; p.lowCutHz = 150.f; p.master = 0.8f;
+}
+inline void subInverterRoll(Params& p) {   // dark noise roll: LP24 opens from 60 to about 400 Hz with 60 percent resonance (a moving sub bump). Noise high-pass is 100 Hz at the lowest.
+  p = Params();
+  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::LP24; p.cutoff = 60.f; p.reso = 0.6f; p.envAmt = 0.55f; p.fenv = {5.f, 0.1f, 1.f, 0.3f, 0.f, 0.f, -0.4f};
+  p.amp = {1.f, 0.1f, 1.f, 0.4f}; p.spread = 0.f; p.bassMonoHz = 400.f; p.lowCutHz = 20.f;
+}
+inline void pitchScreamRiser(Params& p) {   // happy hardcore uplifter: stacked saws plus an octave saw climb three octaves in about 7 s, then snap back
+  p = Params();
+  lay(p, 0, Wave::SuperSaw, 0.55f, 0, 0.f, 4); p.layer[0].cents = 0.f; p.layer[0].detune = 0.15f; lay(p, 1, Wave::Saw, 0.35f, 1);
+  p.pitchAmt = 36.f; p.pitchAttack = 7.f; p.pitchTime = 0.08f; p.filterMode = FilterMode::LP24; p.cutoff = 18000.f; p.reso = 0.1f; p.dist = 0.15f;
+  p.amp = {0.05f, 0.1f, 1.f, 0.15f}; p.spread = 0.7f; p.chorusMix = 0.25f; p.delayMix = 0.15f; p.delaySync = true; p.delayDiv = 10; p.delayFb = 0.35f; p.bpm = 170.f; p.reverbMix = 0.12f; p.lowCutHz = 120.f;
+}
+inline void laserRollRiser(Params& p) {   // hardstyle laser roll: synced pulse, band-pass at 1.5 kHz, a falling 1/16 ramp on pitch and cutoff (140 BPM) while the base pitch climbs
+  p = Params();
+  lay(p, 0, Wave::Pulse, 0.7f, 0, 0.f, 1, 0.f, 0.5f); p.layer[0].sync = true; p.layer[0].syncSemis = 4.5f;
+  p.filterMode = FilterMode::BP; p.cutoff = 1500.f; p.reso = 0.4f; p.lfoShape = 3; p.lfoRate = 9.333f; p.mx[S_LFO][D_PITCH] = -1.f; p.lfoCutoff = -0.25f;
+  p.pitchAmt = 24.f; p.pitchAttack = 4.f; p.pitchTime = 0.05f; p.dist = 0.2f; p.amp = {0.01f, 0.1f, 1.f, 0.1f}; p.spread = 0.5f;
+  p.delayMix = 0.15f; p.delaySync = true; p.delayDiv = 10; p.bpm = 140.f; p.lowCutHz = 150.f;
+}
+inline void fmLaserChop(Params& p) {   // psy-trance FM laser: sine carrier with a +3 octave sine modulator, 1/32 gate (140 BPM), pitch slides up two octaves
+  p = Params();
+  lay(p, 0, Wave::Sine, 0.8f); lay(p, 1, Wave::Sine, 0.f, 3); p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.45f;
+  p.lfoShape = 2; p.lfoRate = 18.667f; p.lfoAmp = 1.f; p.pitchAmt = 24.f; p.pitchAttack = 0.8f; p.pitchTime = 4.f;
+  p.filterMode = FilterMode::LP24; p.cutoff = 12000.f; p.amp = {0.002f, 0.1f, 1.f, 0.08f}; p.spread = 0.4f; p.reverbMix = 0.1f; p.lowCutHz = 120.f;
+}
+inline void annihilatorAlarm(Params& p) {   // 90s rave alarm: square with FM from a saw, 12 Hz triangle LFO moves the pitch plus and minus an octave, clipped, 1/16 ping-pong
+  p = Params();
+  lay(p, 0, Wave::Pulse, 0.7f, 0, 0.f, 1, 0.f, 0.5f); lay(p, 1, Wave::Saw, 0.f, 1); p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.5f;
+  p.lfoShape = 1; p.lfoRate = 12.f; p.mx[S_LFO][D_PITCH] = 1.f; p.dist = 0.6f; p.filterMode = FilterMode::LP24; p.cutoff = 9000.f;
+  p.delayMix = 0.25f; p.delaySync = true; p.delayDiv = 10; p.delayFb = 0.4f; p.bpm = 140.f; p.delayPing = 1.f; p.amp = {0.002f, 0.1f, 1.f, 0.1f}; p.spread = 0.8f; p.lowCutHz = 200.f;
+}
+inline void metalScrape(Params& p) {   // jungle metal scrape (no comb filter here): pulse plus noise into a very resonant band-pass swept by a ramp LFO on 1/4 notes, hard clipped
+  p = Params();
+  lay(p, 0, Wave::Pulse, 0.6f, 0, 0.f, 1, 0.f, 0.5f); p.noiseLevel = 0.35f; p.noiseHpHz = 1000.f;
+  p.filterMode = FilterMode::BP; p.cutoff = 1200.f; p.reso = 0.9f; p.lfoShape = 3; p.lfoRate = 2.333f; p.lfoCutoff = 1.2f; p.dist = 0.85f; p.drive = 0.5f;
+  p.amp = {0.002f, 0.1f, 1.f, 0.1f}; p.spread = 0.6f; p.lowCutHz = 150.f;
+}
+inline void tapeStopGlitch(Params& p) {   // complextro tape stop: hypersaw whose pitch falls 24 st and whose filter closes together, a little crunch
+  p = Params();
+  lay(p, 0, Wave::SuperSaw, 0.6f, 0, 0.f, 7); p.layer[0].cents = 0.f; p.layer[0].detune = 0.3f;
+  p.pitchFall = 24.f; p.pitchFallTime = 0.5f; p.filterMode = FilterMode::LP24; p.cutoff = 500.f; p.envAmt = 1.f; p.fenv = {0.001f, 1.f, 0.f, 1.f, 0.f, 0.f, 0.f};
+  p.amp = {0.001f, 1.4f, 0.f, 1.4f, 0.f, 0.f, -0.4f}; p.dist = 0.2f; p.spread = 0.8f; p.lowCutHz = 100.f;
+}
+inline void stretchedStringRiser(Params& p) {   // melodic techno string riser: two detuned triangles hard left and right, muffled filter opens over 6 s, dotted 1/8 delay into a big hall
+  p = Params();
+  lay(p, 0, Wave::Tri, 0.5f, 0, -25.f, 1, 0.f, 0.5f, -1.f); lay(p, 1, Wave::Tri, 0.5f, 0, 25.f, 1, 0.f, 0.5f, 1.f);
+  p.filterMode = FilterMode::LP24; p.cutoff = 250.f; p.reso = 0.15f; p.envAmt = 0.85f; p.fenv = {6.f, 0.1f, 1.f, 0.5f}; p.amp = {1.5f, 0.1f, 1.f, 1.f}; p.drift = 0.3f; p.spread = 1.f;
+  p.chorusMix = 0.5f; p.delayMix = 0.35f; p.delaySync = true; p.delayDiv = 8; p.delayFb = 0.55f; p.bpm = 124.f; p.reverbMix = 0.45f; p.reverbSize = 0.9f; p.reverbLowCutHz = 300.f;
+}
+inline void subDropImpact(Params& p) {   // clean sub boom: a sine falls 36 st (about 280 Hz to 35 Hz when played on C#1), no effects, low-passed
+  p = Params();
+  lay(p, 0, Wave::Sine, 1.f); p.pitchAmt = 36.f; p.pitchTime = 0.12f; p.filterMode = FilterMode::LP24; p.cutoff = 160.f; p.reso = 0.1f;
+  p.amp = {0.001f, 1.5f, 0.f, 1.5f}; p.spread = 0.f; p.bassMonoHz = 500.f; p.lowCutHz = 20.f;
+}
+inline void subSuckSweeper(Params& p) {   // sub that climbs 24 st in 1.5 s (35 Hz to 140 Hz when played on C#1) under a 140 Hz low-pass; release the key one beat before the drop
+  p = Params();
+  lay(p, 0, Wave::Sine, 1.f); p.pitchAmt = 24.f; p.pitchAttack = 1.5f; p.pitchTime = 8.f; p.filterMode = FilterMode::LP24; p.cutoff = 140.f; p.reso = 0.1f;
+  p.amp = {0.02f, 0.1f, 1.f, 0.05f}; p.spread = 0.f; p.bassMonoHz = 500.f; p.lowCutHz = 20.f;
+}
+inline void glassShrapnel(Params& p) {   // hardstyle glass impact: FM bell (sine with a +4 octave modulator), high-passed at 4 kHz, fast decay, fast chorus, 1/16 delay
+  p = Params();
+  lay(p, 0, Wave::Sine, 0.8f); lay(p, 1, Wave::Sine, 0.f, 4); p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.42f;
+  p.filterMode = FilterMode::HP; p.cutoff = 4000.f; p.reso = 0.1f; p.amp = {0.001f, 0.45f, 0.f, 0.45f}; p.spread = 1.f;
+  p.chorusMix = 0.5f; p.chorusRate = 4.f; p.chorusDepth = 0.8f; p.delayMix = 0.25f; p.delaySync = true; p.delayDiv = 10; p.bpm = 150.f; p.reverbMix = 0.15f; p.lowCutHz = 200.f;
+}
+inline void chimeShardDown(Params& p) {   // neo-rave downlifter: FM chime that falls an octave while the high-pass closes from 8 to 2 kHz, wide wash and a huge tail
+  p = Params();
+  lay(p, 0, Wave::Sine, 0.8f); lay(p, 1, Wave::Sine, 0.f, 3); p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.35f;
+  p.pitchAmt = 12.f; p.pitchTime = 1.2f; p.filterMode = FilterMode::HP; p.cutoff = 2000.f; p.envAmt = 0.4f; p.fenv = {0.001f, 4.5f, 0.f, 4.5f, 0.f, 0.f, 0.f};
+  p.amp = {0.001f, 4.5f, 0.f, 4.5f}; p.spread = 1.f; p.chorusMix = 0.4f; p.chorusRate = 0.4f; p.chorusDepth = 0.9f; p.reverbMix = 0.5f; p.reverbSize = 0.95f; p.reverbDamp = 0.2f; p.lowCutHz = 200.f;
+}
+
 struct RaveEntry { const char* name; void (*fn)(Params&); int note; float hold, total; };
 inline const RaveEntry* raveList(int& n) {
   static const RaveEntry L[] = {
@@ -399,7 +484,12 @@ inline const RaveEntry* raveList(int& n) {
     {"donk_organ_bass", donkOrganBass, 36, 0.3f, 1.0f}, {"dubstep_tear_growl", dubstepTearGrowl, 36, 1.5f, 2.5f}, {"reese_tear", reeseTear, 40, 1.2f, 2.2f},
     {"kick_909", kick909, 36, 0.3f, 1.0f}, {"gabber_kick", gabberKick, 36, 0.3f, 1.0f}, {"snare_909", snare909, 60, 0.15f, 0.8f},
     {"hat_909_closed", hat909Closed, 60, 0.05f, 0.5f}, {"hat_909_open", hat909Open, 60, 0.1f, 1.0f}, {"ride_909", ride909, 60, 0.1f, 1.8f},
-    {"crash_909", crash909, 60, 0.1f, 2.5f}, {"cowbell_808", cowbell808, 60, 0.1f, 0.8f}};
+    {"crash_909", crash909, 60, 0.1f, 2.5f}, {"cowbell_808", cowbell808, 60, 0.1f, 0.8f},
+    {"noise_wash_down", noiseWashDown, 60, 0.2f, 4.5f}, {"club_crush_wash", clubCrushWash, 60, 7.5f, 8.5f}, {"sub_inverter_roll", subInverterRoll, 60, 5.5f, 6.5f},
+    {"pitch_scream_riser", pitchScreamRiser, 48, 7.5f, 8.5f}, {"laser_roll_riser", laserRollRiser, 60, 4.f, 5.f}, {"fm_laser_chop", fmLaserChop, 60, 1.2f, 2.f},
+    {"annihilator_alarm", annihilatorAlarm, 69, 1.5f, 2.5f}, {"metal_scrape", metalScrape, 48, 2.f, 3.f}, {"tape_stop_glitch", tapeStopGlitch, 60, 0.3f, 1.6f},
+    {"stretched_string_riser", stretchedStringRiser, 60, 6.5f, 9.f}, {"sub_drop_impact", subDropImpact, 25, 0.1f, 1.8f}, {"sub_suck_sweeper", subSuckSweeper, 25, 1.5f, 1.8f},
+    {"glass_shrapnel", glassShrapnel, 72, 0.1f, 1.2f}, {"chime_shard_down", chimeShardDown, 84, 0.1f, 5.5f}};
   n = (int)(sizeof(L) / sizeof(L[0])); return L;
 }
 inline float raveGain(const std::string& name) {
