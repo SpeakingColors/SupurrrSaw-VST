@@ -164,6 +164,14 @@ int main(int argc, char** argv) {
     for (const char* n : {"hoover", "access_bass"}) { Params q; presets::byName(n, q); q.master = 2.f; q.optoAmt = 1.f; q.ottMix = 1.f; q.ottDepth = 1.f; q.sqzAmt = 1.f; Engine e; e.prepare(48000); e.p = q; float L[512], R[512], pk = 0;
       for (int k : {48, 55, 60, 64}) e.noteOn(k, 1.f); for (int b = 0; b < 60; ++b) { e.render(L, R, 512); for (int i = 0; i < 512; ++i) { CHECK(L[i] == L[i]); pk = std::max(pk, std::fabs(L[i])); } } CHECK(pk <= 1.f); }
   }
+  { // mod matrix: every destination reacts to a source that is active, and nothing blows up
+    auto rms = [&](int src, int dst, float amt) { Params q; q.layer[0].wave = Wave::SuperSaw; q.layer[0].level = 0.7f; q.cutoff = 1500.f; q.modWheel = 1.f; q.mx[src][dst] = amt;
+      Engine e; e.prepare(48000); e.p = q; e.noteOn(57, 0.8f); float L[4800], R[4800]; e.render(L, R, 4800); double s2 = 0; for (int i = 0; i < 4800; ++i) { CHECK(L[i] == L[i]); s2 += (double)L[i] * L[i]; } return std::sqrt(s2 / 4800); };
+    double base = rms(0, 0, 0.f); int changed = 0;
+    for (int d : {0, 1, 2, 5, 6, 7, 11, 12, 13}) { if (std::fabs(rms(4, d, 0.8f) - base) > 1e-6) ++changed; }
+    std::printf("mod matrix: %d of 9 wheel destinations changed the sound\n", changed); CHECK(changed == 9);
+    for (int sidx = 0; sidx < 8; ++sidx) for (int d = 0; d < 14; ++d) CHECK(std::isfinite(rms(sidx, d, 1.f)));
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }

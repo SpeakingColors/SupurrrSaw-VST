@@ -153,6 +153,9 @@ struct Params {
   bool limiter = true;         // slow, smooth peak limiter in front of the clipper
   float limCeil = 0.9f;        // limiter ceiling (linear)
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
+  // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random.
+  // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
+  float mx[8][14] = {};
 };
 
 // smooth knee clipper: identity below T, then T + w*tanh((|x|-T)/w); C2-continuous at T, tops out at exactly 1
@@ -253,7 +256,7 @@ struct Voice {
   float phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
   float gl = 0.f; float syncPhase[kLayers] = {}; float noiseHp = 0.f, noiseHp2 = 0.f;
-  float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
+  float rnd = 0.f; float subPhase = 0.f, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   float lfoPhase = 0.f, t = 0.f, stackCents = 0.f, stackGain = 1.f;
   EnvState amp, fenv; Filter fl, fr; float hpL = 0.f, hpR = 0.f; bool oneShot = false;
 };
@@ -406,12 +409,12 @@ class Engine {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;
       for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
-      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
+      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (float)(v->note - note); v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->age = ++clock; v->t = 0.f; v->amp.on(); v->fenv.on(); return; }
     }
     const int n = p.mono ? 1 : std::max(1, std::min(4, p.stackCount));   // Stack mode plays several detuned copies per key
     for (int k = 0; k < n; ++k) {
       Voice* v = allocVoice();
-      *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->age = ++clock;
+      *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.f * rng.next() - 1.f; v->age = ++clock;
       v->stackCents = n > 1 ? ((float)k / (float)(n - 1) * 2.f - 1.f) * p.stackCents : 0.f; v->stackGain = 1.f / std::sqrt((float)n);
       for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.f : rng.next();
       v->amp.on(); v->fenv.on();
@@ -459,8 +462,8 @@ class Engine {
   float bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05f, limRel = 0.0002f;
 
   // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.
-  void addSub(Voice& v, float& L, float& R, float invSr) {
-    if (p.subLevel <= 0.f) return;
+  void addSub(Voice& v, float& L, float& R, float invSr, float lvl) {
+    if (lvl <= 0.f) return;
     float sf = 440.f * std::exp2(((float)(v.note - 69) + (float)p.subOctave * 12.f) / 12.f);
     float sdt = sf * invSr; float& sp = v.subPhase; float s;
     switch (p.subWave) {
@@ -470,11 +473,14 @@ class Engine {
       default: s = std::sin(2.f * kPi * sp); break;
     }
     sp += sdt; if (sp >= 1.f) sp -= 1.f;
-    L += p.subLevel * s * 0.7f; R += p.subLevel * s * 0.7f;
+    L += lvl * s * 0.7f; R += lvl * s * 0.7f;
   }
 
   void renderVoice(Voice& v, float* oL, float* oR, int n) {
     const float invSr = 1.f / sr;
+    int mxs[112], mxd[112]; float mxv[112]; int mxn = 0;   // sparse list of the non-zero matrix cells
+    for (int a = 0; a < 8; ++a) for (int b = 0; b < 14; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
+    float md[14] = {}, sv[8];
     for (int i = 0; i < n; ++i) {
       float ampE = v.amp.tick(p.amp, sr), fE = v.fenv.tick(p.fenv, sr);
       if (v.amp.stage == 0) { v.active = false; return; }
@@ -488,19 +494,25 @@ class Engine {
         for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004f * (2.f * rng.next() - 1.f);
       for (int j = 0; j < kMaxSaws; ++j) v.drift[j] += 0.0005f * (v.driftT[j] - v.drift[j]);
 
+      if (mxn) {
+        for (int k = 0; k < 14; ++k) md[k] = 0.f;
+        sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = std::max(-2.f, std::min(2.f, pitchEnv / 12.f)); sv[4] = p.modWheel;
+        sv[5] = std::max(-2.f, std::min(2.f, (float)(v.note - 60) / 24.f)); sv[6] = v.vel; sv[7] = v.rnd;
+        for (int k = 0; k < mxn; ++k) md[mxd[k]] += sv[mxs[k]] * mxv[k];
+      }
       float L = 0.f, R = 0.f;
       for (int ly = 0; ly < kLayers; ++ly) {
         const LayerParams& lp = p.layer[ly];
         if (lp.wave == Wave::Off || lp.level <= 0.f) continue;
-        float semis = (float)(v.note - 69) + v.gl + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo + v.stackCents * 0.01f + p.wheelVib * p.modWheel * 0.01f * lfo;
+        float semis = (float)(v.note - 69) + v.gl + (float)lp.octave * 12.f + lp.tune * 0.01f + pitchEnv + p.lfoPitch * lfo * 0.3f + lp.lfoPitchCents * 0.01f * lfo + v.stackCents * 0.01f + p.wheelVib * p.modWheel * 0.01f * lfo + md[0] * 12.f;
         float f = 440.f * std::exp2(semis / 12.f);
         float dt = std::min(0.45f, f * invSr);
         float lL = 0.f, lR = 0.f;
         if (lp.wave == Wave::SuperSaw || lp.wave == Wave::SuperSquare || (lp.wave == Wave::Custom && lp.table && lp.table->ready())) {
           int nv = std::max(1, std::min(kMaxSaws, lp.voices));
-          float det = lp.cents > 0.f ? std::exp2(lp.cents / 1200.f) - 1.f : jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo)))) * kMaxDetune * p.detuneRange;
+          float det = lp.cents > 0.f ? std::exp2(std::max(0.f, lp.cents + md[5] * 50.f) / 1200.f) - 1.f : jpDetune(std::min(1.f, std::max(0.f, lp.detune * (1.f + p.lfoDetune * lfo) + md[5] * 0.5f))) * kMaxDetune * p.detuneRange;
           float sideFade = lp.cents > 0.f ? 1.f : std::min(1.f, lp.detune * 20.f);  // detune 0 = one clean voice
-          float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f));
+          float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f + md[4] * 0.45f));
           float norm = 1.f / (1.f + (float)(nv - 1) * 0.62f * sideFade);
           for (int j = 0; j < nv; ++j) {
             float sp = sawSpread(j, nv);
@@ -544,12 +556,12 @@ class Engine {
           }
         } else {
           float& ph = v.phase[ly][0];
-          float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f));
+          float pw = std::min(0.95f, std::max(0.05f, lp.pwm + p.lfoPwm * lfo * 0.45f + md[4] * 0.45f));
           // with sync on, the slave oscillator makes the sound and the master only restarts it
           float& sph = v.syncPhase[ly];
           float odt = dt;
           if (lp.sync) {
-            float sem = std::min(48.f, std::max(0.f, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo + lp.syncKey * (float)(v.note - 60) / 12.f + lp.syncWheel * p.modWheel));
+            float sem = std::min(48.f, std::max(0.f, lp.syncSemis + lp.syncEnv * fE + lp.syncLfo * lfo + lp.syncKey * (float)(v.note - 60) / 12.f + lp.syncWheel * p.modWheel + md[8 + ly] * 12.f));
             odt = std::min(0.45f, dt * std::exp2(sem / 12.f));
           }
           float& op = lp.sync ? sph : ph;
@@ -577,34 +589,36 @@ class Engine {
           }
           lL = lR = s;
         }
-        float pg = (std::min(1.f, std::max(-1.f, lp.pan + p.lfoPan * lfo)) + 1.f) * kPi * 0.25f;
+        float pg = (std::min(1.f, std::max(-1.f, lp.pan + p.lfoPan * lfo + md[6])) + 1.f) * kPi * 0.25f;
         L += lp.level * lL * std::cos(pg) * 1.414f; R += lp.level * lR * std::sin(pg) * 1.414f;
       }
-      if (p.noiseLevel > 0.f) {  // white noise, high-passed (two poles) so only the top end is added
+      const float nzl = std::max(0.f, p.noiseLevel + md[12] * 0.5f), subL = std::max(0.f, p.subLevel + md[11] * 0.7f);
+      if (nzl > 0.f) {  // white noise, high-passed (two poles) so only the top end is added
         float n = (2.f * rng.next() - 1.f);
         float a = 1.f - std::exp(-2.f * kPi * std::min(0.45f * sr, std::max(100.f, p.noiseHpHz)) / sr);
         v.noiseHp += a * (n - v.noiseHp); float h1 = n - v.noiseHp;
         v.noiseHp2 += a * (h1 - v.noiseHp2); float h2 = h1 - v.noiseHp2;
-        L += p.noiseLevel * 0.5f * h2; R += p.noiseLevel * 0.5f * h2;
+        L += nzl * 0.5f * h2; R += nzl * 0.5f * h2;
       }
       auto distort = [&](float& l, float& r) {
         if (p.dist <= 0.f) return;
         float k = 1.f + p.dist * 14.f, norm = 1.f / std::tanh(k * 0.6f);
         l = std::tanh(k * l + 0.15f * p.dist) * norm * 0.8f; r = std::tanh(k * r + 0.15f * p.dist) * norm * 0.8f; };
-      if (p.subPreFilter) addSub(v, L, R, invSr);
+      if (p.subPreFilter) addSub(v, L, R, invSr, subL);
       if (p.distPre) distort(L, R);
       // filter
-      float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f + p.wheelCutoff * p.modWheel * 5.f + p.velCutoff * v.vel * 5.f);
+      float cut = p.cutoff * std::exp2(p.envAmt * fE * 5.f + p.keyTrack * (float)(v.note - 60) / 12.f + p.lfoCutoff * lfo * 2.f + p.wheelCutoff * p.modWheel * 5.f + p.velCutoff * v.vel * 5.f + md[1] * 5.f);
       cut = std::min(18000.f, std::max(20.f, cut));
-      L = v.fl.process(L, p.filterMode, cut, p.reso, p.drive, sr);
-      R = v.fr.process(R, p.filterMode, cut, p.reso, p.drive, sr);
+      const float rs = std::min(1.f, std::max(0.f, p.reso + md[2] * 0.5f)), dv = std::min(1.f, std::max(0.f, p.drive + md[3] * 0.75f));
+      L = v.fl.process(L, p.filterMode, cut, rs, dv, sr);
+      R = v.fr.process(R, p.filterMode, cut, rs, dv, sr);
       { // low cut, then distortion
-        float a = 1.f - std::exp(-2.f * kPi * std::max(5.f, p.lowCutHz) / sr);
+        float a = 1.f - std::exp(-2.f * kPi * std::max(5.f, std::min(2000.f, p.lowCutHz * std::exp2(md[13] * 4.f))) / sr);
         v.hpL += a * (L - v.hpL); v.hpR += a * (R - v.hpR); L -= v.hpL; R -= v.hpR;
         if (!p.distPre) distort(L, R);
       }
-      if (!p.subPreFilter) addSub(v, L, R, invSr);
-      float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f * v.stackGain * (1.f - p.lfoAmp * 0.5f * (1.f - lfo));
+      if (!p.subPreFilter) addSub(v, L, R, invSr, subL);
+      float g = ampE * (0.4f + 0.6f * v.vel) * 1.3f * v.stackGain * (1.f - p.lfoAmp * 0.5f * (1.f - lfo)) * (mxn ? std::max(0.f, 1.f + md[7]) : 1.f);
       oL[i] += L * g; oR[i] += R * g;
     }
   }
