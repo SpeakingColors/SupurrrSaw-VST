@@ -299,8 +299,8 @@ int main(int argc, char** argv) {
     Params a = baseP(); a.f2Mode = FilterMode::HP24; a.f2Cut = 300.f; a.f3Mode = FilterMode::Notch; a.f3Cut = 2500.f; auto ser = runP(a); a.fRoute = 1; auto par = runP(a); CHECK(allFinite(ser) && allFinite(par)); CHECK(relDiff(ser, par) > 0.05);
     Params b = baseP(); b.filterMode = FilterMode::Off; auto b0 = runP(b); b.f3Mode = FilterMode::LP12; b.f3Cut = 400.f; auto b3 = runP(b); CHECK(relDiff(b0, b3) > 0.1 && brightness(b3) < brightness(b0) * 0.6);
     Params c = baseP(); c.f2Mode = FilterMode::LP12; c.f2Cut = 300.f; c.f2Env = 1.f; c.fenv2 = {0.001f, 0.2f, 0.f, 0.1f}; c.noiseLevel = 0.f; c.chorusMix = c.delayMix = c.reverbMix = 0.f; c.fenv.s = 0.f; c.envAmt = 0.f; c.amp = {0.002f, 0.3f, 1.f, 0.2f}; auto c0 = runP(c);
-    double e1 = brightness(std::vector<float>(c0.begin() + 400, c0.begin() + 2400)), e2 = brightness(std::vector<float>(c0.begin() + 20000, c0.begin() + 22000)); double lateRms = 0; for (int i = 20000; i < 22000; ++i) lateRms += (double)c0[i] * c0[i]; lateRms = std::sqrt(lateRms / 2000);   // a silent late window counts as fully closed; brightness of near-silence is just rounding noise and differs by platform
-    CHECK(e1 > e2 * 1.2 || lateRms < 1e-4);
+    double e1 = brightness(std::vector<float>(c0.begin() + 400, c0.begin() + 1400)), e2 = brightness(std::vector<float>(c0.begin() + 4000, c0.begin() + 5000));   // the run is 12800 samples long, the note is released at 5120: both windows lie inside it
+    std::printf("fenv2 brightness early %g late %g\n", e1, e2); CHECK(c0.size() >= 5000 && e1 > e2 * 1.1);
     Params k0 = baseP(); k0.f2Mode = FilterMode::LP12; k0.f2Cut = 500.f; Params k1 = k0; k1.f2Key = 0.8f; CHECK(relDiff(runP(k0), runP(k1)) > 0.02);
     for (const char* dd : {"cut2", "cut3"}) { Params m0 = baseP(); m0.f2Mode = FilterMode::LP12; m0.f3Mode = FilterMode::LP12; m0.f2Cut = m0.f3Cut = 800.f; Params m1 = m0; mxSet(m1, "fenv2", dd, 0.8f); mxSet(m1, "vel", dd, 0.6f); CHECK(relDiff(runP(m0), runP(m1)) > 0.02); }
     std::printf("filters 2 and 3: serial vs parallel differ %.3f, envelope and matrix work\n", relDiff(ser, par));
