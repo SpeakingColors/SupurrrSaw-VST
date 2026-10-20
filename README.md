@@ -8,6 +8,10 @@ A free, open source supersaw, hoover and acid synth for **Linux, Windows and mac
 
 By **Studio 87**.
 
+**Download:** the latest release has one zip with a real installer for Windows, macOS (Apple silicon) and Linux, plus a PDF manual. Works in any DAW that loads VST3 (Ableton Live, Bitwig, Reaper, FL Studio, Studio One, Cubase and others).
+
+**Good for:** free VST3 supersaw synth, trance and hardstyle leads, hoover and rave stabs, acid bass, supersaw chords, JP-8000 style supersaw sound. Linux VST3 synth, Windows VST3 synth, macOS VST3 synth.
+
 ## What it does
 
 - **3 layers.** Each one is an oscillator or a loaded sample: Super Saw (JP-8000 style), Super Square (PWM), Saw, Pulse, Triangle, Sine, Sample.
