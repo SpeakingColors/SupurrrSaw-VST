@@ -82,6 +82,12 @@
 
   /* ---- db and downloads: files in the Studio 87 folder ---- */
   window.__SUPURR_CALL = call;
+  /* after a click that is not in a text field, give keyboard focus back to the DAW (Space, arrows and other shortcuts keep working) */
+  document.addEventListener("pointerup", e => {
+    const t = e.target, tag = t && t.tagName ? t.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable)) return;
+    setTimeout(() => { const a = document.activeElement, n = a && a.tagName ? a.tagName.toLowerCase() : ""; if (n === "input" || n === "textarea" || n === "select") return; call("releaseFocus"); }, 60);
+  }, true);
   const mkDoc = (path, json) => ({ id: path.split("/").pop(), data: () => JSON.parse(json) });
   const DB = {
     doc: path => ({

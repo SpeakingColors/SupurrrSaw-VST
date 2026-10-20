@@ -109,6 +109,30 @@ SupurrEditor::SupurrEditor (SupurrProcessor& p) : AudioProcessorEditor (&p), pro
             juce::SystemClipboard::copyTextToClipboard (Diagnostics::report());
             done (true);
         })
+        .withNativeFunction ("releaseFocus", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>&, Completion done)
+        {
+            // hand keyboard focus back to the host so Space, arrows and other DAW shortcuts keep working after a click on the plugin
+            juce::MessageManager::callAsync ([sp]
+            {
+               #if JUCE_WINDOWS
+                if (sp == nullptr) return;
+                if (auto* peer = sp->getPeer())
+                {
+                    static juce::DynamicLibrary user32 ("user32.dll");
+                    using GetParentFn = void* (__stdcall*) (void*);
+                    using SetFocusFn = void* (__stdcall*) (void*);
+                    auto getParent = (GetParentFn) user32.getFunction ("GetParent");
+                    auto setFocus = (SetFocusFn) user32.getFunction ("SetFocus");
+                    if (getParent != nullptr && setFocus != nullptr)
+                        if (void* parent = getParent (peer->getNativeHandle()))
+                            setFocus (parent);
+                }
+               #else
+                juce::ignoreUnused (sp);
+               #endif
+            });
+            done (true);
+        })
         .withNativeFunction ("resetSize", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>&, Completion done)
         {
             juce::MessageManager::callAsync ([sp] { if (sp != nullptr) sp->setSize (juce::jmin (kBaseW, 1180), (int) (juce::jmin (kBaseW, 1180) * (double) kBaseH / kBaseW)); });
