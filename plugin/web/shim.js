@@ -81,6 +81,7 @@
   B.addEventListener("meters", d => { if (node && node.port.onmessage) node.port.onmessage({ data: d }); });
 
   /* ---- db and downloads: files in the Studio 87 folder ---- */
+  window.__SUPURR_CALL = call;
   const mkDoc = (path, json) => ({ id: path.split("/").pop(), data: () => JSON.parse(json) });
   const DB = {
     doc: path => ({

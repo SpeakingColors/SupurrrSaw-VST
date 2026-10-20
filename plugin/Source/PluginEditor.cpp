@@ -109,6 +109,17 @@ SupurrEditor::SupurrEditor (SupurrProcessor& p) : AudioProcessorEditor (&p), pro
             juce::SystemClipboard::copyTextToClipboard (Diagnostics::report());
             done (true);
         })
+        .withNativeFunction ("resetSize", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>&, Completion done)
+        {
+            juce::MessageManager::callAsync ([sp] { if (sp != nullptr) sp->setSize (juce::jmin (kBaseW, 1180), (int) (juce::jmin (kBaseW, 1180) * (double) kBaseH / kBaseW)); });
+            done (true);
+        })
+        .withNativeFunction ("setScale", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>& a, Completion done)
+        {
+            const double sc = a.size() ? juce::jlimit (0.34, 2.0, (double) a[0]) : 1.0;
+            juce::MessageManager::callAsync ([sp, sc] { if (sp != nullptr) sp->setSize ((int) (kBaseW * sc), (int) (kBaseH * sc)); });
+            done (true);
+        })
         .withNativeFunction ("log", [] (const juce::Array<juce::var>& a, Completion done)
         {
             if (a.size() >= 1) Diagnostics::log ("page: " + a[0].toString().substring (0, 600));
