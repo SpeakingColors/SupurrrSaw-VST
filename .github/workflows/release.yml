@@ -170,7 +170,21 @@ jobs:
           path: zips
           pattern: installer-*
           merge-multiple: true
+      - name: Make the zip (installers, manual, install note, checksums)
+        run: |
+          Z="SupurrSaw_v${VER}"
+          mkdir -p "$Z/Installers"
+          cp zips/* "$Z/Installers/"
+          cp docs/SupurrSaw_Manual.pdf "$Z/SupurrSaw_Manual.pdf"
+          sed "s/vX\.Y\.Z/v$VER/g" release/INSTALL.txt > "$Z/INSTALL.txt"
+          cp LICENSE "$Z/LICENSE"
+          (cd "$Z" && find . -type f ! -name SHA256SUMS.txt | sort | xargs sha256sum > SHA256SUMS.txt)
+          zip -r -q "$Z.zip" "$Z"
+          ls -la "$Z" "$Z/Installers" "$Z.zip"
       - name: Create the release
         run: |
-          ls -la zips
-          gh release create "v$VER" zips/* docs/SupurrSaw_Manual.pdf --target "$GITHUB_SHA" --title "SupurrSaw v$VER" --notes-file release/NOTES.md
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            gh release upload "v$VER" "SupurrSaw_v$VER.zip" --clobber
+          else
+            gh release create "v$VER" "SupurrSaw_v$VER.zip" --target "$GITHUB_SHA" --title "SupurrSaw v$VER" --notes-file release/NOTES.md
+          fi

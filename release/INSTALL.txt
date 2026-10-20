@@ -1,0 +1,36 @@
+SupurrSaw by Studio 87: how to install
+======================================
+
+1. Unzip this file first (do not run things from inside the zip).
+2. Open the installer for your system and follow it. You do not copy any plugin folder by hand.
+
+WINDOWS 10 or 11
+  Installers/SupurrSaw_vX.Y.Z_windows_setup.exe
+  Double click, Next, Install. The plugin goes into C:\Program Files\Common Files\VST3 (where your DAW looks).
+  The standalone app and the manual go into the folder the installer shows, with a Start menu entry.
+  Uninstall: Settings, Apps, SupurrSaw, Uninstall (or the Uninstall entry in the Start menu).
+  Windows may show a blue "Windows protected your PC" window because the installer is not signed yet.
+  Click "More info", then "Run anyway".
+
+MACOS (Apple silicon)
+  Installers/SupurrSaw_vX.Y.Z_macos.pkg
+  Double click and Continue until it is done. The plugin goes into /Library/Audio/Plug-Ins/VST3,
+  the standalone app into Applications.
+  If macOS refuses to open it (not signed yet): System Settings, Privacy and Security, scroll down, click Open Anyway.
+  Uninstall: delete /Library/Audio/Plug-Ins/VST3/SupurrSaw.vst3 and SupurrSaw in Applications.
+
+LINUX
+  DAW installed normally:   Installers/SupurrSaw_vX.Y.Z_linux.deb
+    Double click it in your software center, or run: sudo apt install ./SupurrSaw_vX.Y.Z_linux.deb
+    The plugin goes into /usr/lib/vst3. Uninstall: sudo apt remove supurrsaw
+  Standalone app only (Flatpak):   Installers/SupurrSaw_vX.Y.Z_linux.flatpak
+    Double click it in your software center, or run: flatpak install SupurrSaw_vX.Y.Z_linux.flatpak
+    Needs the internet once to fetch the Flatpak runtime. Uninstall: flatpak uninstall org.studio87.SupurrSaw
+
+After installing, restart your DAW or rescan plugins, load SupurrSaw as an instrument and play.
+The manual is SupurrSaw_Manual.pdf in this zip. SHA256SUMS.txt lets you check the files were not changed.
+
+Your presets, saved waves, exports and the log are kept in your user folder under Studio 87/SupurrSaw.
+The Files button inside the plugin opens them.
+
+Free and open source (AGPL-3.0-or-later). Source code and help: https://github.com/SpeakingColors/SupurrrSaw-VST

@@ -29,6 +29,10 @@ PrivilegesRequired=admin
 WizardStyle=modern
 VersionInfoVersion={#AppVer}
 
+[Messages]
+SelectDirLabel3=This folder holds the standalone app and the manual. The plugin (VST3) is installed separately into C:\Program Files\Common Files\VST3, where your DAW looks for it.
+SelectDirBrowseLabel=Click Next to continue. To choose a different folder for the standalone app, click Browse.
+
 [Components]
 Name: "vst3"; Description: "SupurrSaw plugin (VST3), installed where your DAW looks for it"; Types: full compact custom; Flags: fixed
 Name: "standalone"; Description: "SupurrSaw standalone app (play it without a DAW)"; Types: full custom
