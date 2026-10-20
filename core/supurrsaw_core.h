@@ -102,6 +102,7 @@ inline double envShape(double f, double c, bool rising) {
 }
 
 struct LayerParams {
+  bool on = true;              // layer switch: off keeps the wave and settings but mutes the layer
   Wave wave = Wave::Off;
   float level = 0.7f;
   int voices = 7;          // 1..15 for the super waves
@@ -231,6 +232,11 @@ struct Params {
   float build = 0.f;
   // mod effect in the chorus slot: 0 chorus, 1 flanger, 2 phaser (chorusMix is the amount); chorusFb is the feedback of the flanger and phaser
   int modFxType = 0; float chorusFb = 0.5f;
+  // Stack: when on, the two types that are not picked also run, each with its own knobs (mx0 chorus, mx1 flanger, mx2 phaser)
+  bool mfxMulti = false;
+  float mx0Mix = 0.f, mx0Depth = 0.5f, mx0Rate = 0.6f, mx0Delay = 12.f, mx0Width = 1.f, mx0Fb = 0.5f;
+  float mx1Mix = 0.f, mx1Depth = 0.6f, mx1Rate = 0.25f, mx1Delay = 6.f, mx1Width = 1.f, mx1Fb = 0.6f;
+  float mx2Mix = 0.f, mx2Depth = 0.7f, mx2Rate = 0.35f, mx2Delay = 12.f, mx2Width = 1.f, mx2Fb = 0.5f;
   // crusher (bit depth and sample rate reduction) after the colour stack; crushMix 0 = off
   float crushBits = 16.f, crushRate = 1.f, crushMix = 0.f;
   // width: mid/side with separate width below and above 2 kHz, plus mid and side saturation (side only above 2 kHz)
@@ -556,31 +562,43 @@ struct WidthStage {
     if (ms > 0) { m = sat(0, m, ms); }
     const double s2 = sl * wm + hi * wh; oL = m + s2; oR = m - s2; } };
 struct Fx {
-  double sr = 48000.; DelayLine chor, dl, dr, pre, fl[2]; Reverb rev; double lfo = 0., dlp[2] = {0, 0}, rhp = 0., dtSm = -1., ph[2][6] = {}, phFb[2] = {0, 0};
+  double sr = 48000.; DelayLine chor, dl, dr, pre, fl[2]; Reverb rev; double lfo = 0., lfoT[3] = {0, 0, 0}, dlp[2] = {0, 0}, rhp = 0., dtSm = -1., ph[2][6] = {}, phFb[2] = {0, 0};
   double wt[8] = {1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9};   // min/max of the delay and reverb wet signal, for the live display
   void wetTake(float* o) { for (int i = 0; i < 8; ++i) { o[i] = std::fabs(wt[i]) > 1e8 ? 0.f : (float)wt[i]; wt[i] = (i & 1) ? -1e9 : 1e9; } }
   void prepare(double s) { sr = s; chor.init((size_t)(0.05 * s)); dl.init((size_t)(2. * s)); dr.init((size_t)(2. * s)); rev.init(s); pre.init((size_t)(0.26 * s)); fl[0].init((size_t)(0.02 * s)); fl[1].init((size_t)(0.02 * s));
-    lfo = 0.; dlp[0] = dlp[1] = 0.; rhp = 0.; dtSm = -1.; for (auto& a : ph) for (double& v : a) v = 0; phFb[0] = phFb[1] = 0; }
+    lfo = 0.; lfoT[0] = lfoT[1] = lfoT[2] = 0.; dlp[0] = dlp[1] = 0.; rhp = 0.; dtSm = -1.; for (auto& a : ph) for (double& v : a) v = 0; phFb[0] = phFb[1] = 0; }
   void process(const Params& p, double& L, double& R) {
     const double m = 0.5 * (L + R); const int mt = p.modFxType;
-    if (p.chorusMix > 0 && mt == 1) {   // flanger: short swept delay with feedback
-      lfo += p.chorusRate / sr; if (lfo >= 1) lfo -= 1; const double base = std::max(0.0004, p.chorusDelay * 0.00025), fb = std::max(-0.95, std::min(0.95, (double)p.chorusFb)), wd = 0.25 * p.chorusWidth; double out[2] = {L, R};
-      for (int c = 0; c < 2; ++c) { const double x = c ? R : L, phs = lfo + (c ? wd : 0), d = (base * (1 + 0.9 * p.chorusDepth * std::sin(2 * kPiD * phs))) * sr, y = fl[c].read(std::max(1.0, d)); fl[c].push(x + fb * y); out[c] = x + p.chorusMix * y; }
-      L = out[0]; R = out[1];
-    } else if (p.chorusMix > 0 && mt == 2) {   // phaser: 6 allpass stages swept in frequency, with feedback
-      lfo += p.chorusRate / sr; if (lfo >= 1) lfo -= 1; const double fb = std::max(-0.95, std::min(0.95, (double)p.chorusFb)), wd = 0.25 * p.chorusWidth; double out[2] = {L, R};
-      for (int c = 0; c < 2; ++c) { const double x = c ? R : L, phs = lfo + (c ? wd : 0), f = std::min(0.45 * sr, 220 * std::pow(2.0, p.chorusDepth * 4.2 * (0.5 + 0.5 * std::sin(2 * kPiD * phs)))), tg = std::tan(kPiD * f / sr), a = (tg - 1) / (tg + 1); double* z = ph[c]; double v = x + fb * phFb[c];
-        for (int k = 0; k < 6; ++k) { const double y = a * v + z[k]; z[k] = v - a * y; v = y; } phFb[c] = v; out[c] = x * (1 - 0.5 * p.chorusMix) + v * 0.5 * p.chorusMix; }
-      L = out[0]; R = out[1];
+    static const int kOrder[3] = {1, 2, 0};   // stages run flanger, phaser, chorus; the picked type uses the main knobs, the others only run when Stack is on
+    for (int oi = 0; oi < 3; ++oi) {
+      const int t = kOrder[oi]; double mix, depth, rate, delay, width, fbk;
+      if (t == mt) { mix = p.chorusMix; depth = p.chorusDepth; rate = p.chorusRate; delay = p.chorusDelay; width = p.chorusWidth; fbk = p.chorusFb; }
+      else if (p.mfxMulti) {
+        switch (t) {
+          case 0: mix = p.mx0Mix; depth = p.mx0Depth; rate = p.mx0Rate; delay = p.mx0Delay; width = p.mx0Width; fbk = p.mx0Fb; break;
+          case 1: mix = p.mx1Mix; depth = p.mx1Depth; rate = p.mx1Rate; delay = p.mx1Delay; width = p.mx1Width; fbk = p.mx1Fb; break;
+          default: mix = p.mx2Mix; depth = p.mx2Depth; rate = p.mx2Rate; delay = p.mx2Delay; width = p.mx2Width; fbk = p.mx2Fb; break;
+        }
+      } else continue;
+      if (!(mix > 0)) continue;
+      lfoT[t] += rate / sr; if (lfoT[t] >= 1) lfoT[t] -= 1; const double lf = lfoT[t];
+      if (t == 1) {   // flanger: short swept delay with feedback
+        const double base = std::max(0.0004, delay * 0.00025), fb = std::max(-0.95, std::min(0.95, fbk)), wd = 0.25 * width; double out[2] = {L, R};
+        for (int c = 0; c < 2; ++c) { const double x = c ? R : L, phs = lf + (c ? wd : 0), d = (base * (1 + 0.9 * depth * std::sin(2 * kPiD * phs))) * sr, y = fl[c].read(std::max(1.0, d)); fl[c].push(x + fb * y); out[c] = x + mix * y; }
+        L = out[0]; R = out[1];
+      } else if (t == 2) {   // phaser: 6 allpass stages swept in frequency, with feedback
+        const double fb = std::max(-0.95, std::min(0.95, fbk)), wd = 0.25 * width; double out[2] = {L, R};
+        for (int c = 0; c < 2; ++c) { const double x = c ? R : L, phs = lf + (c ? wd : 0), f = std::min(0.45 * sr, 220 * std::pow(2.0, depth * 4.2 * (0.5 + 0.5 * std::sin(2 * kPiD * phs)))), tg = std::tan(kPiD * f / sr), a = (tg - 1) / (tg + 1); double* z = ph[c]; double v = x + fb * phFb[c];
+          for (int k = 0; k < 6; ++k) { const double y = a * v + z[k]; z[k] = v - a * y; v = y; } phFb[c] = v; out[c] = x * (1 - 0.5 * mix) + v * 0.5 * mix; }
+        L = out[0]; R = out[1];
+      } else {   // chorus, side-only: the left and right wet signals are opposite, so they cancel in mono
+        chor.push(0.5 * (L + R)); const double cd = delay * 0.001; const double d = (cd + 0.006 * depth * std::sin(2. * kPiD * lf)) * sr;
+        const double d2 = (cd + 0.005 + 0.006 * depth * std::sin(2. * kPiD * (lf + 0.5))) * sr;
+        const double w = chor.read(d) - chor.read(d2);   // adds width without shifting the left/right balance
+        L += mix * w; R -= mix * w * width;
+      }
     }
-    if (p.chorusMix > 0 && mt == 0) {  // chorus, side-only: the left and right wet signals are opposite, so they cancel in mono
-      lfo += p.chorusRate / sr; if (lfo >= 1.) lfo -= 1.;
-      chor.push(m); const double cd = p.chorusDelay * 0.001; const double d = (cd + 0.006 * p.chorusDepth * std::sin(2. * kPiD * lfo)) * sr;
-      const double d2 = (cd + 0.005 + 0.006 * p.chorusDepth * std::sin(2. * kPiD * (lfo + 0.5))) * sr;
-      // side = difference of two differently delayed copies: adds width without shifting the left/right balance
-      const double w = chor.read(d) - chor.read(d2);
-      L += p.chorusMix * w; R -= p.chorusMix * w * p.chorusWidth;
-    }
+    (void)m;
     if (p.delayMix > 0.) {  // ping-pong, darker on every repeat
       const double tt = delaySeconds(p) * sr;
       if (dtSm < 0.) dtSm = tt; dtSm += (tt - dtSm) * (1. - std::exp(-1. / (0.06 * sr)));   // time changes glide like tape instead of clicking
@@ -918,7 +936,7 @@ class Engine {
     double sv[kMxSrc] = {}, md[kMxDst] = {};
     for (int q = 0; q < 3; ++q) { v.fl[q].cb = &combPool[((size_t)vi * 6 + q * 2) * 4096]; v.fr[q].cb = &combPool[((size_t)vi * 6 + q * 2 + 1) * 4096]; }
     bool usedAsSrc[kLayers] = {}, anyFmSub = false, anyFmNz = false;
-    for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly]; if (q.wave == Wave::Off || q.level <= 0.f) continue;
+    for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly]; if (!q.on || q.wave == Wave::Off || q.level <= 0.f) continue;
       if (q.fmAmt > 0.f && q.fmSrc >= 1 && q.fmSrc <= 3) usedAsSrc[q.fmSrc - 1] = true; if (q.amAmt > 0.f && q.amSrc >= 1 && q.amSrc <= 3) usedAsSrc[q.amSrc - 1] = true;
       if ((q.fmAmt > 0.f && q.fmSrc == 4) || (q.amAmt > 0.f && q.amSrc == 4)) anyFmSub = true; if ((q.fmAmt > 0.f && q.fmSrc == 5) || (q.amAmt > 0.f && q.amSrc == 5)) anyFmNz = true; }
     // per-block tables for the supersaw layers (pan law and spread depend only on settings, so they are not recomputed per sample)
@@ -935,7 +953,7 @@ class Engine {
       const double ampE = v.amp.tick(p.amp, sr); double aE2 = ampE, aE3 = ampE;
       if (!link) { aE2 = v.amp2.tick(p.amp2, sr); aE3 = v.amp3.tick(p.amp3, sr); }
       const double fE = v.fenv.tick(p.fenv, sr), fE2 = v.fenv2.tick(p.fenv2, sr), fE3 = v.fenv3.tick(p.fenv3, sr);
-      if (v.amp.stage == 0 && (link || ((p.layer[1].wave == Wave::Off || v.amp2.stage == 0) && (p.layer[2].wave == Wave::Off || v.amp3.stage == 0) && (p.layer[0].wave == Wave::Off || v.amp.stage == 0)))) { v.active = false; return; }
+      if (v.amp.stage == 0 && (link || ((!p.layer[1].on || p.layer[1].wave == Wave::Off || v.amp2.stage == 0) && (!p.layer[2].on || p.layer[2].wave == Wave::Off || v.amp3.stage == 0) && (!p.layer[0].on || p.layer[0].wave == Wave::Off || v.amp.stage == 0)))) { v.active = false; return; }
       const bool ctl = (v.ctr++ & 3) == 0;
       v.lfoPhase += p.lfoRate * invSr; if (v.lfoPhase >= 1.0) { v.lfoPhase -= 1.0; v.sh0 = v.sh; v.sh = 2.0 * rng.next() - 1.0; }
       for (int k = 0; k < 2; ++k) { v.lp2[k] += (k ? p.lfo3Rate : p.lfo2Rate) * invSr; if (v.lp2[k] >= 1.0) { v.lp2[k] -= 1.0; v.sb[k] = v.sa[k]; v.sa[k] = v.lfoRnd(); } }
@@ -979,7 +997,7 @@ class Engine {
           if (ctl) v.sq[ly] = std::pow(2.0, (lp.smpPitch + (smpKeyed(lp.smp) ? v.note - 60 + v.gl : 0.0)) / 12.0);
           const double pos = v.sp[ly]; const int i0 = (int)pos;
           if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } }
-        if (lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
+        if (!lp.on || lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
         double f;
         if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
           f = 440.0 * std::pow(2.0, semis / 12.0); v.fC[ly] = f; } else f = v.fC[ly];

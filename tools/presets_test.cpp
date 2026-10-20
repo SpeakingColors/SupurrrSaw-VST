@@ -373,6 +373,13 @@ int main(int argc, char** argv) {
     Params w0 = baseP(); w0.dmMix = 0.f; w0.limiter = false; w0.spread = 1.f; w0.layer[0].detune = 0.8f; w0.chorusMix = 0.f; auto w0l = runP(w0); Params w1 = w0; w1.widMid = 0.f; w1.widHi = 0.f; std::vector<float> wl, wr; runP(w1, &wr); wl = runP(w1); double dd = 0, ss = 0; for (size_t i = 0; i < wl.size(); ++i) { dd += std::fabs(wl[i] - wr[i]); ss += std::fabs(wl[i]); } CHECK(dd < ss * 1e-6);
     Params w2 = w0; w2.widMid = 1.f; w2.widHi = 1.f; CHECK(relDiff(w0l, runP(w2)) == 0.0);
     Params w3 = w0; w3.widHi = 1.8f; w3.widMid = 0.4f; CHECK(relDiff(w0l, runP(w3)) > 0.01); Params w4 = w0; w4.msMid = 0.7f; w4.msSide = 0.7f; auto w4o = runP(w4); CHECK(allFinite(w4o) && relDiff(w0l, w4o) > 0.01);
+    // stack: the types that are not picked only run when Stack is on, and then each uses its own knobs
+    { Params a = baseP(); a.chorusMix = 0.5f; a.modFxType = 0; a.mx1Mix = 0.5f; a.mx2Mix = 0.5f; auto off = runP(a); Params b = a; b.mfxMulti = true; auto on = runP(b);
+      CHECK(allFinite(on) && relDiff(off, on) > 0.02); Params c = a; c.mx1Mix = c.mx2Mix = 0.f; c.mfxMulti = true; CHECK(relDiff(off, runP(c)) < 1e-9);   // stack on but the others at 0: unchanged
+      Params d = b; d.mx1Mix = 0.f; CHECK(relDiff(on, runP(d)) > 0.01);   // each extra set is live
+      Params e = b; e.mx2Mix = 0.f; CHECK(relDiff(on, runP(e)) > 0.01); }
+    // layer switch: off mutes the layer and keeps its wave; on brings it back bit for bit
+    { Params a = baseP(); auto base = runP(a); Params b = a; b.layer[0].on = false; auto off = runP(b); CHECK(relDiff(base, off) > 0.05 && b.layer[0].wave != Wave::Off); Params c = b; c.layer[0].on = true; CHECK(relDiff(base, runP(c)) == 0.0); }
     std::printf("effects: flanger, phaser (both polarities), crush and width behave\n");
   }
   { // low cut / high cut: the high pass reaches up to 20 kHz, auxSlope sets 6/12/18/24 dB per octave, highCutHz works next to a highpass filter and is ignored otherwise

@@ -77,7 +77,10 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(menvTime); S87_B(menvInv); S87_B(menvLoop); S87_F(lfoDepth); S87_F(lfoFade); S87_F(lfoStart); S87_F(pitchHold); S87_F(pitchCurve);
         // added with the big build: ranges are the ones of the page's knobs
         S87_FR(highCutHz, 20.f, 20000.f); S87_IR(auxSlope, 0, 5); S87_B(ampLink); S87_IR(fRoute, 0, 1); S87_FR(build, 0.f, 1.f);
-        S87_IR(modFxType, 0, 2); S87_FR(chorusFb, -0.95f, 0.95f); S87_FR(crushBits, 1.f, 16.f); S87_FR(crushRate, 1.f, 40.f); S87_FR(crushMix, 0.f, 1.f);
+        S87_IR(modFxType, 0, 2); S87_B(mfxMulti);
+        S87_F(mx0Mix); S87_F(mx0Depth); S87_F(mx0Rate); S87_F(mx0Delay); S87_F(mx0Width); S87_FR(mx0Fb, -0.95f, 0.95f);
+        S87_F(mx1Mix); S87_F(mx1Depth); S87_F(mx1Rate); S87_F(mx1Delay); S87_F(mx1Width); S87_FR(mx1Fb, -0.95f, 0.95f);
+        S87_F(mx2Mix); S87_F(mx2Depth); S87_F(mx2Rate); S87_F(mx2Delay); S87_F(mx2Width); S87_FR(mx2Fb, -0.95f, 0.95f); S87_FR(chorusFb, -0.95f, 0.95f); S87_FR(crushBits, 1.f, 16.f); S87_FR(crushRate, 1.f, 40.f); S87_FR(crushMix, 0.f, 1.f);
         S87_FR(widMid, 0.f, 2.f); S87_FR(widHi, 0.f, 2.f); S87_FR(msMid, 0.f, 1.f); S87_FR(msSide, 0.f, 1.f);
         S87_FR(f2Cut, 20.f, 20000.f); S87_FR(f2Res, 0.f, 1.f); S87_FR(f2Drv, 0.f, 1.5f); S87_F(f2Env); S87_F(f2Key);
         S87_FR(f3Cut, 20.f, 20000.f); S87_FR(f3Res, 0.f, 1.f); S87_FR(f3Drv, 0.f, 1.5f); S87_F(f3Env); S87_F(f3Key);
@@ -152,6 +155,7 @@ inline bool setLayerKey(supurr::LayerParams& l, const std::string& k, const juce
     if (k == "octave")     { l.octave = asI(v); return true; }
     if (k == "tune")       { l.tune = asF(v); return true; }
     if (k == "pan")        { l.pan = asF(v); return true; }
+    if (k == "on")         { l.on = asB(v); return true; }
     if (k == "sync")       { l.sync = asB(v); return true; }
     if (k == "syncSemis")  { l.syncSemis = asF(v); return true; }
     if (k == "syncEnv")    { l.syncEnv = asF(v); return true; }
