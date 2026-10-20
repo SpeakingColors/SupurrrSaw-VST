@@ -2876,7 +2876,7 @@ window.addEventListener("keydown",e=>{
   if(k in KEYMAP&&!keyNote.has(k)){const n=oct*12+12+KEYMAP[k];keyNote.set(k,n);noteOn(n,0.8);}
 });
 window.addEventListener("keyup",e=>{const k=e.key.toLowerCase();if(keyNote.has(k)){noteOff(keyNote.get(k));keyNote.delete(k);}});
-window.addEventListener("blur",()=>panic());
+window.addEventListener("blur",()=>{if(window.__SUPURR_PLUGIN){[...held].forEach(n=>noteOff(n));keyNote.clear();return;}panic();});   /* in the plugin, clicking the DAW must not cut sound that is playing */
 function setOct(o){oct=clamp(o,0,7);buildKbd();}
 function panic(){held.forEach(n=>lightKey(n,0));held.clear();keyNote.clear();send({t:"all"});stopDemo();}
 $("#octd").onclick=()=>setOct(oct-1);$("#octu").onclick=()=>setOct(oct+1);$("#panic").onclick=panic;

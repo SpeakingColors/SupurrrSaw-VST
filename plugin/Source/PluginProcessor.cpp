@@ -116,7 +116,8 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         if (isMuted) continue;
         if (msg.isNoteOn()) noteOnAny (msg.getNoteNumber(), msg.getFloatVelocity());
         else if (msg.isNoteOff()) noteOffAny (msg.getNoteNumber());
-        else if (msg.isAllNotesOff() || msg.isAllSoundOff()) allOffAny();
+        else if (msg.isAllSoundOff()) allOffAny();
+        else if (msg.isAllNotesOff()) engine.releaseAll();   // hosts send this when a clip changes or the transport stops: let the notes release, no cut
         else if (msg.isController() && msg.getControllerNumber() == 1)
         {
             wheelCC = (float) msg.getControllerValue() / 127.f;

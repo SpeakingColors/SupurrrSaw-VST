@@ -813,6 +813,7 @@ class Engine {
   }
   void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) envsOff(v); }
   void allOff() { for (auto& v : voices) v.active = false; }
+  void releaseAll() { for (auto& v : voices) if (v.active && v.amp.stage != 3 && !v.oneShot) envsOff(v); }   // like every key let go: tails ring out
   struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}; };
   void wetTake(float* o) { fx.wetTake(o); }
   Meters meters() const { Meters m = mtr; m.lim = (float)limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = (float)dyn.gr[i]; m.dm[i] = (float)dm.gr[i]; } return m; }
