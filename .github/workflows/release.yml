@@ -1,116 +1,114 @@
+# Release build, same layout as the other Studio 87 plugins: one zip with
+#   windows/SupurrSaw-Setup.exe, macos/SupurrSaw-macOS.pkg, linux/ (.deb, .vst3 tarball, standalone Flatpak),
+#   the PDF manual, INSTALL.txt, LICENSE and SHA256SUMS.
+# Run it by hand (Actions tab, Run workflow) and type a tag like v0.2.6, or push a tag. Empty tag only builds.
 name: release
-# Click Run workflow (Actions tab), type a version like 0.2.0, and it builds Linux, Windows and macOS,
-# makes a real installer for each (Windows setup .exe, macOS .pkg, Linux .deb and Flatpak) and publishes a GitHub release with them and the manual.
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version number, digits only, for example 0.2.0"
-        required: true
-        default: "0.2.0"
-
+      tag:
+        description: 'Publish a release with this tag (for example v0.2.6). Leave empty to only build.'
+        required: false
+        default: ''
 permissions:
-  contents: write
-
+  contents: read
+env:
+  TAGIN: ${{ inputs.tag }}
+  NAME: SupurrSaw
+  PRODUCT: "SupurrSaw"
+  WV2: Microsoft.Web.WebView2.1.0.1901.177
 jobs:
-  check:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Version looks right
-        env:
-          V: ${{ inputs.version }}
-        run: |
-          echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::Version must look like 1.2.3"; exit 1; }
-
-  build:
-    needs: check
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            name: linux
-          - os: windows-latest
-            name: windows
-          - os: macos-latest
-            name: macos
-    runs-on: ${{ matrix.os }}
-    name: Build ${{ matrix.name }}
-    env:
-      VER: ${{ inputs.version }}
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: WebView2 package (static loader, nothing to install for users)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.1901.177 -OutFile wv2.zip
+          Expand-Archive wv2.zip "webview2/$env:WV2"
+      - name: Build
+        run: |
+          ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; if echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then sed -i.bak -E "s/^(project\([A-Za-z0-9_]+ VERSION )[0-9.]+/\1$ver/" plugin/CMakeLists.txt; rm -f plugin/CMakeLists.txt.bak; fi
+          cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_WEBVIEW2_PACKAGE_LOCATION="$GITHUB_WORKSPACE/webview2"
+          cmake --build build --config Release --parallel 4
+      - name: Stage files
+        run: |
+          mkdir -p stage/vst3
+          v=$(find build -type d -name "*.vst3" | head -1); echo "VST3: $v"
+          cp -r "$v"/. "stage/vst3/"
+          exe=$(find build -name "*.exe" -path "*Standalone*" | head -1); echo "EXE: $exe"
+          cp "$exe" "stage/$PRODUCT.exe"
+          cp docs/SupurrSaw_Manual.pdf "stage/$NAME-manual.pdf"
+      - name: Installer (Inno Setup)
+        run: |
+          ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || ver=0.0.1
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          [ -f "$iscc" ] || { choco install innosetup -y --no-progress; }
+          "$iscc" "//DName=$NAME" "//DProduct=$PRODUCT" "//DVersion=$ver" packaging/windows.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: "Output/*.exe"
 
-      - name: Linux packages
-        if: matrix.name == 'linux'
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (universal)
+        run: |
+          ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; if echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then sed -i.bak -E "s/^(project\([A-Za-z0-9_]+ VERSION )[0-9.]+/\1$ver/" plugin/CMakeLists.txt; rm -f plugin/CMakeLists.txt.bak; fi
+          cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          cmake --build build --config Release --parallel 4
+      - name: Installer (.pkg)
+        run: |
+          ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || ver=0.0.1
+          id="io.github.speakingcolors.$(echo "$NAME" | tr 'A-Z' 'a-z')"
+          v=$(find build -type d -name "*.vst3" | head -1); a=$(find build -type d -name "*.app" | head -1)
+          echo "VST3: $v  APP: $a"
+          mkdir -p root/vst3 root/app root/doc
+          osacompile -o "root/app/Uninstall $PRODUCT.app" packaging/macos-uninstall.applescript
+          cp -R "$v" root/vst3/; cp -R "$a" root/app/; cp docs/SupurrSaw_Manual.pdf "root/doc/$NAME-manual.pdf"
+          codesign --force --deep -s - "root/vst3/$(basename "$v")"; codesign --force --deep -s - "root/app/$(basename "$a")"
+          pkgbuild --root root/vst3 --identifier "$id.vst3" --version "$ver" --install-location "/Library/Audio/Plug-Ins/VST3" vst3.pkg
+          pkgbuild --root root/app --identifier "$id.app" --version "$ver" --install-location "/Applications" app.pkg
+          pkgbuild --root root/doc --identifier "$id.doc" --version "$ver" --install-location "/Library/Application Support/Studio 87/$PRODUCT" doc.pkg
+          productbuild --package vst3.pkg --package app.pkg --package doc.pkg "$NAME-macOS.pkg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: "*.pkg"
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
             libxinerama-dev libxrandr-dev libxrender-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev \
-            libwebkit2gtk-4.1-dev libgtk-3-dev
-
-      - name: Windows WebView2 package (static loader, nothing to install for users)
-        if: matrix.name == 'windows'
-        shell: pwsh
-        run: |
-          Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.1901.177 -OutFile wv2.zip
-          Expand-Archive wv2.zip webview2/Microsoft.Web.WebView2.1.0.1901.177
-
-      - name: Set the version (this build only)
-        shell: bash
-        run: sed -i.bak "s/project(SupurrSaw VERSION [0-9.]*/project(SupurrSaw VERSION $VER/" plugin/CMakeLists.txt && grep -n "^project" plugin/CMakeLists.txt
-
-      - name: Configure
-        shell: bash
-        run: |
-          EXTRA=""
-          if [ "${{ matrix.name }}" = "windows" ]; then EXTRA="-DJUCE_WEBVIEW2_PACKAGE_LOCATION=$GITHUB_WORKSPACE/webview2"; fi
-          cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release $EXTRA
-
+            libwebkit2gtk-4.1-dev libgtk-3-dev flatpak flatpak-builder
       - name: Build
-        run: cmake --build build --config Release --parallel 4
-
-      - name: Collect the built files
-        shell: bash
         run: |
-          mkdir -p payload
-          find build/SupurrSaw_artefacts -maxdepth 3 \( -name "*.vst3" -o -name "SupurrSaw" -o -name "SupurrSaw.exe" -o -name "SupurrSaw.app" \) -not -path "*/JuceLibraryCode/*" | while read f; do cp -R "$f" payload/; done
-          cp docs/SupurrSaw_Manual.pdf payload/SupurrSaw_Manual.pdf
-          cp LICENSE payload/LICENSE
-          ls -la payload
-          test -d payload/SupurrSaw.vst3 || { echo "::error::no SupurrSaw.vst3 was built"; exit 1; }
-
-      - name: Windows installer (Inno Setup)
-        if: matrix.name == 'windows'
-        shell: pwsh
+          ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; if echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then sed -i.bak -E "s/^(project\([A-Za-z0-9_]+ VERSION )[0-9.]+/\1$ver/" plugin/CMakeLists.txt; rm -f plugin/CMakeLists.txt.bak; fi
+          cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 4
+          mkdir -p payload out
+          v=$(find build -type d -name "*.vst3" | head -1); echo "VST3: $v"; cp -R "$v" payload/
+          s=$(find build -type f -name SupurrSaw -path "*Standalone*" | head -1); echo "APP: $s"; cp "$s" payload/SupurrSaw
+          cp docs/SupurrSaw_Manual.pdf payload/SupurrSaw_Manual.pdf; cp LICENSE payload/LICENSE
+          test -d payload/SupurrSaw.vst3 && test -f payload/SupurrSaw
+      - name: Plain .vst3 tarball
+        run: tar -C payload -czf "out/$NAME-linux-vst3.tar.gz" SupurrSaw.vst3
+      - name: .deb for native DAWs
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
-          if (-not (Test-Path $iscc)) { throw "Inno Setup not found" }
-          $stage = (Resolve-Path payload).Path
-          & $iscc "/DAppVer=$env:VER" "/DStage=$stage" "/O$PWD\out" release\windows\SupurrSaw.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-          Get-ChildItem out
-
-      - name: macOS installer (.pkg)
-        if: matrix.name == 'macos'
-        run: |
-          mkdir -p root/Library/Audio/Plug-Ins/VST3 root/Applications "root/Library/Application Support/Studio 87/SupurrSaw" out res
-          cp -R payload/SupurrSaw.vst3 root/Library/Audio/Plug-Ins/VST3/
-          cp -R payload/SupurrSaw.app root/Applications/
-          cp payload/SupurrSaw_Manual.pdf "root/Library/Application Support/Studio 87/SupurrSaw/"
-          cp payload/LICENSE res/LICENSE.txt
-          cp release/macos/welcome.html res/welcome.html
-          pkgbuild --root root --identifier com.studio87.supurrsaw --version "$VER" --install-location / --ownership recommended SupurrSaw-component.pkg
-          productbuild --distribution release/macos/distribution.xml --resources res --package-path . "out/SupurrSaw_v${VER}_macos.pkg"
-          pkgutil --payload-files "out/SupurrSaw_v${VER}_macos.pkg" | head -20 || true
-          ls -la out
-
-      - name: Linux packages (.deb and Flatpak)
-        if: matrix.name == 'linux'
-        run: |
-          mkdir -p out
-          # .deb for native DAWs
+          ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || ver=0.0.1
           D=debroot
           mkdir -p $D/DEBIAN $D/usr/bin $D/usr/lib/vst3 $D/usr/share/applications $D/usr/share/doc/supurrsaw $D/usr/share/icons/hicolor/256x256/apps
           cp -R payload/SupurrSaw.vst3 $D/usr/lib/vst3/
@@ -119,24 +117,11 @@ jobs:
           sed 's/^Icon=.*/Icon=supurrsaw/' release/linux/org.studio87.SupurrSaw.desktop > $D/usr/share/applications/supurrsaw.desktop
           cp release/linux/org.studio87.SupurrSaw.png $D/usr/share/icons/hicolor/256x256/apps/supurrsaw.png
           find $D -type d -exec chmod 755 {} +
-          cat > $D/DEBIAN/control <<EOF
-          Package: supurrsaw
-          Version: $VER
-          Section: sound
-          Priority: optional
-          Architecture: amd64
-          Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libasound2 | libasound2t64
-          Maintainer: Studio 87 <noreply@users.noreply.github.com>
-          Homepage: https://github.com/SpeakingColors/SupurrrSaw-VST
-          Description: SupurrSaw supersaw, hoover and acid synth (VST3 and standalone)
-           Free and open source synthesizer by Studio 87. Installs the VST3 plugin
-           into /usr/lib/vst3 and the standalone app as supurrsaw.
-          EOF
-          sed -i 's/^          //' $D/DEBIAN/control
-          dpkg-deb --root-owner-group --build $D "out/SupurrSaw_v${VER}_linux.deb"
-          dpkg-deb -I "out/SupurrSaw_v${VER}_linux.deb"
-          # Flatpak (standalone app)
-          sudo apt-get install -y flatpak flatpak-builder
+          printf 'Package: supurrsaw\nVersion: %s\nSection: sound\nPriority: optional\nArchitecture: amd64\nDepends: libwebkit2gtk-4.1-0, libgtk-3-0, libasound2 | libasound2t64\nMaintainer: Studio 87 <noreply@users.noreply.github.com>\nHomepage: https://github.com/SpeakingColors/SupurrrSaw-VST\nDescription: SupurrSaw supersaw, hoover and acid synth (VST3 and standalone)\n Free and open source synthesizer by Studio 87. Installs the VST3 plugin\n into /usr/lib/vst3 and the standalone app as supurrsaw.\n' "$ver" > $D/DEBIAN/control
+          dpkg-deb --root-owner-group --build $D "out/$NAME-linux.deb"
+          dpkg-deb -I "out/$NAME-linux.deb"
+      - name: Flatpak (standalone app)
+        run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub org.gnome.Platform//47 org.gnome.Sdk//47
           mkdir -p fp/payload
@@ -146,45 +131,44 @@ jobs:
           cd fp
           flatpak-builder --user --force-clean --repo=repo build org.studio87.SupurrSaw.yml
           if flatpak build build ldd /app/bin/supurrsaw | grep "not found"; then echo "::error::missing libraries in the Flatpak runtime"; exit 1; fi
-          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo repo "../out/SupurrSaw_v${VER}_linux.flatpak" org.studio87.SupurrSaw
-          cd ..
-          ls -la out
-
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo repo "../out/$NAME-flatpak.flatpak" org.studio87.SupurrSaw
       - uses: actions/upload-artifact@v4
         with:
-          name: installer-${{ matrix.name }}
-          path: |
-            out/*
-            !out/**/*.tmp
+          name: linux
+          path: "out/*"
 
-  publish:
-    needs: build
-    runs-on: ubuntu-22.04
-    env:
-      VER: ${{ inputs.version }}
-      GH_TOKEN: ${{ github.token }}
+  package:
+    permissions:
+      contents: write
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        with: { path: parts }
+      - name: Assemble the zip
+        run: |
+          tag="$GITHUB_REF_NAME"; if [ "$GITHUB_REF_TYPE" != "tag" ]; then tag="${TAGIN:-dev}"; fi
+          d="$NAME-$tag"; mkdir -p "$d/windows" "$d/macos" "$d/linux"
+          cp parts/windows/*.exe "$d/windows/"; cp parts/macos/*.pkg "$d/macos/"
+          cp parts/linux/* "$d/linux/"
+          cp docs/SupurrSaw_Manual.pdf "$d/$NAME-manual.pdf"; cp LICENSE "$d/"
+          cp packaging/INSTALL.txt "$d/INSTALL.txt"
+          (cd "$d" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS)
+          zip -r "$d.zip" "$d"
+          ls -l "$d.zip"; unzip -l "$d.zip"
+          echo "TAG=$tag" >> "$GITHUB_ENV"; echo "ZIP=$d.zip" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
         with:
-          path: zips
-          pattern: installer-*
-          merge-multiple: true
-      - name: Make the zip (installers, manual, install note, checksums)
+          name: release-zip
+          path: "*.zip"
+      - name: Publish release
+        if: github.ref_type == 'tag' || inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          Z="SupurrSaw_v${VER}"
-          mkdir -p "$Z/Installers"
-          cp zips/* "$Z/Installers/"
-          cp docs/SupurrSaw_Manual.pdf "$Z/SupurrSaw_Manual.pdf"
-          sed "s/vX\.Y\.Z/v$VER/g" release/INSTALL.txt > "$Z/INSTALL.txt"
-          cp LICENSE "$Z/LICENSE"
-          (cd "$Z" && find . -type f ! -name SHA256SUMS.txt | sort | xargs sha256sum > SHA256SUMS.txt)
-          zip -r -q "$Z.zip" "$Z"
-          ls -la "$Z" "$Z/Installers" "$Z.zip"
-      - name: Create the release
-        run: |
-          if gh release view "v$VER" >/dev/null 2>&1; then
-            gh release upload "v$VER" "SupurrSaw_v$VER.zip" --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
           else
-            gh release create "v$VER" "SupurrSaw_v$VER.zip" --target "$GITHUB_SHA" --title "SupurrSaw v$VER" --notes-file release/NOTES.md
+            gh release create "$TAG" "$ZIP" --target "$GITHUB_SHA" --title "$PRODUCT $TAG" --notes-file release/NOTES.md
           fi

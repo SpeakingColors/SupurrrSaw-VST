@@ -1,0 +1,47 @@
+SupurrSaw install, remove and use (works fully offline)
+=======================================================
+
+Windows 10 or 11
+  Run windows\SupurrSaw-Setup.exe. It installs two things: the VST3 plugin for your DAW
+  (C:\Program Files\Common Files\VST3, fixed location, all users) and the standalone app plus manual
+  (C:\Program Files\Studio 87\SupurrSaw, the folder the installer asks about).
+  Windows may show a blue "unknown publisher" screen because the installer is not signed:
+  click "More info", then "Run anyway".
+  Remove: Settings > Apps > SupurrSaw > Uninstall. It asks if you also want your saved presets, waves and exports deleted
+  (default is No, so they stay).
+
+macOS (Apple silicon or Intel, macOS 11 or newer)
+  Open macos\SupurrSaw-macOS.pkg. It installs the VST3 plugin, the standalone app, the manual and "Uninstall SupurrSaw".
+  The installer is not notarized: if macOS blocks it, open System Settings > Privacy & Security and choose "Open Anyway".
+  Remove: open "Uninstall SupurrSaw" in the Applications folder. It asks if you also want your saved presets deleted
+  (default is Keep).
+
+Linux, DAW installed natively (Debian, Ubuntu, Mint and similar)
+  Install linux\SupurrSaw-linux.deb: double click it in your software centre, or run:
+       sudo apt install ./SupurrSaw-linux.deb
+  It installs the plugin into /usr/lib/vst3 and the standalone app (start menu entry "SupurrSaw").
+  Remove: sudo apt remove supurrsaw
+  The window is a web view, so the system needs GTK 3 and WebKitGTK 4.1 (apt installs them for you).
+
+Linux, any other distribution (Fedora, Arch, Bazzite and similar), DAW installed natively
+  Extract linux/SupurrSaw-linux-vst3.tar.gz into ~/.vst3  (create the folder if needed), then rescan plugins.
+  You need GTK 3 and WebKitGTK 4.1 (Fedora: webkit2gtk4.1, Arch: webkit2gtk-4.1).
+  Remove: delete the SupurrSaw.vst3 folder from ~/.vst3.
+
+Linux, standalone app only (Flatpak)
+  Install linux\SupurrSaw-flatpak.flatpak: double click it in your software centre, or run:
+       flatpak install --user linux/SupurrSaw-flatpak.flatpak
+  The first time it needs the internet once to fetch the Flatpak runtime.
+  Remove: flatpak uninstall --user org.studio87.SupurrSaw
+  Not for Flatpak DAWs: the plugin window needs WebKitGTK, which Flatpak DAW runtimes do not include.
+  If your DAW is a Flatpak, use the standalone app, or install the DAW natively.
+
+Your saved presets, waves, exports and log (kept on remove unless you choose to delete them)
+  Windows : %APPDATA%\Studio 87\SupurrSaw
+  macOS   : ~/Library/Application Support/Studio 87/SupurrSaw
+  Linux   : ~/.config/Studio 87/SupurrSaw
+  The Files button inside the plugin opens this folder. To delete it yourself, remove the Studio 87/SupurrSaw folder.
+
+Manual: SupurrSaw-manual.pdf (every control plus recommendations).
+Checksums: SHA256SUMS.
+Licence: AGPL-3.0-or-later (see LICENSE). Free to use, copy and change.
