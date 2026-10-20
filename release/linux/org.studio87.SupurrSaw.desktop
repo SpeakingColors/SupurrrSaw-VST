@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SupurrSaw
+GenericName=Synthesizer
+Comment=Supersaw, hoover and acid synth by Studio 87
+Exec=supurrsaw
+Icon=org.studio87.SupurrSaw
+Terminal=false
+Categories=AudioVideo;Audio;Midi;Music;

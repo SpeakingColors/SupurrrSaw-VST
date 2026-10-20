@@ -1,0 +1,24 @@
+app-id: org.studio87.SupurrSaw
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: supurrsaw
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --share=ipc
+  - --device=all
+  - --filesystem=xdg-documents
+modules:
+  - name: supurrsaw
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 SupurrSaw /app/bin/supurrsaw
+      - install -Dm644 SupurrSaw_Manual.pdf /app/share/doc/supurrsaw/SupurrSaw_Manual.pdf
+      - install -Dm644 LICENSE /app/share/doc/supurrsaw/LICENSE
+      - install -Dm644 org.studio87.SupurrSaw.desktop /app/share/applications/org.studio87.SupurrSaw.desktop
+      - install -Dm644 org.studio87.SupurrSaw.png /app/share/icons/hicolor/256x256/apps/org.studio87.SupurrSaw.png
+    sources:
+      - type: dir
+        path: payload

@@ -4,7 +4,7 @@
 
 A free, open source supersaw, hoover and acid synth for **Linux, Windows and macOS** (VST3 and standalone app, built from one codebase).
 
-> Status: first release candidate. The engine is tested offline, and the VST3 and standalone are built for Linux, Windows and macOS (Apple silicon) by GitHub Actions. Not signed yet, see the install notes in each release zip.
+> Status: first release candidate. The engine is tested offline, and the VST3 and standalone are built for Linux, Windows and macOS (Apple silicon) by GitHub Actions. Not signed yet, see the install steps in the release notes.
 
 By **Studio 87**.
 
@@ -66,11 +66,3 @@ Not affiliated with or endorsed by Roland, Korg or any other brand mentioned. Na
 ## Docs
 - [Interactive mockups](docs/README.md)
 - [Roadmap](ROADMAP.md)
-
-## Demo MIDI
-`demo-midi/` holds MIDI files made by Studio 87 for trying presets (A minor, 150 BPM). Play one through two presets:
-```
-g++ -O2 -std=c++17 -o midi_demo tools/midi_demo.cpp
-./midi_demo demo-midi/Amin_-_Sylenth1_-_JP8080_LEAD_2.mid out.wav 150 55 trance_bass trance_lead
-```
-Notes below the split note (55) use the first preset, the rest the second. Presets: hoover, pick, pluck, trance_lead, talking_lead, trance_bass, funk_bass.

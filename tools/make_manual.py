@@ -45,7 +45,7 @@ head = [[Image(logo, 22 * mm, 22 * mm) if os.path.exists(logo) else "", [Paragra
 ht = Table(head, colWidths=[28 * mm, W - 28 * mm]); ht.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")])); S.append(ht)
 
 S += [Paragraph("1. Install and first sound", H2),
-      P("Read <b>INSTALL.txt</b> in the zip for your system: it says where the plugin folder goes and how to get past the first-run warning (the builds are not signed yet). "
+      P("Run the installer for your system (Windows: the <b>setup .exe</b>; macOS: the <b>.pkg</b>; Linux: the <b>.deb</b> for DAWs installed normally, or the <b>.flatpak</b> for the standalone app). It puts the plugin where your DAW looks, so there is nothing to copy. The first time, Windows and macOS warn about an unsigned app because the builds are not signed yet: Windows, click More info then Run anyway; macOS, open System Settings, Privacy and Security, and click Open Anyway. "
         "Then restart your DAW, load <b>SupurrSaw</b> as an instrument and play. The standalone app does the same without a DAW."),
       P("It opens on <b>Trance 90s</b>. Press the keys, then use the arrows beside the preset name to step through sounds. "
         "In a DAW, draw MIDI notes as usual. The mod wheel (CC 1) is wired to the Mod page. Your DAW's own tempo is not read yet: set <b>BPM</b> at the bottom for the synced delay and the drawn envelopes.")]

@@ -1,6 +1,6 @@
 name: release
 # Click Run workflow (Actions tab), type a version like 0.2.0, and it builds Linux, Windows and macOS,
-# zips each with an install note and the manual, and publishes a GitHub release with the three zips.
+# makes a real installer for each (Windows setup .exe, macOS .pkg, Linux .deb and Flatpak) and publishes a GitHub release with them and the manual.
 on:
   workflow_dispatch:
     inputs:
@@ -70,28 +70,92 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel 4
 
-      - name: Pack
+      - name: Collect the built files
         shell: bash
         run: |
-          D="SupurrSaw_v${VER}_${{ matrix.name }}"
-          mkdir -p "$D"
-          find build/SupurrSaw_artefacts -maxdepth 3 \( -name "*.vst3" -o -name "SupurrSaw" -o -name "SupurrSaw.exe" -o -name "SupurrSaw.app" \) -not -path "*/JuceLibraryCode/*" | while read f; do cp -R "$f" "$D/"; done
-          cp "release/INSTALL_${{ matrix.name }}.txt" "$D/INSTALL.txt"
-          cp docs/SupurrSaw_Manual.pdf "$D/SupurrSaw_Manual.pdf"
-          cp LICENSE "$D/LICENSE"
-          ls -la "$D"
-          test -d "$D/SupurrSaw.vst3" || { echo "::error::no SupurrSaw.vst3 was built"; exit 1; }
-          if [ "${{ matrix.name }}" = "windows" ]; then
-            pwsh -Command "Compress-Archive -Path '$D' -DestinationPath '$D.zip'"
-          else
-            zip -r -y -q "$D.zip" "$D"
-          fi
-          ls -la "$D.zip"
+          mkdir -p payload
+          find build/SupurrSaw_artefacts -maxdepth 3 \( -name "*.vst3" -o -name "SupurrSaw" -o -name "SupurrSaw.exe" -o -name "SupurrSaw.app" \) -not -path "*/JuceLibraryCode/*" | while read f; do cp -R "$f" payload/; done
+          cp docs/SupurrSaw_Manual.pdf payload/SupurrSaw_Manual.pdf
+          cp LICENSE payload/LICENSE
+          ls -la payload
+          test -d payload/SupurrSaw.vst3 || { echo "::error::no SupurrSaw.vst3 was built"; exit 1; }
+
+      - name: Windows installer (Inno Setup)
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found" }
+          $stage = (Resolve-Path payload).Path
+          & $iscc "/DAppVer=$env:VER" "/DStage=$stage" "/O$PWD\out" release\windows\SupurrSaw.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          Get-ChildItem out
+
+      - name: macOS installer (.pkg)
+        if: matrix.name == 'macos'
+        run: |
+          mkdir -p root/Library/Audio/Plug-Ins/VST3 root/Applications "root/Library/Application Support/Studio 87/SupurrSaw" out res
+          cp -R payload/SupurrSaw.vst3 root/Library/Audio/Plug-Ins/VST3/
+          cp -R payload/SupurrSaw.app root/Applications/
+          cp payload/SupurrSaw_Manual.pdf "root/Library/Application Support/Studio 87/SupurrSaw/"
+          cp payload/LICENSE res/LICENSE.txt
+          cp release/macos/welcome.html res/welcome.html
+          pkgbuild --root root --identifier com.studio87.supurrsaw --version "$VER" --install-location / --ownership recommended SupurrSaw-component.pkg
+          productbuild --distribution release/macos/distribution.xml --resources res --package-path . "out/SupurrSaw_v${VER}_macos.pkg"
+          pkgutil --payload-files "out/SupurrSaw_v${VER}_macos.pkg" | head -20 || true
+          ls -la out
+
+      - name: Linux packages (.deb and Flatpak)
+        if: matrix.name == 'linux'
+        run: |
+          mkdir -p out
+          # .deb for native DAWs
+          D=debroot
+          mkdir -p $D/DEBIAN $D/usr/bin $D/usr/lib/vst3 $D/usr/share/applications $D/usr/share/doc/supurrsaw $D/usr/share/icons/hicolor/256x256/apps
+          cp -R payload/SupurrSaw.vst3 $D/usr/lib/vst3/
+          install -m755 payload/SupurrSaw $D/usr/bin/supurrsaw
+          install -m644 payload/SupurrSaw_Manual.pdf payload/LICENSE $D/usr/share/doc/supurrsaw/
+          sed 's/^Icon=.*/Icon=supurrsaw/' release/linux/org.studio87.SupurrSaw.desktop > $D/usr/share/applications/supurrsaw.desktop
+          cp release/linux/org.studio87.SupurrSaw.png $D/usr/share/icons/hicolor/256x256/apps/supurrsaw.png
+          find $D -type d -exec chmod 755 {} +
+          cat > $D/DEBIAN/control <<EOF
+          Package: supurrsaw
+          Version: $VER
+          Section: sound
+          Priority: optional
+          Architecture: amd64
+          Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libasound2 | libasound2t64
+          Maintainer: Studio 87 <noreply@users.noreply.github.com>
+          Homepage: https://github.com/SpeakingColors/SupurrrSaw-VST
+          Description: SupurrSaw supersaw, hoover and acid synth (VST3 and standalone)
+           Free and open source synthesizer by Studio 87. Installs the VST3 plugin
+           into /usr/lib/vst3 and the standalone app as supurrsaw.
+          EOF
+          sed -i 's/^          //' $D/DEBIAN/control
+          dpkg-deb --root-owner-group --build $D "out/SupurrSaw_v${VER}_linux.deb"
+          dpkg-deb -I "out/SupurrSaw_v${VER}_linux.deb"
+          # Flatpak (standalone app)
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.gnome.Platform//47 org.gnome.Sdk//47
+          mkdir -p fp/payload
+          cp payload/SupurrSaw payload/SupurrSaw_Manual.pdf payload/LICENSE fp/payload/
+          cp release/linux/org.studio87.SupurrSaw.desktop release/linux/org.studio87.SupurrSaw.png fp/payload/
+          cp release/linux/org.studio87.SupurrSaw.yml fp/
+          cd fp
+          flatpak-builder --user --force-clean --repo=repo build org.studio87.SupurrSaw.yml
+          if flatpak build build ldd /app/bin/supurrsaw | grep "not found"; then echo "::error::missing libraries in the Flatpak runtime"; exit 1; fi
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo repo "../out/SupurrSaw_v${VER}_linux.flatpak" org.studio87.SupurrSaw
+          cd ..
+          ls -la out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: zip-${{ matrix.name }}
-          path: SupurrSaw_v${{ inputs.version }}_${{ matrix.name }}.zip
+          name: installer-${{ matrix.name }}
+          path: |
+            out/*
+            !out/**/*.tmp
 
   publish:
     needs: build
@@ -104,9 +168,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: zips
-          pattern: zip-*
+          pattern: installer-*
           merge-multiple: true
       - name: Create the release
         run: |
           ls -la zips
-          gh release create "v$VER" zips/*.zip --target "$GITHUB_SHA" --title "SupurrSaw v$VER" --notes-file release/NOTES.md
+          gh release create "v$VER" zips/* docs/SupurrSaw_Manual.pdf --target "$GITHUB_SHA" --title "SupurrSaw v$VER" --notes-file release/NOTES.md
