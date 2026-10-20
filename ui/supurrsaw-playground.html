@@ -241,10 +241,18 @@ canvas{display:block;max-width:100%}
 
 <div id="dlg" class="dlg" hidden><div class="dbox" role="dialog" aria-modal="true"><h3 id="dTitle"></h3><p id="dMsg"></p><input id="dIn" type="text" maxlength="40"><div class="drow" id="dBtns"></div></div></div>
 <section class="page" id="pg-presets" hidden><div class="grid" id="g-presets">
-
+<!--NOTES_BEGIN-->
+  <div class="card c3 a-yel" id="notesCard"><h2>Notes for Claude <span class="sub" id="diffInfo"></span></h2>
+    <textarea id="note" placeholder="How it should sound, what to change"></textarea>
+    <div class="chips" id="chips"></div>
+    <div class="row"><input type="text" id="pname" placeholder="Preset name" maxlength="40" style="flex:1 1 120px">
+    <button class="btn on" id="savep" data-tip="Saves the full patch under this name, with your note and the list of what you changed.">Save preset</button>
+    <button class="btn" id="saven" data-tip="Saves only the note, with the current values attached.">Save note</button></div>
+  </div>
+<!--NOTES_END-->
   <div class="card c2 a-hot" id="dangerCard"><h2>Careful</h2><div class="pill" style="margin-bottom:8px">These throw work away. Each one asks twice.</div><div class="row"><button class="btn sm" id="revert" data-tip="Throw away your edits and go back to the loaded preset. Click twice.">Revert edits</button><button class="btn sm" id="del" hidden data-tip="Delete this saved preset. Click twice.">Delete preset</button></div></div>
   <div class="card c3 a-blue" id="movesCard"><h2>Moves this session <span class="sub" id="mvCount"></span></h2><ul id="mv"></ul></div>
-  <div class="card c4 a-vio" id="howCard"><h2>How to use</h2><div class="pill" style="line-height:1.7">Drag a knob up or down (hold Shift for fine). Mouse wheel works too. Click a value to type it. Double-click a knob to reset it to the loaded preset. Drag the filter points (cutoff and low cut) and the envelope nodes directly. Pink dots mark what you moved. Pages: Sound, Mod (matrix), FX, Presets and waves.</div></div>
+  <div class="card c4 a-vio" id="howCard"><h2>How to use</h2><div class="pill" style="line-height:1.7">Drag a knob up or down (hold Shift for fine). Mouse wheel works too. Click a value to type it. Double-click a knob to reset it to the loaded preset. Drag the filter points (cutoff and low cut) and the envelope nodes directly. Pink dots mark what you moved. Everything you change is logged for Claude. Pages: Sound, Mod (matrix), FX, Presets and waves.</div></div>
 </div></section>
 
 <div class="dock">
@@ -1056,7 +1064,7 @@ const EN=new Function(ENGINE_SRC+"\nreturn {Fx,delaySeconds,SupurrEngine,default
 const clone=o=>JSON.parse(JSON.stringify(o));
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const STAGE=innerWidth>=900&&innerHeight>=520;let SCALE=1;const SH=(n,s)=>(STAGE?s:n)+"px";
-const BW=window.__BW||1500,BH=window.__BH||800;let SZ="1";try{SZ=localStorage.getItem("supurrSize")||"1";}catch(e){}
+const BW=window.__BW||1500,BH=window.__BH||800;let SZ=window.__SUPURR_PLUGIN?"fit":"1";if(!window.__SUPURR_PLUGIN){try{SZ=localStorage.getItem("supurrSize")||"1";}catch(e){}}
 function fit(){const R=$("#rack");if(!STAGE){return;}document.documentElement.classList.add("stage");const f=Math.min(innerWidth/BW,innerHeight/BH),s=SZ==="fit"?f:Math.min(f,+SZ);SCALE=s;R.style.width=BW+"px";R.style.height=BH+"px";R.style.transform="scale("+s+")";R.style.left=Math.max(0,(innerWidth-BW*s)/2)+"px";R.style.top=Math.max(0,(innerHeight-BH*s)/2)+"px";}
 fit();window.addEventListener("resize",()=>{fit();if(typeof drawAll==="function"&&P)drawAll();});
 
@@ -2816,7 +2824,7 @@ async function saveChecked(name,note,oldSlug,props){
   }
   return writePreset(name,note||"",oldSlug,props);
 }
-
+/*NOTES_BEGIN*/$("#savep").onclick=()=>{const n=$("#pname").value.trim()||CURNAME+" mod";saveChecked(n,$("#note").value.trim()).then(ok=>{if(ok){$("#note").value="";$("#pname").value="";}});};/*NOTES_END*/
 $("#save").onclick=async()=>{
   commitAll();const pr=curProps();
   const asNew=async()=>{const r=await propsDialog({title:"Save as a new preset",msg:CURBASEKEY.startsWith("u:")?"Choose a name, type, genres and tags.":"Factory presets stay as they are, your copy is saved under this name.",name:uniqueName(CURNAME+" mod"),type:pr.type,genres:pr.genres,tags:pr.tags,ok:"Save"});if(r)await saveChecked(r.name,"",null,r);};
@@ -2834,7 +2842,12 @@ async function renamePreset(){
  b.addEventListener("click",()=>{clearTimeout(t);t=setTimeout(()=>{const s=$("#preset");try{s.showPicker();}catch(e){s.style.pointerEvents="auto";s.focus();}},260);});
  b.addEventListener("dblclick",()=>{clearTimeout(t);renamePreset();});
  $("#preset").addEventListener("blur",()=>{$("#preset").style.pointerEvents="none";});}
-
+/*NOTES_BEGIN*/$("#saven").onclick=async()=>{
+  const note=$("#note").value.trim();if(!note)return;commitAll();
+  const ok=await dbWrite("notes/"+stamp(),{text:note,preset:CURNAME,base:CURBASEKEY,page:curPage,at:new Date().toISOString(),diffFromBase:diffOf(BASE,P),params:clone(P)},"note saved");
+  if(ok){pushMove("@note",CURNAME,note.slice(0,60));$("#note").value="";}
+};
+["thicker","thinner","brighter","darker","more punch","less harsh","more reverb","less reverb","wider","narrower","louder","quieter","more bite","smoother"].forEach(t=>{const b=el("button","chip",t);b.onclick=()=>{const n=$("#note");n.value+=(n.value&&!/[\s,]$/.test(n.value)?", ":"")+t;n.focus();};$("#chips").appendChild(b);});/*NOTES_END*/
 
 /* ---------- playing ---------- */
 const held=new Set();

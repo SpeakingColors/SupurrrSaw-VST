@@ -29,6 +29,9 @@ if k != 1:
 src = src.replace("<small>Playground</small>", "<small>by Studio 87</small>", 1)
 src = re.sub(r"<title>[^<]*</title>", "<title>SupurrSaw by Studio 87</title>", src, count=1)
 shim = (root / "web" / "shim.js").read_text(encoding="utf-8")
+import json
+seed = json.dumps(json.loads((root / "web" / "seed_presets.json").read_text(encoding="utf-8")), separators=(",", ":"))  # ascii only
+shim = "window.__SEED_PRESETS=" + seed + ";\n" + shim
 head = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<style>html,body{margin:0;padding:0;overflow:hidden}\n' + css + '</style>'

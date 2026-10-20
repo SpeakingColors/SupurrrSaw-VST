@@ -19,7 +19,7 @@ set(S87_PAGE_OUT ${CMAKE_CURRENT_BINARY_DIR}/web/index.html)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/web)
 add_custom_command(OUTPUT ${S87_PAGE_OUT}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/make_plugin_page.py ${S87_PAGE_SRC} ${S87_PAGE_OUT}
-    DEPENDS ${S87_PAGE_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/web/shim.js ${CMAKE_CURRENT_SOURCE_DIR}/tools/make_plugin_page.py
+    DEPENDS ${S87_PAGE_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/web/shim.js ${CMAKE_CURRENT_SOURCE_DIR}/web/seed_presets.json ${CMAKE_CURRENT_SOURCE_DIR}/tools/make_plugin_page.py
     COMMENT "Building the plugin page from the mockup")
 add_custom_target(S87Page DEPENDS ${S87_PAGE_OUT})
 

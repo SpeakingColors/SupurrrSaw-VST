@@ -92,7 +92,19 @@
       delete: async () => { await call("dbDelete", path); }
     }),
     collection: name => ({
-      get: async () => { const l = (await call("dbList", name)) || []; const docs = []; l.forEach(x => { try { docs.push(mkDoc(name + "/" + x.id, x.json)); } catch (e) {} }); return { docs }; }
+      get: async () => {
+        if (name === "presets" && window.__SEED_PRESETS) {
+          /* first run: copy the bundled starter presets into the user folder once; after that they are normal files */
+          try {
+            const st = (await call("dbList", "state")) || [];
+            if (!st.some(x => x.id === "seeded_v1")) {
+              const have = ((await call("dbList", "presets")) || []).map(x => x.id);
+              for (const id of Object.keys(window.__SEED_PRESETS)) if (!have.includes(id)) await call("dbSet", "presets/" + id, JSON.stringify(window.__SEED_PRESETS[id]));
+              await call("dbSet", "state/seeded_v1", JSON.stringify({ at: Date.now() }));
+            }
+          } catch (e) {}
+        }
+        const l = (await call("dbList", name)) || []; const docs = []; l.forEach(x => { try { docs.push(mkDoc(name + "/" + x.id, x.json)); } catch (e) {} }); return { docs }; }
     })
   };
   const DL = {
