@@ -261,12 +261,12 @@ int main(int argc, char** argv) {
   }
   // ======================= tests for the features added with the big build (filters, LFOs, envelopes, samples, EQ dynamics, build macro, effects) =======================
   { // mod matrix size and order are the ones of the playground engine (MX_SRC / MX_DST); the filter list covers every mode once
-    CHECK(kMxSrc == 15 && kMxDst == 23);
-    const char* S[] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3"};
+    CHECK(kMxSrc == 18 && kMxDst == 23);
+    const char* S[] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"};
     const char* D[] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
     for (int i = 0; i < kMxSrc; ++i) CHECK(std::string(kMxSrcNames[i]) == S[i]);
     for (int i = 0; i < kMxDst; ++i) CHECK(std::string(kMxDstNames[i]) == D[i]);
-    CHECK(sizeof(Params().mx) == sizeof(float) * 15 * 23);
+    CHECK(sizeof(Params().mx) == sizeof(float) * 18 * 23);
     bool seen[kFilterModes] = {}; for (int i = 0; i < kFilterModes; ++i) seen[(int)kFilterList[i]] = true; for (bool b : seen) CHECK(b);
     for (int i = 0; i < kFilterModes; ++i) CHECK(filterModeFromName(kFilterNames[i]) == (FilterMode)i);
     CHECK(std::string(kFilterNames[(int)kFilterList[0]]) == "Off" && std::string(kFilterNames[(int)kFilterList[17]]) == "Formant");
@@ -430,9 +430,9 @@ int main(int argc, char** argv) {
     Params g = baseP(); g.f2Mode = FilterMode::LP12; g.f2Cut = 400.f; g.f2Env = 1.f; Params g2 = g; g2.fenv2 = {0.001f, 0.05f, 0.f, 0.1f}; CHECK(relDiff(runP(g), runP(g2)) > 0.02);
     std::printf("drawn envelopes 2 and 3 and filter envelopes 2 and 3 change the sound through the matrix\n");
   }
-  { // every one of the 345 mod matrix cells acts (three LFOs, three drawn envelopes, three filter and amp envelopes feeding filters, global destinations included)
+  { // every one of the 414 mod matrix cells acts (three LFOs, three drawn envelopes, three filter and amp envelopes feeding filters, global destinations included)
     auto mk = [&](int syl, int src, int dst, bool neg = false) { Params q; q.limiter = false; q.cutoff = 3000.f; q.reso = 0.3f; q.drive = 0.2f; q.lowCutHz = 100.f; q.subLevel = 0.3f; q.noiseLevel = 0.3f; q.pitchAmt = 7.f; q.pitchTime = 0.5f; q.lfoRate = 5.f; q.lfo2Rate = 4.3f; q.lfo3Rate = 6.1f; q.lfo2Shape = 3; q.lfo3Shape = 6;
-      q.modWheel = 1.f; q.fenv.s = 0.6f; q.fenv2 = {0.01f, 0.6f, 0.5f, 0.3f}; q.fenv3 = {0.05f, 0.4f, 0.7f, 0.3f}; q.amp.s = 0.7f; q.f2Mode = FilterMode::LP12; q.f3Mode = FilterMode::BP; q.f2Cut = 1500.f; q.f3Cut = 2200.f;
+      q.modWheel = 1.f; q.pressure = 0.8f; q.slide = 0.8f; q.pitchBend = 1.f; q.bendRange = 12.f; q.fenv.s = 0.6f; q.fenv2 = {0.01f, 0.6f, 0.5f, 0.3f}; q.fenv3 = {0.05f, 0.4f, 0.7f, 0.3f}; q.amp.s = 0.7f; q.f2Mode = FilterMode::LP12; q.f3Mode = FilterMode::BP; q.f2Cut = 1500.f; q.f3Cut = 2200.f;
       q.reverbMix = 0.1f; q.delayMix = 0.1f; q.delayTime = 0.1f; q.chorusMix = 0.2f; q.drvDrive = 0.3f; q.dmMix = 0.5f; q.eq1On = false; q.eq6On = false; q.widHi = 0.8f;
       q.layer[0].wave = Wave::Pulse; q.layer[0].level = 0.5f; q.layer[0].pwm = 0.5f; q.layer[1].wave = Wave::SuperSaw; q.layer[1].level = 0.5f; q.layer[1].detune = 0.5f; q.layer[1].voices = 5; q.layer[2].wave = Wave::Saw; q.layer[2].level = 0.4f;
       if (syl >= 0) { for (int i = 0; i < 3; ++i) q.layer[i].wave = Wave::Off; q.layer[syl].wave = Wave::Saw; q.layer[syl].level = 0.6f; q.layer[syl].sync = true; q.layer[syl].syncSemis = 7.f; }
