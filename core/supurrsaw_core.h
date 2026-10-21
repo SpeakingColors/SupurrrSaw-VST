@@ -200,8 +200,8 @@ struct Params {
   bool limiter = true;         // slow, smooth peak limiter in front of the clipper
   float limCeil = 0.9f;        // limiter ceiling (linear)
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
-  // Pitch wheel and MPE. pitchBend is -1..1 (live, set by the host); bendRange is semitones at full wheel. In MPE mode the notes' own channels bend by mpeRange (48 is the MPE default).
-  float bendRange = 2.f, pitchBend = 0.f, mpeRange = 48.f; bool mpe = true;
+  // Pitch wheel and MPE. pitchBend is -1..1 (live, set by the host); bendRange is semitones up at full wheel and bendDown semitones down. In MPE mode the notes' own channels bend by mpeRange (48 is the MPE default).
+  float bendRange = 2.f, bendDown = 2.f, pitchBend = 0.f, mpeRange = 48.f; bool mpe = true;
   float pressure = 0.f, slide = 0.f;   // live, 0..1: channel pressure and CC74 (global); a note's own values come from its MPE channel or polyphonic pressure
   // Mastering: dynMix scales the whole opto/OTT/squeeze chain; dm* is the dance master chain (3 band compressor, clipper, dry/wet)
   float lfoDepth = 1.f, lfoFade = 0.f, lfoStart = 0.f;   // LFO master depth, fade-in time (s) and start phase (0..1); shapes: 0 sine, 1 tri, 2 square, 3 saw, 4 sample and hold
@@ -799,7 +799,7 @@ class Engine {
   void envsOn(Voice& v) { v.amp.on(); v.amp2.on(); v.amp3.on(); v.fenv.on(); v.fenv2.on(); v.fenv3.on(); }
   void envsOff(Voice& v) { v.amp.off(); v.amp2.off(); v.amp3.off(); v.fenv.off(); v.fenv2.off(); v.fenv3.off(); }
   double chBend[16] = {}, chPress[16] = {}, chSlide[16] = {};   // last values per MIDI channel (MPE member channels), applied to a note when it starts
-  double bendSt(const Voice& v) const { return (double)p.pitchBend * (double)p.bendRange + v.bend; }
+  double bendSt(const Voice& v) const { const double w = p.pitchBend; return w * (double)(w >= 0.0 ? p.bendRange : p.bendDown) + v.bend; }
   void noteOn(int note, float vel, int ch = 0) {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;

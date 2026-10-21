@@ -38,7 +38,7 @@ int main() {
     const double a = goertzel(o, 493.88, 48000), b = goertzel(o, 440.0, 48000); CHECK(a > 0.05); CHECK(b < a * 0.1);
     Engine f = sine(); f.p.pitchBend = 1.f; f.p.bendRange = 12.f; f.noteOn(69, 0.9f); o = run(f, 1.5);
     CHECK(goertzel(o, 880.0, 48000) > 0.05); CHECK(goertzel(o, 440.0, 48000) < 0.01);
-    Engine g = sine(); g.p.pitchBend = -1.f; g.p.bendRange = 12.f; g.noteOn(69, 0.9f); o = run(g, 1.5);
+    Engine g = sine(); g.p.pitchBend = -1.f; g.p.bendRange = 2.f; g.p.bendDown = 12.f; g.noteOn(69, 0.9f); o = run(g, 1.5);
     CHECK(goertzel(o, 220.0, 48000) > 0.05);
   }
   { // MPE: two notes on two channels, only the second one bends (+12 semitones)
