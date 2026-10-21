@@ -12,6 +12,8 @@ By **Studio 87**.
 
 **Good for:** free VST3 supersaw synth, trance and hardstyle leads, hoover and rave stabs, acid bass, supersaw chords, JP-8000 style supersaw sound. Linux VST3 synth, Windows VST3 synth, macOS VST3 synth.
 
+**Manual:** [PDF with interface tour, opens in the browser](https://github.com/SpeakingColors/SupurrrSaw-VST/blob/main/docs/SupurrSaw_Manual.pdf)
+
 ## What it does
 
 - **3 layers.** Each one is an oscillator or a loaded sample: Super Saw (JP-8000 style), Super Square (PWM), Saw, Pulse, Triangle, Sine, Sample.
