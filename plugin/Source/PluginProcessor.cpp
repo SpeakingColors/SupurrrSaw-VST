@@ -49,6 +49,7 @@ void SupurrProcessor::applyPendingParams()
     dirty.store (false);
 }
 
+
 void SupurrProcessor::pushEvent (int type, int note, float vel)
 {
     int s1, n1, s2, n2;
@@ -70,13 +71,14 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     wasMuted = isMuted;
 
     applyPendingParams();
+    engine.p.pitchBend = liveBend.load(); engine.p.pressure = livePress.load(); engine.p.slide = liveSlide.load();
     if (kitDirty.load())
     {
         const juce::SpinLock::ScopedTryLockType kl (kitLock);
         if (kl.isLocked()) { kitLive = kitNext; kitDirty.store (false); engine.allOff(); }
     }
-    auto noteOnAny = [&] (int note, float vel) { if (kitLive) kitLive->noteOn (note, vel); else engine.noteOn (note, vel); };
-    auto noteOffAny = [&] (int note) { if (! kitLive) engine.noteOff (note); };
+    auto noteOnAny = [&] (int note, float vel, int ch = 0) { if (kitLive) kitLive->noteOn (note, vel); else engine.noteOn (note, vel, ch); };
+    auto noteOffAny = [&] (int note, int ch = -1) { if (! kitLive) engine.noteOff (note, ch); };
     auto allOffAny = [&] { engine.allOff(); if (kitLive) kitLive->allOff(); };
 
     // notes from the on screen keyboard and the demo player
@@ -114,8 +116,27 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         const auto msg = meta.getMessage();
         renderTo (juce::jlimit (0, n, meta.samplePosition));
         if (isMuted) continue;
-        if (msg.isNoteOn()) noteOnAny (msg.getNoteNumber(), msg.getFloatVelocity());
-        else if (msg.isNoteOff()) noteOffAny (msg.getNoteNumber());
+        const int ch = juce::jlimit (0, 15, msg.getChannel() - 1);
+        const bool member = engine.p.mpe && ch > 0;   // MPE: channels 2 to 16 belong to single notes, channel 1 is the main channel
+        if (msg.isNoteOn()) noteOnAny (msg.getNoteNumber(), msg.getFloatVelocity(), engine.p.mpe ? ch : 0);
+        else if (msg.isNoteOff()) noteOffAny (msg.getNoteNumber(), engine.p.mpe ? ch : -1);
+        else if (msg.isPitchWheel())
+        {
+            const float b = (float) (msg.getPitchWheelValue() - 8192) / 8192.f;
+            if (member) engine.setChanBend (ch, (double) b * engine.p.mpeRange);
+            else { liveBend.store (b); engine.p.pitchBend = b; }
+        }
+        else if (msg.isChannelPressure())
+        {
+            const float x = (float) msg.getChannelPressureValue() / 127.f;
+            if (member) engine.setChanPress (ch, x); else { livePress.store (x); engine.p.pressure = x; }
+        }
+        else if (msg.isAftertouch()) engine.setNotePress (msg.getNoteNumber(), (double) msg.getAfterTouchValue() / 127.0);   // polyphonic key pressure
+        else if (msg.isController() && msg.getControllerNumber() == 74)
+        {
+            const float x = (float) msg.getControllerValue() / 127.f;
+            if (member) engine.setChanSlide (ch, x); else { liveSlide.store (x); engine.p.slide = x; }
+        }
         else if (msg.isAllSoundOff()) allOffAny();
         else if (msg.isAllNotesOff()) engine.releaseAll();   // hosts send this when a clip changes or the transport stops: let the notes release, no cut
         else if (msg.isController() && msg.getControllerNumber() == 1)
@@ -270,6 +291,9 @@ void SupurrProcessor::handleUiMessage (const juce::var& m)
     else if (t == "p")
     {
         const auto k = m["k"].toString();
+        if (k == "pitchBend") { liveBend.store ((float) (double) m["v"]); return; }   // the page's wheels are live values, not part of a patch
+        if (k == "pressure")  { livePress.store ((float) (double) m["v"]); return; }
+        if (k == "slide")     { liveSlide.store ((float) (double) m["v"]); return; }
         const juce::ScopedLock sl (stateLock);
         setInJson (paramsJson, k, m["v"]);
         const juce::SpinLock::ScopedLockType pl (paramLock);

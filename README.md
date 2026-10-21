@@ -24,6 +24,7 @@ By **Studio 87**.
 - **Mono safe:** low frequencies are summed to mono, and the engine checks the mono sum.
 - **Mod matrix, three LFOs and drawn envelopes**, wave lab with single-cycle waves you draw yourself.
 - **FX:** drive and crush, mod FX (chorus, flanger and phaser, each remembers its own settings), delay, reverb, opto leveller, OTT, squeeze, dance master, limiter. The displays show what each one does.
+- **Pitch wheel, mod wheel and MPE.** Pitch bend with a range of 1 to 24 semitones, mod wheel to anything in the matrix, and MPE (per-note bend, pressure and slide) so one note of a chord can bend alone. Pressure, Slide and Bend are sources in the mod matrix.
 - **Kit mode:** play drum kits from the keyboard (built-in genre kits, edit your own on the Kit page).
 - **180+ presets** in banks A to G (128 slots each), with favorites, your own order, search and tags.
 - **Factory banks:** `presets/factory/` holds SysEx files with the factory banks A to D. Import them on the Presets page (Banks, Import .syx) to get the factory sounds back after you overwrite a bank, or use **Restore factory** on the same page.

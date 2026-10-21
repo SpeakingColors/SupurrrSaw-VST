@@ -89,6 +89,7 @@ private:
     bool wasMuted = false;
     float volNow = 1.f;
     float wheelCC = 0.f; bool wheelSeen = false;
+    std::atomic<float> liveBend { 0.f }, livePress { 0.f }, liveSlide { 0.f };   // pitch wheel, pressure and CC74 on the main channel: from MIDI or from the page
 
     std::atomic<double> sampleRateNow { 48000.0 };
     std::atomic<float> mPeakL { 0 }, mPeakR { 0 }, mLim { 0 }, mGr[3], mDm[3], mWet[8];

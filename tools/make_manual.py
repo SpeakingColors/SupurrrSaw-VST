@@ -48,7 +48,7 @@ S += [Paragraph("1. Install and first sound", H2),
       P("Run the installer for your system (Windows: the <b>setup .exe</b>; macOS: the <b>.pkg</b>; Linux: the <b>.deb</b> for DAWs installed normally, or the <b>.flatpak</b> for the standalone app). It puts the plugin where your DAW looks, so there is nothing to copy. The first time, Windows and macOS warn about an unsigned app because the builds are not signed yet: Windows, click More info then Run anyway; macOS, open System Settings, Privacy and Security, and click Open Anyway. "
         "Then restart your DAW, load <b>SupurrSaw</b> as an instrument and play. The standalone app does the same without a DAW."),
       P("It opens on <b>Trance 90s</b>. Press the keys, then use the arrows beside the preset name to step through sounds. "
-        "In a DAW, draw MIDI notes as usual. The mod wheel (CC 1) is wired to the Mod page. Your DAW's own tempo is not read yet: set <b>BPM</b> at the bottom for the synced delay and the drawn envelopes.")]
+        "In a DAW, draw MIDI notes as usual. The mod wheel, pitch wheel and MPE are described in section 2a. Your DAW's own tempo is not read yet: set <b>BPM</b> at the bottom for the synced delay and the drawn envelopes.")]
 
 S += [Paragraph("2. The window", H2),
       T([("Top bar", "Preset arrows and name (click to pick, double-click to rename). <b>A/B</b> compares your edits with the sound as loaded. The disk button saves; it always asks before overwriting. "
@@ -57,10 +57,16 @@ S += [Paragraph("2. The window", H2),
           ("Lamps", "Voices playing / voices allowed, then a CPU lamp with a bar (green is fine, red is close to the limit; a star means the engine is thinning supersaw voices to keep playing). "
                     "<b>LIM</b> lights when the limiter works, <b>CLIP</b> when the soft clipper bends the output. Click either to open the FX page."),
           ("Pages", "<b>Sound</b>, <b>Kit</b>, <b>Mod</b>, <b>FX</b>, <b>Presets</b>."),
-          ("Bottom bar", "Keyboard with Oct - / Oct +, mod wheel, Panic (stops every note), a volume that only changes this window, window size (Fit, 100%, 85%, 70%; double-click the wooden side to go back to 100%), "
+          ("Bottom bar", "Keyboard with Oct - / Oct +, mod wheel, pitch wheel (Bend) with its Range, the MPE switch and MPE range, Panic (stops every note), a volume that only changes this window, window size (Fit, 100%, 85%, 70%; double-click the wooden side to go back to 100%), "
                          "demo lines with BPM and Play, and <b>Drag last note</b> in the standalone and browser versions."),
           ("Tips", "Hover any control for about a second to see what it does. Drag a knob up or down (hold Shift for fine), use the mouse wheel, click the value to type it, double-click to reset it. "
                    "Pink dots show what you changed.")], [26 * mm, W - 26 * mm])]
+
+S += [Paragraph("2a. Pitch wheel, mod wheel and MPE", H2),
+      T([("Pitch wheel", "Your keyboard's pitch wheel (or the <b>Bend</b> slider in the window, which springs back to the middle) bends every note. <b>Range</b> sets how far it goes at full travel, from 1 to 24 semitones (12 is an octave, good for risers and falls). The range is saved with the preset; the default is 2."),
+          ("Mod wheel", "CC 1. Send it to anything in the <b>Mod matrix</b> (Mod wheel row), or use the <b>Wheel</b> knob beside the cutoff for a quick filter opening, or the vibrato depth and sync wheel controls."),
+          ("MPE (per-note expression)", "With <b>MPE</b> on, a note sent on MIDI channels 2 to 16 can bend, slide and press on its own, so you can bend one note of a chord while the others stay still. Channel 1 is the main channel and moves every note. MPE keyboards and the piano roll of DAWs that support MPE send this automatically. <b>MPE range</b> is how far a single note bends (48 semitones is the MPE standard; change it only if your controller uses another range). Off, every channel is treated the same. The MPE switch and its range belong to you, not to the preset."),
+          ("Pressure, Slide, Bend", "Three more rows in the Mod matrix. <b>Pressure</b> is aftertouch (channel pressure, or polyphonic key pressure), <b>Slide</b> is CC 74 (the finger sliding on an MPE key), <b>Bend</b> is the pitch wheel plus the note's own bend in octaves. With MPE on, each note has its own pressure, slide and bend. Example: Pressure to cutoff opens the filter as you press harder; Slide to cutoff or to detune adds a second dimension to each key.")], [30 * mm, W - 30 * mm])]
 
 S += [Paragraph("3. Sound page", H2),
       T([("Layers 1 to 3", "Each layer has an <b>On</b> switch (off mutes it but keeps its wave and settings) and is Off, Super saw, Super square, Saw, Pulse, Triangle, Sine or Custom wave (drawn in the Wave lab; your saved waves are listed under My waves, and a factory Aah stab wave is included). Detune 0 gives one clean oscillator. "
@@ -95,7 +101,7 @@ S += [Paragraph("7. Presets page", H2),
       P("<b>Browse</b> lists everything: filter by sound type (Lead, Bass, Keys, Pad, Pluck, Chord, Brass, Bell, Drum, FX) and by genre. Click the heart to make a favorite and use the <b>Favorites</b> chip to list only those (the arrow buttons then step through favorites only). <b>Re-order</b> shows up and down buttons to move presets inside their group; the arrows next to the preset name follow the same order. <b>Properties</b> renames a preset and sets its type, genres and tags. "
         "<b>Banks</b> A to G hold 128 slots each of your own and factory sounds; you can write, clear, and export or import them as <b>.syx</b> files to share. <b>Restore factory</b> puts bank A to D back to the factory sounds; the factory banks are also on GitHub as .syx files. "
         "The <b>Wave lab</b> lets you draw a single cycle, build one from the first 32 harmonics, or start from saw, square, triangle, pulse, vowel and organ shapes, then use it as a layer's Custom wave."),
-      P("Saving: the disk button asks for a name, type, genres and an optional note, and never overwrites without asking. Your presets, saved waves, kits, exports and the log live in your user folder under <b>Studio 87/SupurrSaw</b>; the <b>Files</b> button opens them.")]
+      P("Saving: the disk button asks for a name, type, genres and an optional note, and never overwrites without asking. Your presets, saved waves, kits, exports and the log live in your user folder under <b>Studio 87/SupurrSaw</b>; the <b>Files</b> button opens them. The plugin comes with eight starter presets in <b>Your saved</b> (Daft Funk mod, DANCE SUPER AAHH, deep dirty bass, hoover amazing, hoover new meow made, Sandstorm Lead mod, suopersaw chords, Trance 90s Pro 2); they are copied to your folder the first time you open the plugin and are yours to edit or delete.")]
 
 tips = ["For a quick start, load a preset close to what you want, then change only the cutoff, the envelopes and the drive.",
         "Keep the lowpass below about 12 kHz on leads. A fully open filter sounds too bright.",

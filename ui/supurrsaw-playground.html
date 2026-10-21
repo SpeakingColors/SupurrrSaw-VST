@@ -259,6 +259,10 @@ canvas{display:block;max-width:100%}
   <div class="row">
     <button class="btn sm" id="octd" data-tip="Octave down (key Z).">Oct −</button><span id="octv" class="pill" style="min-width:34px;text-align:center"></span><button class="btn sm" id="octu" data-tip="Octave up (key X).">Oct +</button>
     <label class="row" data-tip="Mod wheel. Used by the Mod matrix wheel row."><span class="lbl">Wheel</span><input type="range" id="wheel" min="0" max="1" step="0.01" value="0" style="width:90px;accent-color:#02ebba"></label>
+    <label class="row" data-tip="Pitch wheel. Drag it, it springs back to the middle when you let go. Moves every note. Use the range next to it to set how far it goes."><span class="lbl">Bend</span><input type="range" id="bend" min="-1" max="1" step="0.005" value="0" style="width:90px;accent-color:#ff7bb1"></label>
+    <label class="row" data-tip="How far the pitch wheel bends, in semitones, up and down. 12 is one octave, handy for risers and falls. Saved with the preset."><span class="lbl">Range</span><select id="bendRange" class="sel"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option><option value="7">7</option><option value="12">12</option><option value="24">24</option></select></label>
+    <button class="btn sm" id="mpe" data-tip="MPE: per-note expression. On, a note sent on MIDI channels 2 to 16 bends, slides (CC74) and presses on its own, so you can bend one note of a chord. Channel 1 is the main channel and moves every note. Off, every channel is treated alike. The Mod matrix has Pressure, Slide and Bend sources.">MPE</button>
+    <label class="row" data-tip="Pitch bend range of a single MPE note, in semitones. 48 is the MPE standard and what most MPE keyboards and DAWs use. Change it only if your controller uses another range."><span class="lbl">MPE range</span><select id="mpeRange" class="sel"><option value="12">12</option><option value="24">24</option><option value="48">48</option><option value="96">96</option></select></label>
     <button class="btn sm" id="midi" data-tip="Use a MIDI keyboard. Needs permission, may be blocked inside this page.">MIDI in</button>
     <button class="btn sm" id="panic" data-tip="Stops every note.">Panic</button>
     <button class="btn sm" id="dragWav" draggable="true">Drag last note</button>
@@ -346,7 +350,7 @@ function blep(t, dt) {
 function defaultLayer() {
   return { on: true, wave: "Off", level: 0.7, voices: 7, detune: 0.4, pwm: 0.5, octave: 0, tune: 0, pan: 0, sync: false, syncSemis: 7, syncEnv: 0, syncLfo: 0, syncKey: 0, syncWheel: 0, cents: 0, lfoPitchCents: 0, fmSrc: 0, fmAmt: 0, amSrc: 0, amAmt: 0, smp: "Off", smpPitch: 0, smpVol: 1 };
 }
-const MX_SRC = ["lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3"];
+const MX_SRC = ["lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"];
 const MX_DST = ["pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"];
 const MX_NS = MX_SRC.length, MX_ND = MX_DST.length;
 const MX_KEYS = []; for (let a = 0; a < MX_NS; a++) for (let b = 0; b < MX_ND; b++) MX_KEYS.push("mx_" + MX_SRC[a] + "_" + MX_DST[b]);
@@ -357,7 +361,7 @@ function defaultParams() {
     dist: 0, distPre: false, noiseLevel: 0, noiseHpHz: 3000, ampA: 0.002, ampD: 0.3, ampS: 0.8, ampR: 0.3, fenvA: 0.002, fenvD: 0.3, fenvS: 0.8, fenvR: 0.3, ampCA: 0, ampCD: -0.4, ampCR: -0.4, fenvCA: 0, fenvCD: -0.4, fenvCR: -0.4,
     pitchAmt: 0, pitchTime: 0.09, pitchAttack: 0, pitchFall: 0, pitchFallTime: 1, lfoRate: 6, lfoPwm: 0, lfoPitch: 0, lfoCutoff: 0, lfoDetune: 0, lfoShape: 0, lfoPan: 0, lfoAmp: 0, wheelCutoff: 0, velCutoff: 0, wheelVib: 0, phaseReset: false, drift: 0, detuneRange: 1,
     spread: 0.7, bassMonoHz: 120, mfxMulti: false, mx0Mix: 0, mx0Depth: 0.5, mx0Rate: 0.6, mx0Delay: 12, mx0Width: 1, mx0Fb: 0.5, mx1Mix: 0, mx1Depth: 0.6, mx1Rate: 0.25, mx1Delay: 6, mx1Width: 1, mx1Fb: 0.6, mx2Mix: 0, mx2Depth: 0.7, mx2Rate: 0.35, mx2Delay: 12, mx2Width: 1, mx2Fb: 0.5, chorusMix: 0, chorusDepth: 0.5, chorusRate: 0.6, delayMix: 0, delayTime: 0.25, delayFb: 0.4, delaySync: false, delayDiv: 7, bpm: 120, optoAmt: 0, ottDepth: 0, ottMix: 0, sqzAmt: 0, reverbMix: 0, reverbSize: 0.6, reverbWidth: 0.8, reverbLowCutHz: 150,
-    master: 1, clipKnee: 0.72, limiter: true, limCeil: 0.9, polyphony: 12, modWheel: 0, dynMix: 1, dmMix: 0.4, dmDrive: 0.5, dmClip: 0.35, dmLow: 0, dmMid: 0, dmHigh: 0, chorusDelay: 12, chorusWidth: 1, delayDamp: 0.7, delayPing: 1, reverbPre: 0, reverbDamp: 0.25, optoGain: 0, optoRel: 1, ottLow: 0, ottMid: 0, ottHigh: 0, ottTime: 1, sqzAtk: 4, sqzRel: 90, sqzMakeup: 0, menvData: "", menvPts: "", menvTime: 0.5, menvInv: false, menvLoop: false, menvSync: false, menvDiv: 6, lfoDepth: 1, lfoFade: 0, lfoStart: 0, pitchHold: 0, pitchCurve: 0, drvDrive: 0, drvXs: 0, drvFuzz: 0, drvMix: 1, eq1On: false, eq1F: 30, eq2On: true, eq2F: 120, eq2G: 0, eq3On: true, eq3F: 500, eq3G: 0, eq3Q: 1, eq4On: true, eq4F: 3000, eq4G: 0, eq4Q: 1, eq5On: true, eq5F: 9000, eq5G: 0, eq6On: false, eq6F: 18000, build: 0, modFxType: 0, chorusFb: 0.5, crushBits: 16, crushRate: 1, crushMix: 0, widMid: 1, widHi: 1, msMid: 0, msSide: 0, ampLink: true, fRoute: 0,
+    master: 1, clipKnee: 0.72, limiter: true, limCeil: 0.9, polyphony: 12, modWheel: 0, bendRange: 2, pitchBend: 0, mpe: true, mpeRange: 48, pressure: 0, slide: 0, dynMix: 1, dmMix: 0.4, dmDrive: 0.5, dmClip: 0.35, dmLow: 0, dmMid: 0, dmHigh: 0, chorusDelay: 12, chorusWidth: 1, delayDamp: 0.7, delayPing: 1, reverbPre: 0, reverbDamp: 0.25, optoGain: 0, optoRel: 1, ottLow: 0, ottMid: 0, ottHigh: 0, ottTime: 1, sqzAtk: 4, sqzRel: 90, sqzMakeup: 0, menvData: "", menvPts: "", menvTime: 0.5, menvInv: false, menvLoop: false, menvSync: false, menvDiv: 6, lfoDepth: 1, lfoFade: 0, lfoStart: 0, pitchHold: 0, pitchCurve: 0, drvDrive: 0, drvXs: 0, drvFuzz: 0, drvMix: 1, eq1On: false, eq1F: 30, eq2On: true, eq2F: 120, eq2G: 0, eq3On: true, eq3F: 500, eq3G: 0, eq3Q: 1, eq4On: true, eq4F: 3000, eq4G: 0, eq4Q: 1, eq5On: true, eq5F: 9000, eq5G: 0, eq6On: false, eq6F: 18000, build: 0, modFxType: 0, chorusFb: 0.5, crushBits: 16, crushRate: 1, crushMix: 0, widMid: 1, widHi: 1, msMid: 0, msSide: 0, ampLink: true, fRoute: 0,
     f2Mode: "Off", f2Cut: 4000, f2Res: 0.2, f2Drv: 0, f2Env: 0, f2Key: 0, f3Mode: "Off", f3Cut: 4000, f3Res: 0.2, f3Drv: 0, f3Env: 0, f3Key: 0,
     lfo2Rate: 6, lfo2Shape: 0, lfo2Depth: 1, lfo2Fade: 0, lfo2Start: 0, lfo3Rate: 6, lfo3Shape: 0, lfo3Depth: 1, lfo3Fade: 0, lfo3Start: 0,
     menv2Data: "", menv2Pts: "", menv2Time: 0.5, menv2Inv: false, menv2Loop: false, menv2Sync: false, menv2Div: 6, menv3Data: "", menv3Pts: "", menv3Time: 0.5, menv3Inv: false, menv3Loop: false, menv3Sync: false, menv3Div: 6,
@@ -756,7 +760,7 @@ class Master {
 const MENV_BEATS = [16, 8, 4, 2, 3, 4 / 3, 1, 1.5, 2 / 3, 0.5, 0.75, 1 / 3, 0.25, 0.375, 1 / 6, 0.125];
 const ENV_ORDER = ["amp", "amp2", "amp3", "fenv", "fenv2", "fenv3"], MENV_P = ["menv", "menv2", "menv3"];
 function newVoice() {
-  return { active: false, note: 60, vel: 1, age: 0, phase: [new Float64Array(kMaxSaws), new Float64Array(kMaxSaws), new Float64Array(kMaxSaws)], syncPhase: [0, 0, 0],
+  return { active: false, note: 60, vel: 1, age: 0, ch: 0, bend: 0, press: 0, slide: 0, phase: [new Float64Array(kMaxSaws), new Float64Array(kMaxSaws), new Float64Array(kMaxSaws)], syncPhase: [0, 0, 0],
     noiseHp: 0, noiseHp2: 0, subPhase: 0, subPh: new Float64Array(5), nzS: new Float64Array(20), drift: new Float64Array(kMaxSaws), driftT: new Float64Array(kMaxSaws), lfoPhase: 0, t: 0, ctr: 0, lfoC: 0, pEnv: 0, pcC: [1, 1, 1], psC: [0, 0, 0], fC: [440, 440, 440], cc: [1000, 1000, 1000], laC: 0.01, lyOut: [0, 0, 0], fmSubPh: 0, gl: 0, stackCents: 0, stackGain: 1, rnd: 0, sh: 0, sh0: 0,
     lp2: [0, 0], sa: [0, 0], sb: [0, 0], lc2: [0, 0], rs: 1, sp: [0, 0, 0, 0], sq: [1, 1, 1, 1], svL: new Float64Array(MX_NS),
     ax: new Float64Array(8), bw: new Float64Array(40), bwz: new Float64Array(32), bwF: -1, bwN: 0, bwH: false, hcC: 0.9, amp: new Env(), amp2: new Env(), amp3: new Env(), fenv: new Env(), fenv2: new Env(), fenv3: new Env(), fl: [new Filter(), new Filter(), new Filter()], fr: [new Filter(), new Filter(), new Filter()], hpL: 0, hpR: 0 };
@@ -803,7 +807,13 @@ class SupurrEngine {
   }
   envsOn(v) { v.amp.on(); v.amp2.on(); v.amp3.on(); v.fenv.on(); v.fenv2.on(); v.fenv3.on(); }
   envsOff(v) { v.amp.off(); v.amp2.off(); v.amp3.off(); v.fenv.off(); v.fenv2.off(); v.fenv3.off(); }
-  noteOn(note, vel) {
+  bendSt(v) { return this.p.pitchBend * this.p.bendRange + v.bend; }
+  chanSet(ch, key, x) { ch &= 15; (this.chS || (this.chS = { bend: new Float64Array(16), press: new Float64Array(16), slide: new Float64Array(16) }))[key][ch] = x; for (const v of this.voices) if (v.active && v.ch === ch && v.amp.stage !== 3) v[key] = x; }
+  setChanBend(ch, semis) { this.chanSet(ch, "bend", semis); }
+  setChanPress(ch, x) { this.chanSet(ch, "press", x); }
+  setChanSlide(ch, x) { this.chanSet(ch, "slide", x); }
+  setNotePress(note, x) { for (const v of this.voices) if (v.active && v.note === note && v.amp.stage !== 3) v.press = x; }
+  noteOn(note, vel, ch) {
     if (this.kit) { for (const s of this.kit) if (s.n.indexOf(note) >= 0) { for (const t of this.kit) if (t !== s && s.ch.indexOf(t.n[0]) >= 0) { t.e.allOff(); } s.e.noteOn(s.play == null ? note : s.play, vel); s.hot = 4 * this.sr; } return; }
     const p = this.p;
     if (p.mono) {
@@ -814,11 +824,12 @@ class SupurrEngine {
     for (let k = 0; k < n; k++) {
       const v = this.allocVoice(); Object.assign(v, newVoice()); v.active = true; v.note = note; v.vel = vel; v.rnd = 2 * this.rnd() - 1; v.sh = v.rnd; v.sh0 = 0; v.lp2[0] = v.lp2[1] = 0; v.age = ++this.clock; v.rs = (Math.imul(note + 1, 2654435761) ^ Math.imul(v.age, 40503)) >>> 0; v.sa[0] = lfoRnd(v); v.sa[1] = lfoRnd(v); v.sb[0] = v.sb[1] = 0;
       v.stackCents = n > 1 ? (k / (n - 1) * 2 - 1) * p.stackCents : 0; v.stackGain = 1 / Math.sqrt(n);
+      v.ch = (ch | 0) & 15; if (ch > 0 && this.chS) { v.bend = this.chS.bend[v.ch]; v.press = this.chS.press[v.ch]; v.slide = this.chS.slide[v.ch]; }
       for (let l = 0; l < kLayers; l++) for (let j = 0; j < kMaxSaws; j++) v.phase[l][j] = p.phaseReset ? 0 : this.rnd();
       this.envsOn(v);
     }
   }
-  noteOff(note) { if (this.kit) return; for (const v of this.voices) if (v.active && v.note === note && v.amp.stage !== 3) this.envsOff(v); }
+  noteOff(note, ch) { if (this.kit) return; for (const v of this.voices) if (v.active && v.note === note && (ch == null || ch < 0 || v.ch === (ch & 15)) && v.amp.stage !== 3) this.envsOff(v); }
   allOff() { if (this.kit) for (const s of this.kit) { s.e.allOff(); s.hot = 0; } for (const v of this.voices) v.active = false; }
   /* global modulation (reverb, delay, drive, clipper, high-pass, low-pass, width) comes from the newest sounding voice; the Build macro adds to it */
   globals() {
@@ -883,7 +894,7 @@ class SupurrEngine {
     const p = this.p; if (lvl <= 0) return;
     const nv = Math.max(1, Math.min(5, p.subVoices | 0));
     if (nv > 1) {   /* several detuned sub oscillators, spread across the stereo field */
-      const sf0 = 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12) / 12); let sl = 0, sr_ = 0;
+      const sf0 = 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12 + this.bendSt(v)) / 12); let sl = 0, sr_ = 0;
       for (let k = 0; k < nv; k++) {
         const x = 2 * k / (nv - 1) - 1, sdt = sf0 * Math.pow(2, x * p.subDetune * 30 / 1200) * invSr; if (sdt > 0.45) continue; let sp = v.subPh[k], s;
         switch (p.subWave) {
@@ -897,7 +908,7 @@ class SupurrEngine {
       }
       const nrm = lvl * 0.7 / Math.sqrt(nv); st.L += sl * nrm; st.R += sr_ * nrm; return;
     }
-    const sf = 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12) / 12), sdt = sf * invSr; if (sdt > 0.45) return; let sp = v.subPhase, s;
+    const sf = 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12 + this.bendSt(v)) / 12), sdt = sf * invSr; if (sdt > 0.45) return; let sp = v.subPhase, s;
     switch (p.subWave) {
       case "Tri": s = 4 * Math.abs(sp - 0.5) - 1; break;
       case "Pulse": s = (sp < 0.5 ? 1 : -1) + blep(sp, sdt) - blep(sp < 0.5 ? sp + 0.5 : sp - 0.5, sdt); s *= 0.8; break;
@@ -940,14 +951,14 @@ class SupurrEngine {
       if (Math.floor(v.t * sr) % 512 === 0) for (let j = 0; j < kMaxSaws; j++) v.driftT[j] = p.drift * 0.004 * (2 * this.rnd() - 1);
       if (ctl) for (let j = 0; j < kMaxSaws; j++) v.drift[j] += 0.002 * (v.driftT[j] - v.drift[j]);
       if (hasMx) {
-        md.fill(0); sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = Math.max(-2, Math.min(2, pitchEnv / 12)); sv[4] = p.modWheel; sv[5] = Math.max(-2, Math.min(2, (v.note - 60) / 24)); sv[6] = v.vel; sv[7] = v.rnd;
+        md.fill(0); sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = Math.max(-2, Math.min(2, pitchEnv / 12)); sv[4] = p.modWheel; sv[5] = Math.max(-2, Math.min(2, (v.note - 60) / 24)); sv[6] = v.vel; sv[7] = v.rnd; sv[15] = Math.min(1, Math.max(0, p.pressure + v.press)); sv[16] = Math.min(1, Math.max(0, p.slide + v.slide)); sv[17] = Math.max(-2, Math.min(2, this.bendSt(v) / 12));
         sv[8] = p.menvInv ? 1 - this.menvAt(0, v.t) : this.menvAt(0, v.t); sv[9] = lfo2; sv[10] = lfo3; sv[11] = fE2; sv[12] = fE3; sv[13] = p.menv2Inv ? 1 - this.menvAt(1, v.t) : this.menvAt(1, v.t); sv[14] = p.menv3Inv ? 1 - this.menvAt(2, v.t) : this.menvAt(2, v.t);
         for (let k = 0; k < mxl.length; k += 3) md[mxl[k + 1]] += sv[mxl[k]] * mxl[k + 2];
         if (i === n - 1) v.svL.set(sv);
       }
       let L = 0, R = 0, smL = 0, smR = 0;
       srcV[0] = 0; srcV[1] = v.lyOut[0]; srcV[2] = v.lyOut[1]; srcV[3] = v.lyOut[2]; srcV[4] = 0; srcV[5] = 0;
-      if (anySub) { srcV[4] = Math.sin(2 * kPi * v.fmSubPh); v.fmSubPh += 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12) / 12) * invSr; if (v.fmSubPh >= 1) v.fmSubPh -= 1; }
+      if (anySub) { srcV[4] = Math.sin(2 * kPi * v.fmSubPh); v.fmSubPh += 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12 + this.bendSt(v)) / 12) * invSr; if (v.fmSubPh >= 1) v.fmSubPh -= 1; }
       if (anyNz) srcV[5] = 2 * this.rnd() - 1;
       for (let ly = 0; ly < kLayers; ly++) {
         const lp = p.layers[ly], le = link ? 1 : (ly === 0 ? ampE : (ly === 1 ? aE2 : aE3));
@@ -955,7 +966,7 @@ class SupurrEngine {
         if (lp.smp !== "Off") { const d = this.smp[lp.smp]; if (d) { if (ctl) v.sq[ly] = Math.pow(2, (lp.smpPitch + (SMP_KEYED[lp.smp] ? v.note - 60 + v.gl : 0)) / 12); const pos = v.sp[ly], i0 = pos | 0;
           if (i0 < d.length - 1) { const f = pos - i0, sm = (d[i0] * (1 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } }
         if (lp.on === false || lp.wave === "Off" || (lp.level <= 0 && !used[ly])) { v.lyOut[ly] = 0; continue; }
-        let f; if (ctl) { let semis = (v.note - 69) + v.gl + lp.octave * 12 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12;
+        let f; if (ctl) { let semis = (v.note - 69) + v.gl + lp.octave * 12 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + this.bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12;
         f = 440 * Math.pow(2, semis / 12); v.fC[ly] = f; } else f = v.fC[ly];
         let fmF = 1; if (lp.fmAmt > 0 && lp.fmSrc >= 1 && lp.fmSrc <= 5 && lp.fmSrc !== ly + 1) fmF = Math.max(0.02, 1 + lp.fmAmt * 3 * srcV[lp.fmSrc]); const dt = Math.min(0.45, f * invSr * fmF); let lL = 0, lR = 0;
         const wtb = lp.wave === "Custom" ? this.wt[ly] : null;
@@ -1072,8 +1083,12 @@ function applyMsg(e,m){
   if(m.t==="set"){e.setParams(m.p);}
   else if(m.t==="kit"){e.setKit(m.k);}
   else if(m.t==="p"){var k=m.k;if(k.charAt(0)==="L"&&k.charAt(2)==="_"){e.p.layers[+k.charAt(1)][k.slice(3)]=m.v;}else{e.p[k]=m.v;}}
-  else if(m.t==="on"){e.noteOn(m.n,m.v);}
-  else if(m.t==="off"){e.noteOff(m.n);}
+  else if(m.t==="on"){e.noteOn(m.n,m.v,m.c);}
+  else if(m.t==="off"){e.noteOff(m.n,m.c==null?-1:m.c);}
+  else if(m.t==="bend"){e.setChanBend(m.c,m.v);}
+  else if(m.t==="prs"){e.setChanPress(m.c,m.v);}
+  else if(m.t==="sld"){e.setChanSlide(m.c,m.v);}
+  else if(m.t==="pat"){e.setNotePress(m.n,m.v);}
   else if(m.t==="all"){e.allOff();}
   else if(m.t==="cyc"){e.setCycle(m.ly,m.d||null);}
 }
@@ -1680,7 +1695,7 @@ function matrixCard(){
   const DST=["Pitch","Cutoff","Reso","Drive","PWM","Detune","Pan","Volume","Sync 1","Sync 2","Sync 3","Sub","Noise","High pass","Cut 2","Cut 3","Reverb","Delay","Drive stk","Clipper","EQ HPF","EQ LPF","Width"];
   const DID=EN.MX_DST.slice();
   const DTIP=["Pitch, 1 equals 12 semitones.","Cutoff, 1 equals 5 octaves.","Resonance.","Filter drive.","Pulse width.","Super saw detune spread.","Stereo position.","Volume.","Layer 1 sync pitch, 1 equals 12 semitones.","Layer 2 sync pitch, 1 equals 12 semitones.","Layer 3 sync pitch, 1 equals 12 semitones.","Sub level.","Noise level.","High pass of the voice (the Low cut), 1 equals 4 octaves.","Filter 2 cutoff, 1 equals 5 octaves.","Filter 3 cutoff, 1 equals 5 octaves.","Reverb mix, added to the Reverb Mix knob. Global: follows the newest held note.","Delay mix, added to the Delay Mix knob. Global: follows the newest held note.","Drive stack amount (FX page), added to the Drive knob. Global.","Dance master clipper amount, added to Clip. Global.","The EQ low cut (band 1) moves up by 6 octaves per 1.0. Switches the band on while it is above 0. Global.","The EQ high cut (band 6) moves down by 6 octaves per 1.0 (use negative amounts). Switches the band on. Global.","Stereo width, added to the Width settings of the Dance master card. Global."];
-  const SRC=[["LFO","lfo","The LFO."],["Filter env","fenv","The filter envelope."],["Amp env","aenv","The amplifier envelope."],["Pitch env","penv","The pitch envelope, 12 semitones equals 1."],["Mod wheel","whl","The mod wheel."],["Key","key","The played note, 2 octaves above or below middle C equals 1."],["Velocity","vel","How hard the key is hit."],["Random","rnd","A new random value for every note, between -1 and 1."],["Drawn env","men","Your own drawn envelope (card below). 0 to 1 over its length, once or looping."],["LFO 2","lfo2","The second LFO."],["LFO 3","lfo3","The third LFO."],["Filter env 2","fenv2","The envelope of filter 2."],["Filter env 3","fenv3","The envelope of filter 3."],["Drawn env 2","men2","Drawn envelope 2."],["Drawn env 3","men3","Drawn envelope 3."]];
+  const SRC=[["LFO","lfo","The LFO."],["Filter env","fenv","The filter envelope."],["Amp env","aenv","The amplifier envelope."],["Pitch env","penv","The pitch envelope, 12 semitones equals 1."],["Mod wheel","whl","The mod wheel."],["Key","key","The played note, 2 octaves above or below middle C equals 1."],["Velocity","vel","How hard the key is hit."],["Random","rnd","A new random value for every note, between -1 and 1."],["Drawn env","men","Your own drawn envelope (card below). 0 to 1 over its length, once or looping."],["LFO 2","lfo2","The second LFO."],["LFO 3","lfo3","The third LFO."],["Filter env 2","fenv2","The envelope of filter 2."],["Filter env 3","fenv3","The envelope of filter 3."],["Drawn env 2","men2","Drawn envelope 2."],["Drawn env 3","men3","Drawn envelope 3."],["Pressure","prs","How hard a key is pressed after it is down (aftertouch). With MPE on, each note has its own. 0 to 1."],["Slide","sld","Finger slide on an MPE key (MIDI CC74), or CC74 from any controller. With MPE on, each note has its own. 0 to 1."],["Bend","bnd","The pitch wheel plus a note's own MPE bend, in octaves: 12 semitones equals 1. Lets a bend open a filter or add vibrato."]];
   const sy=(n,mx)=>i=>N("L"+i+"_"+n,"",0,n==="syncKey"?8:(n==="syncWheel"?24:12),0.1,"st","Layer "+(i+1)+" sync amount.");
   const L={ // existing parameters that already sit in a cell
     lfo:{pitch:N("lfoPitch","",0,2,0.01,"","LFO vibrato on all layers."),cut:N("lfoCutoff","",0,2,0.01,"","LFO moves the cutoff."),pwm:N("lfoPwm","",0,1,0.01,"","LFO moves the pulse width."),det:N("lfoDetune","",0,1,0.01,"","LFO moves the detune spread."),pan:N("lfoPan","",0,1,0.01,"","Auto-pan."),vol:N("lfoAmp","",0,1,0.01,"","LFO tremolo."),sy1:sy("syncLfo")(0),sy2:sy("syncLfo")(1),sy3:sy("syncLfo")(2)},
@@ -2559,7 +2574,7 @@ function factoryBanks(){if(FACT)return FACT;const order={A:["Lead"],B:["Bass"],C
   for(const b in FACTORY_ORDER)FACTORY_ORDER[b].forEach(n=>{if(PRESETS[n]&&!seen.has(n)&&FACT[b].length<SLOTS){seen.add(n);FACT[b].push(n);}});
   Object.keys(PRESETS).sort((a,b)=>nice(a).localeCompare(nice(b))).forEach(n=>{if(seen.has(n))return;const t=(TAGS[n]||{}).type||"Lead";const b=Object.keys(order).find(k=>order[k].includes(t))||"D";if(FACT[b].length<SLOTS){seen.add(n);FACT[b].push(n);}});return FACT;}
 function slotInfo(b,i){const ov=BOV[b]&&BOV[b][i];if(ov)return {name:ov.name,tags:ov.tags||[],ov:1};const f=factoryBanks()[b]&&factoryBanks()[b][i];if(f)return {name:nice(f),key:f,factory:1,tags:TAGS[f]?[TAGS[f].type,...TAGS[f].genres]:[]};return {name:"Init",init:1,tags:[]};}
-function flatDiff(p){const f=flat(p),b=flat(initParams()),d={};for(const k in f){if(k==="bpm"||k==="modWheel")continue;const x=f[k],y=b[k];if(typeof x==="number"?!(Math.abs(x-y)<=1e-9):x!==y)d[k]=typeof x==="number"?+x.toPrecision(6):x;}return d;}
+function flatDiff(p){const f=flat(p),b=flat(initParams()),d={};for(const k in f){if(k==="bpm"||k==="modWheel"||k==="mpe"||k==="mpeRange"||k==="pitchBend"||k==="pressure"||k==="slide")continue;const x=f[k],y=b[k];if(typeof x==="number"?!(Math.abs(x-y)<=1e-9):x!==y)d[k]=typeof x==="number"?+x.toPrecision(6):x;}return d;}
 function applyFlat(p,d){const known=flat(p);for(const k in d){if(!(k in known))continue;const v=d[k],t=typeof known[k];if(typeof v!==t)continue;if(t==="number"&&!isFinite(v))continue;if(t==="string"&&v.length>60000)continue;
   const m=/^L(\d)_(.+)$/.exec(k);if(m)p.layers[+m[1]][m[2]]=v;else p[k]=v;}return p;}
 function slotParams(b,i){const ov=BOV[b]&&BOV[b][i];if(ov)return applyFlat(initParams(),ov.d||{});const f=factoryBanks()[b]&&factoryBanks()[b][i];return f?EN.loadPreset(PRESETS[f]):initParams();}
@@ -2707,7 +2722,7 @@ function buildPanels(){
   pc[2].querySelector("#movesCard").classList.add("grow");pc.forEach(x=>Pg.appendChild(x));
   BUILD_PAGE="kit";buildKitPage();
 }
-function refreshAll(){capDirty();if(P&&P.ampLink&&TG.amp&&TG.amp.idx>0)tabSet("amp",0);for(const k in CTRL)CTRL[k].refresh();drawAll();updateDiffInfo();wlSyncFromPatch();renderBrowser();}
+function refreshAll(){if(typeof syncDock==="function"&&P)syncDock();capDirty();if(P&&P.ampLink&&TG.amp&&TG.amp.idx>0)tabSet("amp",0);for(const k in CTRL)CTRL[k].refresh();drawAll();updateDiffInfo();wlSyncFromPatch();renderBrowser();}
 
 /* ---------- presets ---------- */
 function slugOf(n){return n.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40)||"patch";}
@@ -2724,6 +2739,7 @@ function loadPreset(val,why){
   else if(val.startsWith("s:")){const sp=val.split(":");p=slotParams(sp[1],+sp[2]);name=slotInfo(sp[1],+sp[2]).name;BANKV=sp[1];SLOTSEL=+sp[2];}
   else{const k=val.slice(2);p=fromSaved(SAVED[k].params);name=SAVED[k].name;}
   p.bpm=clamp(+$("#bpm").value||140,40,240);   // tempo belongs to the song, not the patch
+  if(P)["mpe","mpeRange","pitchBend","pressure","slide"].forEach(k=>{p[k]=P[k];});   // the MPE switch and the live wheels belong to the player, not the patch
   const prev=CURNAME;
   P=p;BASE=clone(p);CURNAME=name;CURBASEKEY=val;touched={};MFXS=MFXS_IN||{};mfxLast=P.modFxType|0;
   loads++;pushMove(why||"@load",prev,name);
@@ -2851,8 +2867,8 @@ async function renamePreset(){
 
 /* ---------- playing ---------- */
 const held=new Set();
-function noteOn(n,v){if(held.has(n))return;held.add(n);startAudio().then(()=>send({t:"on",n,v:v||0.8}));lightKey(n,1);}
-function noteOff(n){if(!held.delete(n))return;send({t:"off",n});lightKey(n,0);}
+function noteOn(n,v,c){if(held.has(n))return;held.add(n);startAudio().then(()=>send(c>0?{t:"on",n,v:v||0.8,c}:{t:"on",n,v:v||0.8}));lightKey(n,1);}
+function noteOff(n,c){if(!held.delete(n))return;send(c>0?{t:"off",n,c}:{t:"off",n});lightKey(n,0);}
 function lightKey(n,on){const k=$('[data-n="'+n+'"]');if(k)k.classList.toggle("on",!!on);}
 let oct=3;const BLACK=[1,3,6,8,10];
 function buildKbd(){
@@ -2881,6 +2897,17 @@ function setOct(o){oct=clamp(o,0,7);buildKbd();}
 function panic(){held.forEach(n=>lightKey(n,0));held.clear();keyNote.clear();send({t:"all"});stopDemo();}
 $("#octd").onclick=()=>setOct(oct-1);$("#octu").onclick=()=>setOct(oct+1);$("#panic").onclick=panic;
 $("#wheel").oninput=e=>{setParam("modWheel",+e.target.value,true);};
+/* pitch wheel and MPE: the wheel and the pressure/slide values are live, never part of a patch; the range and the MPE switch are settings */
+const liveSet=(k,v)=>{putV(k,v);send({t:"p",k,v});};
+$("#bend").oninput=e=>liveSet("pitchBend",+e.target.value);
+["pointerup","pointercancel","blur","keyup"].forEach(ev=>$("#bend").addEventListener(ev,()=>{$("#bend").value=0;liveSet("pitchBend",0);}));
+$("#bend").ondblclick=()=>{$("#bend").value=0;liveSet("pitchBend",0);};
+$("#bendRange").onchange=e=>setParam("bendRange",+e.target.value,true);
+$("#mpe").onclick=()=>setParam("mpe",!P.mpe,true);
+$("#mpeRange").onchange=e=>setParam("mpeRange",+e.target.value,true);
+function syncDock(){const br=$("#bendRange");if(![...br.options].some(o=>+o.value===P.bendRange)){const o=el("option","",String(P.bendRange));o.value=P.bendRange;br.appendChild(o);}br.value=P.bendRange;
+  $("#mpe").classList.toggle("on",!!P.mpe);$("#mpe").textContent=P.mpe?"MPE on":"MPE off";const mr=$("#mpeRange");if(![...mr.options].some(o=>+o.value===P.mpeRange)){const o=el("option","",String(P.mpeRange));o.value=P.mpeRange;mr.appendChild(o);}mr.value=P.mpeRange;$("#mpeRange").parentElement.style.opacity=P.mpe?1:0.45;}
+onChange(k=>{if(k==="bendRange"||k==="mpe"||k==="mpeRange")syncDock();});
 onChange(k=>{if(k==="modWheel")$("#wheel").value=P.modWheel;});
 $("#midi").onclick=async()=>{
   const info=$("#midiInfo");
@@ -2888,9 +2915,14 @@ $("#midi").onclick=async()=>{
     if(!navigator.requestMIDIAccess){info.textContent="MIDI not supported in this browser.";return;}
     const acc=await navigator.requestMIDIAccess();let n=0;
     acc.inputs.forEach(inp=>{n++;inp.onmidimessage=m=>{const [s,a,b]=m.data,cmd=s&0xf0;
-      if(cmd===0x90&&b>0)noteOn(a,b/127);else if(cmd===0x80||(cmd===0x90&&b===0))noteOff(a);
+      const ch=s&15,mem=P.mpe&&ch>0;
+      if(cmd===0x90&&b>0)noteOn(a,b/127,P.mpe?ch:0);else if(cmd===0x80||(cmd===0x90&&b===0))noteOff(a,P.mpe?ch:0);
+      else if(cmd===0xe0){const x=(((b<<7)|a)-8192)/8192;if(mem)send({t:"bend",c:ch,v:x*P.mpeRange});else{liveSet("pitchBend",+x.toFixed(4));$("#bend").value=x;}}
+      else if(cmd===0xd0){const x=a/127;if(mem)send({t:"prs",c:ch,v:x});else liveSet("pressure",x);}
+      else if(cmd===0xa0)send({t:"pat",n:a,v:b/127});
+      else if(cmd===0xb0&&a===74){const x=b/127;if(mem)send({t:"sld",c:ch,v:x});else liveSet("slide",x);}
       else if(cmd===0xb0&&a===1){setParam("modWheel",Number((b/127).toFixed(3)),false);$("#wheel").value=P.modWheel;}};});
-    info.textContent=n?n+" MIDI input"+(n>1?"s":"")+" connected (CC1 = wheel).":"No MIDI devices found.";
+    info.textContent=n?n+" MIDI input"+(n>1?"s":"")+" connected (CC1 mod wheel, pitch bend, MPE).":"No MIDI devices found.";
   }catch(e){info.textContent="MIDI blocked here.";}
 };
 {const vb=$("#voices"),bump=d=>{if(!P)return;const v=clamp((P.polyphony|0)+d,1,32);setParam("polyphony",v,false);CTRL.polyphony&&CTRL.polyphony.refresh();};

@@ -27,9 +27,9 @@ static const FilterMode kFilterList[kFilterModes] = {FilterMode::Off, FilterMode
   FilterMode::HP, FilterMode::HP24, FilterMode::BP, FilterMode::BP24, FilterMode::Notch, FilterMode::CombP, FilterMode::CombM, FilterMode::Formant};
 inline FilterMode filterModeFromName(const char* n) { for (int i = 0; i < kFilterModes; ++i) { const char* a = kFilterNames[i]; const char* b = n; while (*a && *a == *b) { ++a; ++b; } if (!*a && !*b) return (FilterMode)i; } return FilterMode::LP24; }
 
-// Mod matrix: 15 sources x 23 destinations (same order as MX_SRC / MX_DST in the playground engine). Destinations 16 and up are global (effects, clipper, high pass, low pass, width).
-constexpr int kMxSrc = 15, kMxDst = 23;
-static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3"};
+// Mod matrix: 18 sources x 23 destinations (same order as MX_SRC / MX_DST in the playground engine). Destinations 16 and up are global (effects, clipper, high pass, low pass, width).
+constexpr int kMxSrc = 18, kMxDst = 23;
+static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"};
 static const char* const kMxDstNames[kMxDst] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
 
 // Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
@@ -200,6 +200,9 @@ struct Params {
   bool limiter = true;         // slow, smooth peak limiter in front of the clipper
   float limCeil = 0.9f;        // limiter ceiling (linear)
   float modWheel = 0.f;        // 0..1, set by the host (MIDI CC1)
+  // Pitch wheel and MPE. pitchBend is -1..1 (live, set by the host); bendRange is semitones at full wheel. In MPE mode the notes' own channels bend by mpeRange (48 is the MPE default).
+  float bendRange = 2.f, pitchBend = 0.f, mpeRange = 48.f; bool mpe = true;
+  float pressure = 0.f, slide = 0.f;   // live, 0..1: channel pressure and CC74 (global); a note's own values come from its MPE channel or polyphonic pressure
   // Mastering: dynMix scales the whole opto/OTT/squeeze chain; dm* is the dance master chain (3 band compressor, clipper, dry/wet)
   float lfoDepth = 1.f, lfoFade = 0.f, lfoStart = 0.f;   // LFO master depth, fade-in time (s) and start phase (0..1); shapes: 0 sine, 1 tri, 2 square, 3 saw, 4 sample and hold
   float pitchHold = 0.f, pitchCurve = 0.f;               // pitch envelope: hold before the fall (s), 0 = exponential fall, 1 = linear fall
@@ -408,6 +411,7 @@ struct Voice {
   double syncPhase[kLayers] = {}, noiseHp = 0, noiseHp2 = 0, gl = 0, subPh[5] = {}, nzS[20] = {};
   double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   double lfoPhase = 0, t = 0, stackCents = 0, stackGain = 1;
+  int ch = 0; double bend = 0, press = 0, slide = 0;   // MPE: channel of the note, its own bend (semitones), pressure and slide (0..1)
   double lyOut[kLayers] = {}, fmSubPh = 0;
   // control rate values (updated every 4th sample), the second and third LFO, their own random stream (lfoRnd), procedural sample positions and steps
   int ctr = 0; double lfoC = 0, pEnv = 0, pcC[kLayers] = {1, 1, 1}, psC[kLayers] = {0, 0, 0}, fC[kLayers] = {440, 440, 440}, cc[3] = {1000, 1000, 1000}, laC = 0.01, hcC = 0.9;
@@ -794,7 +798,9 @@ class Engine {
     fx.prepare(sr); dyn.prepare(sr); dm.prepare(sr); bank = sampleBank(sr); if (combPool.size() != (size_t)kMaxVoices * 6 * 4096) combPool.assign((size_t)kMaxVoices * 6 * 4096, 0.f); for (double& g : mgS) g = 0; }
   void envsOn(Voice& v) { v.amp.on(); v.amp2.on(); v.amp3.on(); v.fenv.on(); v.fenv2.on(); v.fenv3.on(); }
   void envsOff(Voice& v) { v.amp.off(); v.amp2.off(); v.amp3.off(); v.fenv.off(); v.fenv2.off(); v.fenv3.off(); }
-  void noteOn(int note, float vel) {
+  double chBend[16] = {}, chPress[16] = {}, chSlide[16] = {};   // last values per MIDI channel (MPE member channels), applied to a note when it starts
+  double bendSt(const Voice& v) const { return (double)p.pitchBend * (double)p.bendRange + v.bend; }
+  void noteOn(int note, float vel, int ch = 0) {
     if (p.mono) {  // reuse the one sounding voice so tails never pile up
       Voice* v = nullptr;
       for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
@@ -806,12 +812,18 @@ class Engine {
       *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.0 * rng.next() - 1.0; v->sh = v->rnd; v->sh0 = 0.0; v->age = ++clock;
       v->rs = ((uint32_t)(note + 1) * 2654435761u) ^ ((uint32_t)v->age * 40503u); v->sa[0] = v->lfoRnd(); v->sa[1] = v->lfoRnd(); v->sb[0] = v->sb[1] = 0.0;   // each voice has its own random stream for LFO 2 and 3
       v->stackCents = n > 1 ? ((double)k / (double)(n - 1) * 2.0 - 1.0) * p.stackCents : 0.0; v->stackGain = 1.0 / std::sqrt((double)n);
+      v->ch = ch & 15; if (ch > 0) { v->bend = chBend[ch & 15]; v->press = chPress[ch & 15]; v->slide = chSlide[ch & 15]; }
       for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.0 : rng.next();
       envsOn(*v);
       for (int l = 0; l < kLayers; ++l) if (p.layer[l].wave == Wave::Sample && p.layer[l].sample && p.layer[l].sample->oneShot) v->oneShot = true;
     }
   }
-  void noteOff(int note) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3 && !v.oneShot) envsOff(v); }
+  void noteOff(int note, int ch = -1) { for (auto& v : voices) if (v.active && v.note == note && (ch < 0 || v.ch == (ch & 15)) && v.amp.stage != 3 && !v.oneShot) envsOff(v); }
+  // MPE member channels: bend in semitones, pressure and slide 0..1, for the note sounding on that channel (and the next one that starts on it)
+  void setChanBend(int ch, double semis) { ch &= 15; chBend[ch] = semis; for (auto& v : voices) if (v.active && v.ch == ch && v.amp.stage != 3) v.bend = semis; }
+  void setChanPress(int ch, double x) { ch &= 15; chPress[ch] = x; for (auto& v : voices) if (v.active && v.ch == ch && v.amp.stage != 3) v.press = x; }
+  void setChanSlide(int ch, double x) { ch &= 15; chSlide[ch] = x; for (auto& v : voices) if (v.active && v.ch == ch && v.amp.stage != 3) v.slide = x; }
+  void setNotePress(int note, double x) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3) v.press = x; }   // polyphonic key pressure
   void allOff() { for (auto& v : voices) v.active = false; }
   void releaseAll() { for (auto& v : voices) if (v.active && v.amp.stage != 3 && !v.oneShot) envsOff(v); }   // like every key let go: tails ring out
   struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}; };
@@ -907,7 +919,7 @@ class Engine {
     if (lvl <= 0.0) return;
     const int nv = std::max(1, std::min(5, p.subVoices));
     if (nv > 1) {   // several detuned sub oscillators, spread across the stereo field
-      const double sf0 = 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0) / 12.0); double sl = 0.0, srr = 0.0;
+      const double sf0 = 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0 + bendSt(v)) / 12.0); double sl = 0.0, srr = 0.0;
       for (int k = 0; k < nv; ++k) {
         const double x = 2.0 * k / (nv - 1) - 1.0, sdt = sf0 * std::pow(2.0, x * p.subDetune * 30.0 / 1200.0) * invSr; if (sdt > 0.45) continue; double sp = v.subPh[k], s;
         switch (p.subWave) {
@@ -921,7 +933,7 @@ class Engine {
       }
       const double nrm = lvl * 0.7 / std::sqrt((double)nv); L += sl * nrm; R += srr * nrm; return;
     }
-    const double sf = 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0) / 12.0), sdt = sf * invSr; if (sdt > 0.45) return; double sp = v.subPhase, s;
+    const double sf = 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0 + bendSt(v)) / 12.0), sdt = sf * invSr; if (sdt > 0.45) return; double sp = v.subPhase, s;
     switch (p.subWave) {
       case Wave::Tri: s = 4.0 * std::fabs(sp - 0.5) - 1.0; break;
       case Wave::Pulse: s = (sp < 0.5 ? 1.0 : -1.0) + blep(sp, sdt) - blep(sp < 0.5 ? sp + 0.5 : sp - 0.5, sdt); s *= 0.8; break;
@@ -981,7 +993,7 @@ class Engine {
       if (hasMx) {
         for (int k = 0; k < kMxDst; ++k) md[k] = 0.0;
         sv[0] = lfo; sv[1] = fE; sv[2] = ampE; sv[3] = std::max(-2.0, std::min(2.0, pitchEnv / 12.0)); sv[4] = p.modWheel;
-        sv[5] = std::max(-2.0, std::min(2.0, (double)(v.note - 60) / 24.0)); sv[6] = v.vel; sv[7] = v.rnd;
+        sv[5] = std::max(-2.0, std::min(2.0, (double)(v.note - 60) / 24.0)); sv[6] = v.vel; sv[7] = v.rnd; sv[15] = std::min(1.0, std::max(0.0, (double)p.pressure + v.press)); sv[16] = std::min(1.0, std::max(0.0, (double)p.slide + v.slide)); sv[17] = std::max(-2.0, std::min(2.0, bendSt(v) / 12.0));
         sv[8] = p.menvInv ? 1.0 - menvAt(0, v.t) : menvAt(0, v.t); sv[9] = lfo2; sv[10] = lfo3; sv[11] = fE2; sv[12] = fE3;
         sv[13] = p.menv2Inv ? 1.0 - menvAt(1, v.t) : menvAt(1, v.t); sv[14] = p.menv3Inv ? 1.0 - menvAt(2, v.t) : menvAt(2, v.t);
         for (int k = 0; k < mxn; ++k) md[mxd[k]] += sv[mxs[k]] * mxv[k];
@@ -989,7 +1001,7 @@ class Engine {
       }
       double L = 0.0, R = 0.0, smL = 0.0, smR = 0.0;
       srcV[0] = 0.0; srcV[1] = v.lyOut[0]; srcV[2] = v.lyOut[1]; srcV[3] = v.lyOut[2]; srcV[4] = 0.0; srcV[5] = 0.0;
-      if (anyFmSub) { srcV[4] = std::sin(2.0 * kPiD * v.fmSubPh); v.fmSubPh += 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0) / 12.0) * invSr; if (v.fmSubPh >= 1.0) v.fmSubPh -= 1.0; }
+      if (anyFmSub) { srcV[4] = std::sin(2.0 * kPiD * v.fmSubPh); v.fmSubPh += 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0 + bendSt(v)) / 12.0) * invSr; if (v.fmSubPh >= 1.0) v.fmSubPh -= 1.0; }
       if (anyFmNz) srcV[5] = 2.0 * rng.next() - 1.0;
       for (int ly = 0; ly < kLayers; ++ly) {
         const LayerParams& lp = p.layer[ly]; const double le = link ? 1.0 : (ly == 0 ? ampE : (ly == 1 ? aE2 : aE3));
@@ -1000,7 +1012,7 @@ class Engine {
           if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } }
         if (!lp.on || lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
         double f;
-        if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
+        if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
           f = 440.0 * std::pow(2.0, semis / 12.0); v.fC[ly] = f; } else f = v.fC[ly];
         double fmF = 1.0; if (lp.fmAmt > 0.f && lp.fmSrc >= 1 && lp.fmSrc <= 5 && lp.fmSrc != ly + 1) fmF = std::max(0.02, 1.0 + lp.fmAmt * 3.0 * srcV[lp.fmSrc]);
         const double dt = std::min(0.45, f * invSr * fmF);

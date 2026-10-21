@@ -67,7 +67,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(chorusMix); S87_F(chorusDepth); S87_F(chorusRate); S87_F(delayMix); S87_F(delayTime); S87_F(delayFb); S87_B(delaySync); S87_I(delayDiv);
         S87_F(bpm); S87_F(optoAmt); S87_F(ottDepth); S87_F(ottMix); S87_F(sqzAmt);
         S87_F(reverbMix); S87_F(reverbSize); S87_F(reverbWidth); S87_F(reverbLowCutHz);
-        S87_F(master); S87_F(clipKnee); S87_B(limiter); S87_F(limCeil); S87_I(polyphony); S87_F(modWheel);
+        S87_F(master); S87_F(clipKnee); S87_B(limiter); S87_F(limCeil); S87_I(polyphony); S87_F(modWheel); S87_FR(bendRange, 0.f, 24.f); S87_B(mpe); S87_FR(mpeRange, 1.f, 96.f);
         S87_F(dynMix); S87_F(dmMix); S87_F(dmDrive); S87_F(dmClip); S87_F(dmLow); S87_F(dmMid); S87_F(dmHigh); S87_F(drvDrive); S87_F(drvXs); S87_F(drvFuzz); S87_F(drvMix);
         S87_B(eqBypass); S87_B(eq1On); S87_F(eq1F); S87_B(eq2On); S87_F(eq2F); S87_F(eq2G); S87_B(eq3On); S87_F(eq3F); S87_F(eq3G); S87_F(eq3Q);
         S87_B(eq4On); S87_F(eq4F); S87_F(eq4G); S87_F(eq4Q); S87_B(eq5On); S87_F(eq5F); S87_F(eq5G); S87_B(eq6On); S87_F(eq6F);
