@@ -76,6 +76,15 @@ canvas{display:block;max-width:100%}
 .seg button:focus-visible{outline:2px solid var(--yel);outline-offset:-2px}
 .wave{width:100%}
 .dim{opacity:.4}
+.knob{position:relative}.knob.mdrop{background:#ffffff1c;box-shadow:0 0 0 2px var(--mc,#ff7bb1) inset}.knob .mb{position:absolute;top:-1px;right:3px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;font:600 9px/14px "IBM Plex Mono",monospace;color:#120d28;text-align:center;cursor:pointer;box-shadow:0 1px 3px #0009}
+#modtray{position:absolute;left:12px;bottom:calc(100% + 6px);z-index:30;display:flex;flex-wrap:wrap;gap:4px;max-width:760px;padding:7px 8px;border-radius:10px;background:linear-gradient(180deg,#2a2060f2,#150f30f2);border:1px solid var(--line);box-shadow:0 8px 24px #000a}
+#modtray[hidden]{display:none}#modtray .mt0{width:100%;font:500 11px "IBM Plex Mono",monospace;color:var(--dim,#b8aee6);letter-spacing:.5px;margin-bottom:2px}
+.mchip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 6px;border-radius:12px;font:500 11px "IBM Plex Mono",monospace;color:#fff;background:#ffffff14;border:1px solid #ffffff22;cursor:grab;user-select:none;touch-action:none}
+.mchip i{width:9px;height:9px;border-radius:50%;display:inline-block}.mchip:hover{background:#ffffff26}
+.mghost{position:fixed;z-index:9999;pointer-events:none;padding:3px 10px;border-radius:12px;font:600 11px "IBM Plex Mono",monospace;color:#120d28;box-shadow:0 4px 14px #000b;transform:translate(-50%,-130%)}
+.mpop{position:fixed;z-index:9998;min-width:250px;padding:9px 10px;border-radius:10px;background:#1b1442;border:1px solid #ffffff33;box-shadow:0 10px 30px #000c;font:500 12px "IBM Plex Mono",monospace;color:#fff}
+.mpop h4{margin:0 0 6px;font:600 12px "IBM Plex Mono",monospace;letter-spacing:.5px}.mpop .mr{display:grid;grid-template-columns:10px 84px 1fr 44px 18px;gap:6px;align-items:center;margin:4px 0}
+.mpop .mr i{width:9px;height:9px;border-radius:50%}.mpop .mr input[type=range]{width:100%}.mpop .mr b{cursor:pointer;color:#ff7bb1;font-weight:600;text-align:center}.mpop select{width:100%;margin-top:4px}
 .kbrow{display:flex;gap:8px;margin-top:6px;align-items:stretch}.kbrow #kbd{margin-top:0;flex:1 1 0;min-width:0;width:auto}
 .wheels{display:flex;gap:5px;align-items:stretch;flex:0 0 auto}
 .whl{position:relative;width:26px;border-radius:8px;border:1px solid var(--line);background:repeating-linear-gradient(180deg,#0007 0 2px,#ffffff12 2px 4px),linear-gradient(90deg,#120d28,#2c2266 50%,#120d28);touch-action:none;cursor:ns-resize;user-select:none}
@@ -268,6 +277,7 @@ canvas{display:block;max-width:100%}
     <button class="btn sm" id="mpe" data-tip="MPE: per-note expression. On, a note sent on MIDI channels 2 to 16 bends, slides (CC74) and presses on its own, so you can bend one note of a chord. Channel 1 is the main channel and moves every note. Off, every channel is treated alike. The Mod matrix has Pressure, Slide and Bend sources.">MPE</button>
     <label class="row" data-tip="Pitch bend range of a single MPE note, in semitones. 48 is the MPE standard and what most MPE keyboards and DAWs use. Change it only if your controller uses another range."><span class="lbl">MPE range</span><select id="mpeRange" class="sel"><option value="12">12</option><option value="24">24</option><option value="48">48</option><option value="96">96</option></select></label>
     <button class="btn sm" id="midi" data-tip="Use a MIDI keyboard. Needs permission, may be blocked inside this page.">MIDI in</button>
+    <button class="btn sm" id="modBtn" data-tip="Mod sources. Opens a tray of sources (LFOs, envelopes, wheel, pressure and more). Drag one onto a knob to modulate it, then set the amount; a small number on the knob opens the list. Works on the knobs that have a column in the Mod matrix.">Mod ▴</button>
     <button class="btn sm" id="panic" data-tip="Stops every note.">Panic</button>
     <button class="btn sm" id="dragWav" draggable="true">Drag last note</button>
     <span id="midiInfo" class="pill"></span>
@@ -285,6 +295,7 @@ canvas{display:block;max-width:100%}
     <label class="row pill">Trans <input type="number" id="trs" value="0" min="-36" max="36" style="width:56px"></label>
     <select id="kitSel" style="padding:2px 4px;font-size:12px" data-tip="Drum kit mode. With a kit on, the keys play drums instead of the patch: C1 kick, C#1 rim, D1 snare, D#1 clap, F#1 closed hat (it chokes the open hat), A#1 open hat, C#2 crash, D#2 ride, G#2 cowbell, F1 G1 A1 B1 C2 D2 toms (pitched by key), A#3 shaker. Use Oct - to reach the low keys, or play the drum grooves in the demo list. Picking any normal sound turns the kit off."></select><button class="btn sm" id="demoPlay" data-tip="Loops your MIDI melody through the current patch. Keep moving the knobs while it plays.">Play</button>
   </div>
+  <div id="modtray" hidden></div>
   <div class="kbrow">
     <div class="wheels">
       <div class="whl p" id="pwheel" data-tip="Pitch wheel. Drag it up or down; it springs back to the middle when you let go. Moves every note."><div class="cap"></div></div>
@@ -1252,22 +1263,48 @@ function setParam(k,v,fromUI){
 const A0=-135,A1=135;
 function polar(cx,cy,r,deg){const a=deg*Math.PI/180;return [cx+r*Math.sin(a),cy-r*Math.cos(a)];}
 function arc(cx,cy,r,d0,d1){if(Math.abs(d1-d0)<0.5)return "";const [x0,y0]=polar(cx,cy,r,d0),[x1,y1]=polar(cx,cy,r,d1);return "M"+x0.toFixed(2)+" "+y0.toFixed(2)+"A"+r+" "+r+" 0 "+(Math.abs(d1-d0)>180?1:0)+" "+(d1>d0?1:0)+" "+x1.toFixed(2)+" "+y1.toFixed(2);}
+/* ---------- drag to modulate: sources, knob to destination map, rings ---------- */
+const MXSRC=[["LFO","lfo","#ff7bb1"],["Filter env","fenv","#ffd100"],["Amp env","aenv","#fee400"],["Pitch env","penv","#02ebba"],["Mod wheel","whl","#6cc9f5"],["Key","key","#a43dff"],["Velocity","vel","#cd92fe"],["Random","rnd","#bdf9eb"],["Drawn env","men","#4f10fd"],["LFO 2","lfo2","#fe27d6"],["LFO 3","lfo3","#e900ae"],["Filter env 2","fenv2","#ffa600"],["Filter env 3","fenv3","#ff9000"],["Drawn env 2","men2","#774bf9"],["Drawn env 3","men3","#c0a9fe"],["Pressure","prs","#ff1383"],["Slide","sld","#ff00cf"],["Bend","bnd","#398bc4"]];
+const MXBIP={lfo:1,lfo2:1,lfo3:1,rnd:1,key:1,bnd:1,penv:1};   /* sources that swing both ways */
+const MXCELL={};              /* "src|dest" -> the control spec of that matrix cell (an older knob or mx_src_dest) */
+const MODKNOBS=[];            /* ring painters of every knob that can be modulated */
+const MODMAP={cutoff:"cut",reso:"res",drive:"drv",f2Cut:"cut2",f3Cut:"cut3",subLevel:"sub",noiseLevel:"nz",lowCutHz:"lc",master:"vol",reverbMix:"rvb",delayMix:"dly",drvDrive:"drs",dmClip:"clip",widHi:"wid",widMid:"wid"};
+function modDest(k){if(MODMAP[k])return MODMAP[k];const m=/^L(\d)_(pwm|detune|cents|pan|tune|syncSemis)$/.exec(k);if(!m)return null;return {pwm:"pwm",detune:"det",cents:"det",pan:"pan",tune:"pitch",syncSemis:"sy"+(+m[1]+1)}[m[2]];}
+/* what a source at +1 does to the knob's value, per destination (same scales as the engine) */
+function modApply(c,dest,v,amt){switch(dest){case"cut":case"cut2":case"cut3":return v*Math.pow(2,amt*5);case"lc":return v*Math.pow(2,amt*4);case"res":return v+amt*0.5;case"drv":return v+amt*0.75;case"pwm":return v+amt*0.45;
+  case"det":return v+(/cents$/.test(c.k)?amt*50:amt*0.5);case"pan":return v+amt;case"vol":return v*(1+amt);case"sub":return v+amt*0.7;case"nz":return v+amt*0.5;case"pitch":return v+amt*1200;
+  case"sy1":case"sy2":case"sy3":return v+amt*12;case"wid":return v+(c.k==="widMid"?0.5:1)*amt;default:return v+amt;}}
+const MODALIAS={lfoCutoff:v=>v*2/5,envAmt:v=>v,wheelCutoff:v=>v,velCutoff:v=>v};   /* older knobs that sit in a cell: their value in matrix units, when it can be drawn as a ring */
+function modAmt(spec,val){if(/^mx_/.test(spec.k))return val;if(/^L\d_sync(Lfo|Env|Key|Wheel)$/.test(spec.k))return val/12;const f=MODALIAS[spec.k];return f?f(val):null;}
+function activeMods(c,dest){const out=[],v=getV(c.k);
+  MXSRC.forEach(([name,sid,col])=>{const spec=MXCELL[sid+"|"+dest];if(!spec)return;const val=+getV(spec.k)||0;if(!val)return;
+    const amt=modAmt(spec,val);let lo=null,hi=null;
+    if(amt!==null){const a=toU(c,clamp(modApply(c,dest,v,amt),c.min,c.max)),b=MXBIP[sid]?toU(c,clamp(modApply(c,dest,v,-amt),c.min,c.max)):toU(c,v);lo=Math.min(a,b);hi=Math.max(a,b);}
+    out.push({name,sid,col,spec,val,lo,hi});});
+  return out;}
 function knob(c,opt){
   const w=el("div","knob"+(opt&&opt.mini?" mini":""));w.tabIndex=0;w.setAttribute("role","slider");w.setAttribute("aria-label",c.n);w.dataset.tip=(c.tip||"")+(c.tip?" ":"")+"Double-click resets.";
   w.innerHTML='<svg viewBox="0 0 46 46"><circle class="bd" cx="23" cy="23" r="13"/><path class="tr" d="'+arc(23,23,19,A0,A1)+'"/><path class="va"/><line class="pt" x1="23" y1="23" x2="23" y2="13"/></svg><div class="n">'+c.n+'</div><div class="v"></div>';
   const va=$(".va",w),pt=$(".pt",w);let vv=$(".v",w);
   const bip=c.kind==="lin"&&c.min<0&&c.max>0,z=bip?toU(c,0):0;
+  const mdest=(opt&&opt.mini)?null:modDest(c.k);let ringG=null,badge=null;
+  if(mdest){w.classList.add("mt");w.dataset.mdest=mdest;w.dataset.mkey=c.k;const sv=$("svg",w);sv.style.overflow="visible";ringG=document.createElementNS("http://www.w3.org/2000/svg","g");sv.appendChild(ringG);
+    badge=el("div","mb");badge.hidden=true;w.appendChild(badge);badge.onpointerdown=e=>e.stopPropagation();badge.ondblclick=e=>e.stopPropagation();badge.onclick=e=>{e.stopPropagation();if(window.openModPop)openModPop(w,c,mdest);};
+    w._ctl=c;MODKNOBS.push(()=>drawRing());}
+  function drawRing(){const L=activeMods(c,mdest);let h="";L.forEach((m,i)=>{if(m.lo===null||m.hi-m.lo<0.004)return;const r=22+(i%2)*2.4;h+='<path d="'+arc(23,23,r,A0+m.lo*(A1-A0),A0+m.hi*(A1-A0))+'" fill="none" stroke="'+m.col+'" stroke-width="1.8" stroke-linecap="round"/>';});
+    ringG.innerHTML=h;badge.hidden=!L.length;badge.textContent=L.length;badge.style.background=L.length?L[0].col:"";}
   function show(){
     const v=getV(c.k),u=toU(c,v),ang=A0+u*(A1-A0);
     const [x,y]=polar(23,23,10,ang);pt.setAttribute("x2",x.toFixed(2));pt.setAttribute("y2",y.toFixed(2));
     va.setAttribute("d",bip?arc(23,23,19,A0+z*(A1-A0),ang):arc(23,23,19,A0,ang));
     vv.textContent=fmt(c,v);w.setAttribute("aria-valuenow",v);w.setAttribute("aria-valuetext",fmt(c,v));
+    if(ringG)drawRing();
   }
   const mark=()=>w.classList.toggle("m",!!touched[c.k]);
   addCtrl(c.k,{refresh(){show();mark();},mark});
   let sy=0,su=0,drag=false;
   const apply=u=>{const v=fromU(c,u);setParam(c.k,v,true);show();};
-  w.addEventListener("pointerdown",e=>{if(e.target===vv||e.target.tagName==="INPUT")return;drag=true;sy=e.clientY;su=toU(c,getV(c.k));w.setPointerCapture(e.pointerId);e.preventDefault();w.focus();});
+  w.addEventListener("pointerdown",e=>{if(e.target===vv||e.target.tagName==="INPUT"||e.target===badge)return;drag=true;sy=e.clientY;su=toU(c,getV(c.k));w.setPointerCapture(e.pointerId);e.preventDefault();w.focus();});
   w.addEventListener("pointermove",e=>{if(!drag)return;apply(su+(sy-e.clientY)/SCALE/(e.shiftKey?700:200));});
   const up=()=>{drag=false;};w.addEventListener("pointerup",up);w.addEventListener("pointercancel",up);
   w.addEventListener("wheel",e=>{e.preventDefault();apply(toU(c,getV(c.k))+(e.deltaY<0?1:-1)*(e.shiftKey?0.004:0.02));},{passive:false});
@@ -1725,7 +1762,7 @@ function matrixCard(){
     const r=el("div","r",name);r.dataset.tip=stip;gr.appendChild(r);
     DID.forEach((did,ci)=>{
       const cell=el("div","cell on"),spec=(L[sid]&&L[sid][did])||N("mx_"+sid+"_"+did,"",-1,1,0.01,"",name+" to "+DST[ci].toLowerCase()+". "+DTIP[ci]+" Negative values go the other way.");
-      cell.appendChild(knob(spec,{mini:1}));
+      MXCELL[sid+"|"+did]=spec;cell.appendChild(knob(spec,{mini:1}));
       if(ci>=8&&ci<=10)cells.push([cell,ci-8]);
       gr.appendChild(cell);
     });
@@ -2925,6 +2962,44 @@ wheelDrag("#mwheel","#wheel",0,1,false,v=>setParam("modWheel",v,true));
 window.addEventListener("resize",()=>drawWheels());
 $("#bendUp").onchange=e=>setParam("bendRange",Math.min(24,Math.max(0,Math.round(+e.target.value||0))),true);
 $("#bendDown").onchange=e=>setParam("bendDown",Math.min(24,Math.max(0,Math.round(-(+e.target.value||0)))),true);
+
+/* ---------- drag to modulate: tray of sources, drag onto a knob, set the amount ---------- */
+(function(){
+  const tray=$("#modtray"),btn=$("#modBtn");let ghost=null,over=null,pop=null;
+  const t0=el("div","mt0","Drag a source onto a knob to modulate it");tray.appendChild(t0);
+  MXSRC.forEach(([name,sid,col])=>{const ch=el("div","mchip");ch.innerHTML='<i style="background:'+col+'"></i>'+name;ch.dataset.sid=sid;ch.dataset.tip="Drag onto a knob to modulate it with "+name.toLowerCase()+".";tray.appendChild(ch);
+    ch.addEventListener("pointerdown",e=>{e.preventDefault();ch.setPointerCapture(e.pointerId);closePop();
+      ghost=el("div","mghost",name);ghost.style.background=col;document.body.appendChild(ghost);move(e);
+      const mv=ev=>move(ev),up=ev=>{ch.removeEventListener("pointermove",mv);ch.removeEventListener("pointerup",up);ch.removeEventListener("pointercancel",up);const tg=over;clearOver();if(ghost){ghost.remove();ghost=null;}if(ev.type==="pointerup"&&tg)drop(sid,tg);};
+      ch.addEventListener("pointermove",mv);ch.addEventListener("pointerup",up);ch.addEventListener("pointercancel",up);
+      function move(ev){if(!ghost)return;ghost.style.left=ev.clientX+"px";ghost.style.top=ev.clientY+"px";const t=document.elementFromPoint(ev.clientX,ev.clientY),k=t&&t.closest?t.closest(".knob.mt"):null;if(k!==over){clearOver();over=k;if(k){k.classList.add("mdrop");k.style.setProperty("--mc",col);}}}
+    });});
+  function clearOver(){if(over){over.classList.remove("mdrop");over=null;}}
+  btn.onclick=()=>{tray.hidden=!tray.hidden;btn.textContent=tray.hidden?"Mod ▴":"Mod ▾";btn.classList.toggle("on",!tray.hidden);};
+  function defAmt(spec){const half=spec.max*0.5;return Number((Math.round(half/spec.step)*spec.step).toFixed(5))||spec.step;}
+  function drop(sid,k){const c=k._ctl,dest=k.dataset.mdest,spec=MXCELL[sid+"|"+dest];if(!spec)return;
+    if(!(+getV(spec.k)))setParam(spec.k,defAmt(spec),true);
+    MODKNOBS.forEach(f=>f());openModPop(k,c,dest);}
+  function closePop(){if(pop){pop.remove();pop=null;document.removeEventListener("pointerdown",outside,true);}}
+  const outside=e=>{if(pop&&!pop.contains(e.target))closePop();};
+  window.openModPop=function(k,c,dest){closePop();pop=el("div","mpop");const r=k.getBoundingClientRect();
+    const build=()=>{pop.innerHTML="";const h=el("h4","","Modulating "+c.n+" ("+fmt(c,getV(c.k))+")");pop.appendChild(h);
+      const L=activeMods(c,dest);
+      L.forEach(m=>{const row=el("div","mr");const dot=el("i");dot.style.background=m.col;const nm=el("span","",m.name);const sl=el("input");sl.type="range";sl.min=m.spec.min;sl.max=m.spec.max;sl.step=m.spec.step;sl.value=m.val;const vt=el("span","",String(m.val));const x=el("b","","✕");x.title="Remove";
+        sl.oninput=()=>{setParam(m.spec.k,+sl.value,true);vt.textContent=sl.value;MODKNOBS.forEach(f=>f());};
+        sl.ondblclick=()=>{setParam(m.spec.k,defAmt(m.spec),true);build();};
+        x.onclick=()=>{setParam(m.spec.k,0,true);MODKNOBS.forEach(f=>f());build();};
+        row.append(dot,nm,sl,vt,x);pop.appendChild(row);});
+      const free=MXSRC.filter(([n,sid])=>MXCELL[sid+"|"+dest]&&!(+getV(MXCELL[sid+"|"+dest].k)));
+      if(free.length){const s=el("select");s.appendChild(new Option("+ add a source",""));free.forEach(([n,sid])=>s.appendChild(new Option(n,sid)));s.onchange=()=>{if(!s.value)return;const spec=MXCELL[s.value+"|"+dest];setParam(spec.k,defAmt(spec),true);MODKNOBS.forEach(f=>f());build();};pop.appendChild(s);}
+      if(!L.length){const n=el("div","","No modulation yet.");pop.insertBefore(n,pop.children[1]||null);}
+    };
+    build();document.body.appendChild(pop);const pw=pop.offsetWidth,ph=pop.offsetHeight;
+    pop.style.left=Math.max(6,Math.min(innerWidth-pw-6,r.left+r.width/2-pw/2))+"px";pop.style.top=(r.top-ph-8>6?r.top-ph-8:Math.min(innerHeight-ph-6,r.bottom+8))+"px";
+    setTimeout(()=>document.addEventListener("pointerdown",outside,true),0);};
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closePop();});
+  onChange(k=>{const ks=new Set();for(const q in MXCELL)ks.add(MXCELL[q].k);if(ks.has(k)||k==="all")MODKNOBS.forEach(f=>f());});
+})();
 $("#mpe").onclick=()=>setParam("mpe",!P.mpe,true);
 $("#mpeRange").onchange=e=>setParam("mpeRange",+e.target.value,true);
 function syncDock(){$("#bendUp").value=P.bendRange;$("#bendDown").value=-P.bendDown;
