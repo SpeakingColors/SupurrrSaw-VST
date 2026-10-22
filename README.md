@@ -14,7 +14,7 @@ By **Studio 87**.
 
 **Manual:** [PDF with interface tour, opens in the browser](https://github.com/SpeakingColors/SupurrrSaw-VST/blob/main/docs/SupurrSaw_Manual.pdf)
 
-<p align="center"><img src="docs/screenshot.png" alt="SupurrSaw editor" width="900"><br><sub>Screenshot of the interactive mockup in docs/mockups.</sub></p>
+<p align="center"><img src="docs/screenshot.png" alt="SupurrSaw editor" width="900"><br><sub>The SupurrSaw editor (v0.3.2).</sub></p>
 
 ## What it does
 

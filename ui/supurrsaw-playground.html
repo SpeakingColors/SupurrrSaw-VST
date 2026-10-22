@@ -79,6 +79,8 @@ canvas{display:block;max-width:100%}
 .knob{position:relative}.knob.mdrop{background:#ffffff1c;box-shadow:0 0 0 2px var(--mc,#ff7bb1) inset}.knob .mb{position:absolute;top:-1px;right:3px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;font:600 9px/14px "IBM Plex Mono",monospace;color:#120d28;text-align:center;cursor:pointer;box-shadow:0 1px 3px #0009}
 #modtray{position:absolute;left:12px;bottom:calc(100% + 6px);z-index:30;display:flex;flex-wrap:wrap;gap:4px;max-width:760px;padding:7px 8px;border-radius:10px;background:linear-gradient(180deg,#2a2060f2,#150f30f2);border:1px solid var(--line);box-shadow:0 8px 24px #000a}
 #modtray[hidden]{display:none}#modtray .mt0{width:100%;font:500 11px "IBM Plex Mono",monospace;color:var(--dim,#b8aee6);letter-spacing:.5px;margin-bottom:2px}
+.mh{display:inline-flex;align-items:center;gap:5px;margin-left:auto;padding:2px 8px 2px 6px;border-radius:11px;font:500 10.5px "IBM Plex Mono",monospace;letter-spacing:.4px;text-transform:none;color:#fff;background:#ffffff14;border:1px solid #ffffff2a;cursor:grab;user-select:none;touch-action:none;text-shadow:none}.mh i{width:9px;height:9px;border-radius:50%;display:inline-block}.mh:hover{background:#ffffff2a}
+.pages button.mdrop{outline:2px dashed var(--pink);outline-offset:-3px}
 .mchip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 6px;border-radius:12px;font:500 11px "IBM Plex Mono",monospace;color:#fff;background:#ffffff14;border:1px solid #ffffff22;cursor:grab;user-select:none;touch-action:none}
 .mchip i{width:9px;height:9px;border-radius:50%;display:inline-block}.mchip:hover{background:#ffffff26}
 .mghost{position:fixed;z-index:9999;pointer-events:none;padding:3px 10px;border-radius:12px;font:600 11px "IBM Plex Mono",monospace;color:#120d28;box-shadow:0 4px 14px #000b;transform:translate(-50%,-130%)}
@@ -2965,15 +2967,28 @@ $("#bendDown").onchange=e=>setParam("bendDown",Math.min(24,Math.max(0,Math.round
 
 /* ---------- drag to modulate: tray of sources, drag onto a knob, set the amount ---------- */
 (function(){
-  const tray=$("#modtray"),btn=$("#modBtn");let ghost=null,over=null,pop=null;
+  const tray=$("#modtray"),btn=$("#modBtn");let ghost=null,over=null,pop=null,hov=null,hovT=0;
   const t0=el("div","mt0","Drag a source onto a knob to modulate it");tray.appendChild(t0);
+  function beginDrag(e,src,sid,name,col){e.preventDefault();e.stopPropagation();src.setPointerCapture(e.pointerId);closePop();
+    ghost=el("div","mghost",name);ghost.style.background=col;document.body.appendChild(ghost);move(e);
+    const mv=ev=>move(ev),up=ev=>{src.removeEventListener("pointermove",mv);src.removeEventListener("pointerup",up);src.removeEventListener("pointercancel",up);const tg=over;clearOver();if(ghost){ghost.remove();ghost=null;}if(ev.type==="pointerup"&&tg)drop(sid,tg);};
+    src.addEventListener("pointermove",mv);src.addEventListener("pointerup",up);src.addEventListener("pointercancel",up);
+    function move(ev){if(!ghost)return;ghost.style.left=ev.clientX+"px";ghost.style.top=ev.clientY+"px";const t=document.elementFromPoint(ev.clientX,ev.clientY),k=t&&t.closest?t.closest(".knob.mt"):null;const pb=t&&t.closest?t.closest("#pages button"):null;if(pb!==hov){clearTimeout(hovT);hov=pb;if(pb&&!pb.classList.contains("on"))hovT=setTimeout(()=>{if(hov===pb&&ghost)pb.click();},450);}if(k!==over){clearOver();over=k;if(k){k.classList.add("mdrop");k.style.setProperty("--mc",col);}}}}
   MXSRC.forEach(([name,sid,col])=>{const ch=el("div","mchip");ch.innerHTML='<i style="background:'+col+'"></i>'+name;ch.dataset.sid=sid;ch.dataset.tip="Drag onto a knob to modulate it with "+name.toLowerCase()+".";tray.appendChild(ch);
-    ch.addEventListener("pointerdown",e=>{e.preventDefault();ch.setPointerCapture(e.pointerId);closePop();
-      ghost=el("div","mghost",name);ghost.style.background=col;document.body.appendChild(ghost);move(e);
-      const mv=ev=>move(ev),up=ev=>{ch.removeEventListener("pointermove",mv);ch.removeEventListener("pointerup",up);ch.removeEventListener("pointercancel",up);const tg=over;clearOver();if(ghost){ghost.remove();ghost=null;}if(ev.type==="pointerup"&&tg)drop(sid,tg);};
-      ch.addEventListener("pointermove",mv);ch.addEventListener("pointerup",up);ch.addEventListener("pointercancel",up);
-      function move(ev){if(!ghost)return;ghost.style.left=ev.clientX+"px";ghost.style.top=ev.clientY+"px";const t=document.elementFromPoint(ev.clientX,ev.clientY),k=t&&t.closest?t.closest(".knob.mt"):null;if(k!==over){clearOver();over=k;if(k){k.classList.add("mdrop");k.style.setProperty("--mc",col);}}}
-    });});
+    ch.addEventListener("pointerdown",e=>beginDrag(e,ch,sid,name,col));});
+  /* handles on the source panels: drag straight from the panel onto a knob */
+  const SM={};MXSRC.forEach(m=>SM[m[1]]=m);
+  function handle(card,sid,label){if(!card)return;const h2=card.querySelector("h2");if(!h2||h2.querySelector(".mh"))return;const m=SM[sid],hd=el("span","mh");hd.innerHTML='<i style="background:'+m[2]+'"></i>'+(label||m[0]);
+    hd.dataset.tip="Drag this onto a knob to modulate it with "+m[0].toLowerCase()+". Then set the amount in the box that opens.";hd.addEventListener("pointerdown",e=>beginDrag(e,hd,sid,m[0],m[2]));h2.appendChild(hd);}
+  const cardsBy=t=>[...document.querySelectorAll(".card")].filter(c=>{const h=c.querySelector("h2");return h&&h.firstChild&&h.firstChild.textContent.trim()===t;});
+  function injectHandles(){
+  cardsBy("LFO").forEach((c,i)=>handle(c,["lfo","lfo2","lfo3"][i],"LFO "+(i+1)));
+  cardsBy("Filter env").forEach((c,i)=>handle(c,["fenv","fenv2","fenv3"][i],"Env "+(i+1)));
+  cardsBy("Amp env").slice(0,1).forEach(c=>handle(c,"aenv","Amp"));
+  cardsBy("Pitch envelope").forEach(c=>handle(c,"penv","Pitch"));
+  cardsBy("Drawn envelope").forEach((c,i)=>handle(c,["men","men2","men3"][i],"Draw "+(i+1)));
+  }
+  injectHandles();setTimeout(injectHandles,0);setTimeout(injectHandles,600);
   function clearOver(){if(over){over.classList.remove("mdrop");over=null;}}
   btn.onclick=()=>{tray.hidden=!tray.hidden;btn.textContent=tray.hidden?"Mod ▴":"Mod ▾";btn.classList.toggle("on",!tray.hidden);};
   function defAmt(spec){const half=spec.max*0.5;return Number((Math.round(half/spec.step)*spec.step).toFixed(5))||spec.step;}
