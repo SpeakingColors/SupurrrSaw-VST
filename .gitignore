@@ -4,3 +4,5 @@ build/
 *.wav
 !assets/samples/choir_stab_classic.wav
 /samples/
+*.flac
+/Instruments/

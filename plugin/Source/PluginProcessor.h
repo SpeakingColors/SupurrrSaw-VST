@@ -4,6 +4,7 @@
 #include <atomic>
 #include <array>
 #include "../../core/supurrsaw_core.h"
+#include "InstrumentLibrary.h"
 
 namespace s87 {
 
@@ -47,8 +48,13 @@ public:
 
     double currentSampleRate() const { return sampleRateNow.load(); }
 
+    // instrument pack (multisampled piano, strings, trumpet...); empty when no pack is installed
+    juce::StringArray instrumentNames();
+
 private:
     void applyPendingParams();
+    void useInstrument (int layer, const juce::String& name);                    // message thread: loads (cached) and hands the set to the engine
+    void resolveInstruments (supurr::Params& np, const juce::var& params);       // fills sampleSet of every layer that names an instrument
     void pushEvent (int type, int note, float vel);
     void buildTable (int layer, const float* data, int len);
     void setKitFromJson (const juce::var& k);        // drum kit mode: a list of pads, or null for off
@@ -72,6 +78,9 @@ private:
     std::shared_ptr<const supurr::WaveTable> tables[3];
     std::vector<std::shared_ptr<const supurr::WaveTable>> retired;   // keeps old tables alive off the audio thread
     juce::String tableSrc[3];
+    InstrumentLibrary library;
+    std::shared_ptr<const supurr::SampleSet> sets[3];
+    std::vector<std::shared_ptr<const supurr::SampleSet>> setsRetired;   // old sets stay alive: voices that are still sounding point into them
 
     // saved state (message thread only)
     juce::CriticalSection stateLock;

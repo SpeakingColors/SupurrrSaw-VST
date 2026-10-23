@@ -6,6 +6,7 @@
   const B = window.__JUCE__.backend, ID = window.__JUCE__.initialisationData || {};
   const one = k => { const a = ID[k]; return Array.isArray(a) ? a[0] : a; };
   window.__SUPURR_PLUGIN = true;
+  try { window.__INSTRUMENTS = JSON.parse(one("instruments") || "[]"); } catch (e) { window.__INSTRUMENTS = []; }
 
   /* ---- native calls (promise based) ---- */
   let pid = 0; const pend = new Map();

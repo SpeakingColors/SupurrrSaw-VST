@@ -39,6 +39,35 @@ void SupurrProcessor::prepareToPlay (double sr, int block)
     Diagnostics::log ("audio start: " + juce::String (sr, 0) + " Hz, block " + juce::String (block));
 }
 
+juce::StringArray SupurrProcessor::instrumentNames()
+{
+    library.refresh();
+    return library.names();
+}
+
+void SupurrProcessor::useInstrument (int layer, const juce::String& name)
+{
+    auto set = library.load (name);
+    const juce::SpinLock::ScopedLockType sl (paramLock);
+    if (sets[layer] && sets[layer] != set) { setsRetired.push_back (sets[layer]); if (setsRetired.size() > 32) setsRetired.erase (setsRetired.begin()); }
+    sets[layer] = set;
+    pending.layer[layer].sampleSet = set;
+    dirty.store (true);
+}
+
+void SupurrProcessor::resolveInstruments (supurr::Params& np, const juce::var& params)
+{
+    if (auto* layers = params["layers"].getArray())
+        for (int i = 0; i < juce::jmin (3, layers->size()); ++i)
+        {
+            const auto nm = (*layers)[i]["instrument"].toString();
+            auto set = nm.isNotEmpty() ? library.load (nm) : nullptr;
+            if (sets[i] && sets[i] != set) { setsRetired.push_back (sets[i]); if (setsRetired.size() > 32) setsRetired.erase (setsRetired.begin()); }
+            sets[i] = set;
+            np.layer[i].sampleSet = set;
+        }
+}
+
 void SupurrProcessor::applyPendingParams()
 {
     if (! dirty.load()) return;
@@ -296,6 +325,11 @@ void SupurrProcessor::handleUiMessage (const juce::var& m)
         if (k == "slide")     { liveSlide.store ((float) (double) m["v"]); return; }
         const juce::ScopedLock sl (stateLock);
         setInJson (paramsJson, k, m["v"]);
+        if (k.length() > 3 && k[0] == 'L' && k[2] == '_' && k[1] >= '0' && k[1] <= '2' && k.substring (3) == "instrument")
+        {
+            useInstrument (k[1] - '0', m["v"].toString());
+            return;
+        }
         const juce::SpinLock::ScopedLockType pl (paramLock);
         if (setKey (pending, k, m["v"])) dirty.store (true);
     }
@@ -305,6 +339,7 @@ void SupurrProcessor::handleUiMessage (const juce::var& m)
         paramsJson = m["p"];
         supurr::Params np;
         setAll (np, paramsJson);
+        resolveInstruments (np, paramsJson);
         const juce::SpinLock::ScopedLockType pl (paramLock);
         for (int i = 0; i < 3; ++i) np.layer[i].table = tables[i];
         pending = np;
@@ -389,6 +424,7 @@ void SupurrProcessor::setStateInformation (const void* data, int size)
     {
         supurr::Params np;
         setAll (np, paramsJson);
+        resolveInstruments (np, paramsJson);
         if (auto* layers = paramsJson["layers"].getArray())
             for (int i = 0; i < juce::jmin (3, layers->size()); ++i)
             {

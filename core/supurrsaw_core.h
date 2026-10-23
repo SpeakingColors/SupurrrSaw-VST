@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <map>
 #include <vector>
 
@@ -46,6 +47,24 @@ struct Sample {
   bool loop = false;
   bool oneShot = false;  // plays to the end, key release does not cut it (stabs)
   size_t loopStart = 0, loopEnd = 0;
+  double tune = 0.0;     // cents the recording is sharp of its root note (plays slower by this much so the note comes out in tune)
+};
+
+// A multisampled instrument: zones with a key range each (a piano, a trumpet, strings). The nearest recorded note is played, pitched to the key.
+struct SampleSet {
+  struct Zone { std::shared_ptr<const Sample> s; int lo = 0, hi = 127; };
+  std::string name;
+  std::vector<Zone> zones;
+  const Sample* pick(int note) const {
+    const Sample* best = nullptr; int bd = 1 << 30;
+    for (const auto& z : zones) {
+      if (!z.s) continue;
+      if (note >= z.lo && note <= z.hi) return z.s.get();
+      const int d = note < z.lo ? z.lo - note : note - z.hi;
+      if (d < bd) { bd = d; best = z.s.get(); }
+    }
+    return best;
+  }
 };
 
 // One imported or drawn cycle, stored as 11 band-limited copies (2048 samples, halving the harmonic count each step) so it never aliases.
@@ -128,6 +147,7 @@ struct LayerParams {
   int smp = 0;                 // built-in sample played with this layer (index into kSmpIds, 0 = off), pitch in semitones, volume
   float smpPitch = 0.f, smpVol = 1.f;
   std::shared_ptr<const Sample> sample;
+  std::shared_ptr<const SampleSet> sampleSet;   // used by Wave::Sample when set (a multisampled instrument); sample is the single-sample fallback
   std::shared_ptr<const WaveTable> table;   // used by Wave::Custom (an imported or drawn cycle, played as a super stack)
 };
 
@@ -408,6 +428,7 @@ struct Voice {
   bool active = false; int note = 60; double vel = 1.0; uint64_t age = 0;
   double phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
+  const Sample* zoneS[kLayers] = {}; int zoneN[kLayers] = {-1, -1, -1};   // chosen zone of a multisampled layer, and the note it was chosen for
   double syncPhase[kLayers] = {}, noiseHp = 0, noiseHp2 = 0, gl = 0, subPh[5] = {}, nzS[20] = {};
   double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   double lfoPhase = 0, t = 0, stackCents = 0, stackGain = 1;
@@ -1036,9 +1057,15 @@ class Engine {
             x += d; if (x >= 1.0) x -= 1.0; v.phase[ly][j] = x;
             lL += tCl[ly][j] * s; lR += tCr[ly][j] * s;
           }
-        } else if (lp.wave == Wave::Sample && lp.sample && !lp.sample->l.empty()) {
-          const Sample& sm = *lp.sample;
-          double rate = (double)(f / midiToHz((double)sm.rootNote)) * sm.sampleRate / sr;
+        } else if (lp.wave == Wave::Sample && (lp.sampleSet || (lp.sample && !lp.sample->l.empty()))) {
+          const Sample* smp = lp.sample.get();
+          if (lp.sampleSet) {
+            if (v.zoneN[ly] != v.note) { const Sample* z = lp.sampleSet->pick(v.note); if (z != v.zoneS[ly]) { v.zoneS[ly] = z; v.samplePos[ly] = 0.0; } v.zoneN[ly] = v.note; }
+            smp = v.zoneS[ly];
+          }
+          if (!smp || smp->l.empty()) { v.lyOut[ly] = 0.0; continue; }
+          const Sample& sm = *smp;
+          double rate = (double)(f / midiToHz((double)sm.rootNote)) * sm.sampleRate / sr * std::pow(2.0, -sm.tune / 1200.0);
           double& pos = v.samplePos[ly];
           size_t N = sm.l.size();
           if (sm.loop && sm.loopEnd > sm.loopStart && pos >= (double)sm.loopEnd) pos -= (double)(sm.loopEnd - sm.loopStart);
@@ -1055,6 +1082,8 @@ class Engine {
             lL = mid + side; lR = mid - side;
             pos += rate;
           }
+        } else if (lp.wave == Wave::Sample) {
+          lL = lR = 0.0;   // no instrument or sample loaded: silent, not a stray oscillator
         } else {
           const double pw = std::min(0.95, std::max(0.05, lp.pwm + p.lfoPwm * lfo * 0.45 + md[4] * 0.45));
           double odt = dt;

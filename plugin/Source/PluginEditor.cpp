@@ -45,6 +45,7 @@ SupurrEditor::SupurrEditor (SupurrProcessor& p) : AudioProcessorEditor (&p), pro
         .withInitialisationData ("state", juce::JSON::toString (init, true))
         .withInitialisationData ("version", juce::String (JucePlugin_VersionString))
         .withInitialisationData ("dataDir", Diagnostics::root().getFullPathName())
+        .withInitialisationData ("instruments", juce::JSON::toString (juce::var (proc.instrumentNames()), true))
         .withResourceProvider ([this] (const juce::String& path) { return serve (path); })
         .withEventListener ("msg", [this] (juce::var m) { proc.handleUiMessage (m); })
         .withEventListener ("vol", [this] (juce::var m) { proc.setOutputVolume ((float) (double) m["v"]); })
