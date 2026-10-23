@@ -6,8 +6,8 @@ Supersaw, hoover and acid synth.
 
 - Plugin shell: done in `plugin/` (VST3 + standalone, interface is the real page). Still to check by ear and in hosts: audio, MIDI, Windows and macOS builds from CI.
 - Plugin extras still open: drag a rendered .wav out of the window, host tempo sync, sustain pedal, signed installers (Windows .exe, macOS .pkg, Flatpak).
-- [ ] JUCE plugin shell and standalone on cat-ui, wired to `core/supurrsaw_core.h`
-- [ ] Dance MB section: starts from the Vengeance Dance Master 2 style settings with the low band off, dry/wet at 50%. Thresholds in the mockup were read from a screenshot and are approximate, tune by ear
+- [x] Plugin shell and standalone in `plugin/` (VST3 and standalone, released as test builds with installers; the real page runs inside the plugin window)
+- [x] Dance MB section exists in the page; [ ] still to tune by ear. It starts from the Vengeance Dance Master 2 style settings with the low band off, dry/wet at 50%. Thresholds in the mockup were read from a screenshot and are approximate, tune by ear
 - [ ] Pultec-style low end EQ options for basses; Neve, Moog and Sonic Maximizer style options to be researched
 - [ ] Default OTT-style starting point for dance, UK hardcore and hardstyle
 - [ ] 303 sequencer with accent, slide and tie, classic patterns, clickable roll
@@ -21,7 +21,7 @@ Supersaw, hoover and acid synth.
 - [x] Presets: Hoover Classic is the default, then Trance Super Saw, Trance Hybrid and Trance 90s
 - [ ] Plugin only: **Open folder** button next to the preset and wave lists, opens the user data folder (presets, waves, logs) in the file manager so people can tailor them
 - [ ] Plugin only: **drag a note out as a .wav** to the DAW arranger (render the held note offline with the current patch, then start a native drag of the temporary file). The playground already exports a note as a .wav inside a .zip, with the same offline render
-- [ ] Plugin only: **diagnostics log**. Rolling text log (plugin version, sample rate, buffer size, host, voice and CPU peaks, safety guard resets, errors) capped at 1 MB, oldest lines dropped. Stored in the per-user data folder (the install folder is often read only, so it is not used), with **Open log folder** and **Copy diagnostics** buttons to paste into a GitHub issue. No audio, no personal data and nothing is sent automatically
+- [x] Plugin only: **diagnostics log**. Rolling text log (plugin version, sample rate, buffer size, host, voice and CPU peaks, safety guard resets, errors) capped at 1 MB, oldest lines dropped. Stored in the per-user data folder (the install folder is often read only, so it is not used), with **Open log folder** and **Copy diagnostics** buttons to paste into a GitHub issue. No audio, no personal data and nothing is sent automatically (done: `plugin/Source/Diagnostics.h`, capped at about 1 MB; not checked here: every field listed)
 - [ ] Plugin only: **Audio on** kill switch as in the playground (silences the engine, keeps the UI alive, restart with one click)
 - [x] FM and AM per layer: source (other layer, sub or noise) plus depth; a modulator layer can sit at level 0 and stay silent. Not in the mod matrix yet (the matrix would need extra destination columns for FM depth)
 - [x] Presets: piano, felt piano, E-piano DX, E-piano Wurly, organ, clav, strings, warm pad, glass pad, choir, bell, brass
