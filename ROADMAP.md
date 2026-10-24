@@ -4,7 +4,7 @@ Supersaw, hoover and acid synth.
 
 ## Next
 
-- [x] Instrument pack: multisampled grand piano, FM piano, trumpet, solo violin and violin, viola and cello sections (CC0, separate download), 12 `Inst` presets, engine `SampleSet` in C++ and JS with parity tests (`tools/sampleset_test.cpp`, `tools/sampleset_test.js`, `plugin/tests/instrument_test.cpp`). Still to check by ear.
+- [x] Instrument pack: multisampled grand piano, FM piano, trumpet, solo violin and violin, viola and cello sections (CC0, built into the plugin), 30 `Instruments and hybrids` presets, engine `SampleSet` in C++ and JS with parity tests (`tools/sampleset_test.cpp`, `tools/sampleset_test.js`, `plugin/tests/instrument_test.cpp`). Still to check by ear.
 - [ ] Instrument pack: velocity layers for the piano, a release sample, more instruments (flute, sax, organ)
 - Plugin shell: done in `plugin/` (VST3 + standalone, interface is the real page). Still to check by ear and in hosts: audio, MIDI, Windows and macOS builds from CI.
 - Plugin extras still open: drag a rendered .wav out of the window, host tempo sync, sustain pedal, signed installers (Windows .exe, macOS .pkg, Flatpak).

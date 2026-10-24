@@ -1,6 +1,6 @@
 build/
 *.o
-# Only samples the author owns are committed (assets/samples). Never commit third-party packs.
+# Only samples the author owns are committed (assets/samples), plus the CC0 instrument pack in assets/instruments.bin. Never commit other third-party packs.
 *.wav
 !assets/samples/choir_stab_classic.wav
 /samples/

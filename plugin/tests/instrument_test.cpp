@@ -13,6 +13,21 @@ static double freqOf (const std::vector<float>& x, double sr)
     return n > 2 ? (n - 1) / (last - first) : 0.0;
 }
 
+// fundamental by autocorrelation, for sounds with many harmonics (a piano has far more zero crossings than periods)
+static double acfFreq (const std::vector<float>& x, double sr)
+{
+    const size_t n = std::min<size_t> (x.size(), 8192);
+    double best = 0; size_t bestLag = 0;
+    for (size_t lag = (size_t) (sr / 1000.0); lag < (size_t) (sr / 80.0) && lag < n / 2; ++lag)
+    {
+        double a = 0, e1 = 0, e2 = 0;
+        for (size_t i = 0; i + lag < n; ++i) { a += (double) x[i] * x[i + lag]; e1 += (double) x[i] * x[i]; e2 += (double) x[i + lag] * x[i + lag]; }
+        const double c = a / std::sqrt (e1 * e2 + 1e-12);
+        if (c > best) { best = c; bestLag = lag; }
+    }
+    return bestLag > 0 ? sr / (double) bestLag : 0.0;
+}
+
 static void writeSine (const juce::File& f, int root, double tuneCents, double secs)
 {
     const double sr = 44100.0, fr = 440.0 * std::pow (2.0, (root - 69 + tuneCents / 100.0) / 12.0);
@@ -78,13 +93,29 @@ int main()
     int fails = 0;
     auto ck = [&] (bool ok, const char* what, double got, double want) { std::printf ("%-52s got %.3f want %.3f %s\n", what, got, want, ok ? "ok" : "FAIL"); if (! ok) ++fails; };
 
-    // 1. no pack installed: choosing an instrument must not crash, and it is silent
+    // 1. the pack inside the plugin: listed, sounds, right pitch; an instrument that does not exist is silent
     {
         auto p = make();
-        ck (p->instrumentNames().isEmpty(), "no pack: instrument list is empty", (double) p->instrumentNames().size(), 0);
-        choose (*p, "Test Piano");
-        auto x = play (*p, 60, 30);
-        ck (rms (x, 0, x.size()) < 1e-4, "no pack: layer is silent", rms (x, 0, x.size()), 0);
+        const auto names = p->instrumentNames();
+        ck (names.contains ("Grand Piano") && names.contains ("Moist Keys") && names.contains ("Cello Ensemble"), "built-in pack: instruments are listed", (double) names.size(), 8);
+        for (auto nm : { "Grand Piano", "Moist Keys", "FM Piano", "Trumpet", "Solo Violin", "Violin Ensemble", "Viola Ensemble", "Cello Ensemble" })
+        {
+            auto pp = make(); choose (*pp, nm);
+            auto x = play (*pp, 60, 40);
+            const double r = rms (x, 0, x.size());
+            char what[80]; std::snprintf (what, sizeof what, "built-in %s sounds (rms)", nm);
+            ck (r > 0.01, what, r, 0.1);
+            if (juce::String (nm) == "Grand Piano" || juce::String (nm) == "Trumpet")
+            {
+                const double got = acfFreq (x, 48000.0), want = 261.626;
+                std::snprintf (what, sizeof what, "built-in %s pitch at C4 (Hz)", nm);
+                ck (got > 0.0 && std::abs (1200.0 * std::log2 (got / want)) < 12.0, what, got, want);
+            }
+        }
+        auto q = make();
+        choose (*q, "No Such Instrument");
+        auto x = play (*q, 60, 30);
+        ck (rms (x, 0, x.size()) < 1e-4, "unknown instrument: layer is silent", rms (x, 0, x.size()), 0);
     }
 
     // 2. a pack with two zones, one recorded 20 cents sharp

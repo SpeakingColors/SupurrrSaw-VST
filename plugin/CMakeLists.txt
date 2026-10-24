@@ -26,6 +26,9 @@ add_custom_target(S87Page DEPENDS ${S87_PAGE_OUT})
 juce_add_binary_data(SupurrSawUI SOURCES ${S87_PAGE_OUT})
 add_dependencies(SupurrSawUI S87Page)
 
+# the instrument pack (piano, trumpet, strings), one file built by tools/pack_instruments.py, compiled into the plugin
+juce_add_binary_data(SupurrSawInstruments NAMESPACE S87InstData HEADER_NAME S87InstData.h SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../assets/instruments.bin)
+
 if(WIN32)
     set(S87_WEBVIEW2 TRUE)
 else()
@@ -65,6 +68,7 @@ endif()
 
 target_link_libraries(SupurrSaw PRIVATE
     SupurrSawUI
+    SupurrSawInstruments
     juce::juce_audio_utils
     juce::juce_gui_extra
     PUBLIC
@@ -77,10 +81,10 @@ if(S87_TESTS)
     juce_add_console_app(S87Test PRODUCT_NAME "S87Test" NEEDS_WEB_BROWSER TRUE)
     target_sources(S87Test PRIVATE tests/plugin_test.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
     target_compile_definitions(S87Test PRIVATE JUCE_WEB_BROWSER=1 JUCE_USE_CURL=0 "JucePlugin_Name=\"SupurrSaw\"" "JucePlugin_VersionString=\"0.1.0\"")
-    target_link_libraries(S87Test PRIVATE SupurrSawUI juce::juce_audio_utils juce::juce_gui_extra juce::juce_recommended_config_flags)
+    target_link_libraries(S87Test PRIVATE SupurrSawUI SupurrSawInstruments juce::juce_audio_utils juce::juce_gui_extra juce::juce_recommended_config_flags)
 
     juce_add_console_app(S87InstTest PRODUCT_NAME "S87InstTest" NEEDS_WEB_BROWSER TRUE)
     target_sources(S87InstTest PRIVATE tests/instrument_test.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
     target_compile_definitions(S87InstTest PRIVATE JUCE_WEB_BROWSER=1 JUCE_USE_CURL=0 "JucePlugin_Name=\"SupurrSaw\"" "JucePlugin_VersionString=\"0.1.0\"")
-    target_link_libraries(S87InstTest PRIVATE SupurrSawUI juce::juce_audio_utils juce::juce_gui_extra juce::juce_recommended_config_flags)
+    target_link_libraries(S87InstTest PRIVATE SupurrSawUI SupurrSawInstruments juce::juce_audio_utils juce::juce_gui_extra juce::juce_recommended_config_flags)
 endif()

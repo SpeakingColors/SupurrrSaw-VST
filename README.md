@@ -19,7 +19,7 @@ By **Studio 87**.
 ## What it does
 
 - **3 layers.** Each one is an oscillator or a loaded sample: Super Saw (JP-8000 style), Super Square (PWM), Saw, Pulse, Triangle, Sine, Sample.
-- **Real instruments (optional pack).** Grand piano, FM electric piano, "Moist Keys" (a bright house piano processed from the grand), trumpet, solo violin and violin, viola and cello sections, played from the wave list of any layer. 30 `Instruments and hybrids` presets mix them with synth layers. See "Instrument pack" below.
+- **Real instruments (optional pack).** Grand piano, FM electric piano, "Moist Keys" (a bright house piano processed from the grand), trumpet, solo violin and violin, viola and cello sections, played from the wave list of any layer. 30 `Instruments and hybrids` presets mix them with synth layers. 
 - **0% detune gives one clean oscillator.** Push the detune range further than the original when you want.
 - **Sub oscillator** you can switch on for any sound.
 - **Hoover:** pitch envelope dive, PWM and an LFO on the pulse width and on the detune.
@@ -58,23 +58,15 @@ g++ -O2 -std=c++17 -o presets_test tools/presets_test.cpp && ./presets_test .   
 
 ## Samples and copyright
 
-The built-in `assets/samples/choir_stab_classic.wav` was made by Studio 87 and ships with the synth. Third-party sample packs must never be committed to this repository; put those in your local waveform library.
+The built-in `assets/samples/choir_stab_classic.wav` was made by Studio 87 and ships with the synth. Other third-party sample packs must never be committed to this repository; put those in your local waveform library. The one exception is the CC0 instrument pack described below.
 
-## Instrument pack (optional, separate download)
+## Instruments (built in)
 
-The multisampled instruments are not in the repository and not in the plugin download. They come as one extra zip, `SupurrSaw_Instruments`, on the Releases page. Unzip it so that `instruments.json` sits in one of these folders (or in a folder one level below):
+The multisampled instruments are inside the plugin, nothing extra to download or install: Grand Piano, FM Piano, Moist Keys, Trumpet, Solo Violin, Violin, Viola and Cello sections. Pick them in the wave list of any layer, or start from the `Instruments and hybrids` presets.
 
-Easiest (your user only):
-- Windows: `%APPDATA%\Studio 87\SupurrSaw\Instruments`
-- macOS: `~/Library/Application Support/Studio 87/SupurrSaw/Instruments`
-- Linux: `~/.config/Studio 87/SupurrSaw/Instruments`
+They are stored in `assets/instruments.bin` (about 25 MB, short mono FLAC files in one file) and compiled into the plugin. You can still add or replace instruments: put a folder with an `instruments.json` and FLAC files in `Instruments` inside the SupurrSaw user data folder (`~/.config/Studio 87/SupurrSaw/Instruments` on Linux, `%APPDATA%\Studio 87\SupurrSaw\Instruments` on Windows, `~/Library/Application Support/Studio 87/SupurrSaw/Instruments` on macOS). A folder instrument with the same name as a built-in one wins.
 
-For all users: `C:\ProgramData\Studio 87\SupurrSaw\Instruments` (Windows), `/Library/Application Support/Studio 87/SupurrSaw/Instruments` (macOS), `/usr/local/share/studio87/supurrsaw/Instruments` (Linux).
-
-Without the pack the plugin works as before and an instrument layer is silent. The web playground loads the pack from its own `instruments/` folder.
-
-`tools/make_instruments.py` builds the pack from two public domain sample libraries by Versilian Studios / Sam Gossner: [VCSL](https://github.com/sgossner/VCSL) (Kawai grand piano, TX81Z FM piano) and [VSCO 2 Community Edition](https://github.com/sgossner/VSCO-2-CE) (trumpet, violin, viola and cello). Both are CC0 1.0. The samples are converted to short mono FLAC files, the real pitch of each note is measured, and the sustained instruments get seamless loops. Credit to Versilian Studios / Sam Gossner, please do not sell the raw samples on their own.
-
+`tools/make_instruments.py` builds the sounds from two public domain sample libraries by Versilian Studios / Sam Gossner: [VCSL](https://github.com/sgossner/VCSL) (Kawai grand piano, TX81Z FM piano) and [VSCO 2 Community Edition](https://github.com/sgossner/VSCO-2-CE) (trumpet, violin, viola and cello). Both are CC0 1.0, which allows this. The samples are converted to short mono FLAC files, the real pitch of each note is measured, and the sustained instruments get seamless loops; Moist Keys is the grand piano processed to a bright house piano. `tools/pack_instruments.py` packs the result into `assets/instruments.bin`. Credit to Versilian Studios / Sam Gossner, please do not sell the raw samples on their own.
 
 ## Licence
 
