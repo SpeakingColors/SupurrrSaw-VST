@@ -9,7 +9,8 @@ loops for the sustained instruments, and writes one instruments.json that the en
 
 usage: make_instruments.py VCSL_DIR VSCO_DIR OUT_DIR [--lite]
   --lite  every second zone and shorter notes: a small set (a few MB) that is embedded in the web playground
-Needs: python3, numpy, soundfile, librosa.
+Needs: python3, numpy, scipy, soundfile, librosa.
+Also adds "Moist Keys", a processed grand piano (bright house piano).
 """
 import sys, os, re, glob, json
 import numpy as np, soundfile as sf
@@ -124,6 +125,48 @@ def build(name, files, outdir, loop, maxlen, fadeout=0.6, gain_to=0.7, thin=1):
     return {"name": name, "loop": bool(loop), "zones": zones}
 
 
+def biquad_peak(x, f0, gain_db, q):
+    from scipy.signal import lfilter
+    A = 10 ** (gain_db / 40); w = 2 * np.pi * f0 / SR; al = np.sin(w) / (2 * q)
+    b = [1 + al * A, -2 * np.cos(w), 1 - al * A]; a = [1 + al / A, -2 * np.cos(w), 1 - al / A]
+    return lfilter(np.array(b) / a[0], np.array(a) / a[0], x)
+
+
+def derive_moist_keys(out, name="Moist Keys", source="Grand Piano"):
+    """A made-up house piano in the spirit of the classic bright PCM dance pianos: the Kawai grand, high-passed, with the hammer
+    and presence boosted, soft-clipped and cut short. Built from the grand piano zones already in OUT, adds one instrument to instruments.json."""
+    from scipy.signal import butter, sosfilt
+    jf = os.path.join(out, "instruments.json")
+    J = json.load(open(jf))
+    J["instruments"] = [i for i in J["instruments"] if i["name"] != name]
+    src = next(i for i in J["instruments"] if i["name"] == source)
+    os.makedirs(os.path.join(out, name), exist_ok=True)
+    sos = butter(2, 140 / (SR / 2), "high", output="sos")
+    zones = []
+    for idx, z in enumerate(src["zones"]):
+        x, sr = sf.read(os.path.join(out, z["file"]), dtype="float64")
+        if x.ndim > 1:
+            x = x.mean(axis=1)
+        n = min(len(x), int(3.6 * SR))
+        x = x[:n].copy()
+        pk = np.abs(x).max()
+        x = sosfilt(sos, x)
+        x = biquad_peak(x, 3200, 6.0, 0.8)
+        x = biquad_peak(x, 7500, 4.0, 0.7)
+        x = biquad_peak(x, 250, -3.0, 0.9)
+        t = np.arange(n) / SR
+        x = x * (0.55 + 0.45 * np.exp(-t / 1.1))   # a little more of the early part
+        x = np.tanh(1.8 * x / max(pk, 1e-9)) / np.tanh(1.8)
+        fo = int(0.5 * SR)
+        x[n - fo:] *= np.linspace(1, 0, fo) ** 1.5
+        x = x / max(np.abs(x).max(), 1e-9) * min(0.8, pk * 1.1)
+        fl = "%s/%03d_n%d.flac" % (name, idx, z["root"])
+        sf.write(os.path.join(out, fl), x.astype(np.float32), SR, subtype="PCM_16")
+        zones.append({**z, "file": fl, "len": int(n)})
+    J["instruments"].append({"name": name, "loop": False, "zones": zones})
+    json.dump(J, open(jf, "w"), indent=1)
+
+
 def main():
     vcsl, vsco, out = sys.argv[1:4]
     lite = '--lite' in sys.argv
@@ -140,6 +183,7 @@ def main():
         build("Cello Ensemble", G(vsco, "Strings/Cello Section/susvib/*_v3_*.wav"), out, True, 4.0*sc, thin=th),
     ]
     json.dump({"version": 1, "credit": CREDIT, "instruments": inst}, open(os.path.join(out, "instruments.json"), "w"), indent=1)
+    derive_moist_keys(out)
     for i in inst:
         print("%-16s %2d zones, roots %s" % (i["name"], len(i["zones"]), [z["root"] for z in i["zones"]]))
 

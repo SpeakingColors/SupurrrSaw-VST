@@ -19,7 +19,7 @@ By **Studio 87**.
 ## What it does
 
 - **3 layers.** Each one is an oscillator or a loaded sample: Super Saw (JP-8000 style), Super Square (PWM), Saw, Pulse, Triangle, Sine, Sample.
-- **Real instruments (optional pack).** Grand piano, FM electric piano (the classic dance piano), trumpet, solo violin and violin, viola and cello sections, played from the wave list of any layer. See "Instrument pack" below.
+- **Real instruments (optional pack).** Grand piano, FM electric piano, "Moist Keys" (a bright house piano processed from the grand), trumpet, solo violin and violin, viola and cello sections, played from the wave list of any layer. 30 `Instruments and hybrids` presets mix them with synth layers. See "Instrument pack" below.
 - **0% detune gives one clean oscillator.** Push the detune range further than the original when you want.
 - **Sub oscillator** you can switch on for any sound.
 - **Hoover:** pitch envelope dive, PWM and an LFO on the pulse width and on the detune.
