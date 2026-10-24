@@ -11,7 +11,6 @@ Windows 10 or 11
   (default is No, so they stay).
 
 macOS (Apple silicon or Intel, macOS 11 or newer)
-  NOT IN THIS ZIP YET: GitHub's macOS build servers are not starting our build (see issue #1 on the repo page). We will re-release the macOS version once that works.
   Open macos\SupurrSaw-macOS.pkg. It installs the VST3 plugin, the standalone app, the manual and "Uninstall SupurrSaw".
   The installer is not notarized: if macOS blocks it, open System Settings > Privacy & Security and choose "Open Anyway".
   Remove: open "Uninstall SupurrSaw" in the Applications folder. It asks if you also want your saved presets deleted
