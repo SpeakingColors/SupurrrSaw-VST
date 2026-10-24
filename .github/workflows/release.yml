@@ -12,6 +12,11 @@ on:
         description: 'Publish a release with this tag (for example v0.2.6). Leave empty to only build.'
         required: false
         default: ''
+      skip_macos:
+        description: 'Skip the macOS build (use only when the hosted macOS queue is stuck)'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 env:
@@ -57,6 +62,7 @@ jobs:
           path: "Output/*.exe"
 
   macos:
+    if: ${{ inputs.skip_macos != true }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -141,6 +147,7 @@ jobs:
     permissions:
       contents: write
     needs: [windows, macos, linux]
+    if: ${{ !cancelled() && needs.windows.result == 'success' && needs.linux.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
