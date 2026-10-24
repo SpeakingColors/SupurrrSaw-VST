@@ -4,6 +4,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: build-plugin-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
