@@ -82,7 +82,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(mx1Mix); S87_F(mx1Depth); S87_F(mx1Rate); S87_F(mx1Delay); S87_F(mx1Width); S87_FR(mx1Fb, -0.95f, 0.95f);
         S87_F(mx2Mix); S87_F(mx2Depth); S87_F(mx2Rate); S87_F(mx2Delay); S87_F(mx2Width); S87_FR(mx2Fb, -0.95f, 0.95f); S87_FR(chorusFb, -0.95f, 0.95f); S87_FR(crushBits, 1.f, 16.f); S87_FR(crushRate, 1.f, 40.f); S87_FR(crushMix, 0.f, 1.f);
         S87_FR(widMid, 0.f, 2.f); S87_FR(widHi, 0.f, 2.f); S87_FR(msMid, 0.f, 1.f); S87_FR(msSide, 0.f, 1.f);
-        S87_FR(f2Cut, 20.f, 20000.f); S87_FR(f2Res, 0.f, 1.f); S87_FR(f2Drv, 0.f, 1.5f); S87_F(f2Env); S87_F(f2Key); S87_FR(f2Wheel, 0.f, 1.5f);
+        S87_FR(f2LowCut, 5.f, 20000.f); S87_FR(f2HighCut, 20.f, 20000.f); S87_IR(f2Slope, 0, 5); S87_FR(f3LowCut, 5.f, 20000.f); S87_FR(f3HighCut, 20.f, 20000.f); S87_IR(f3Slope, 0, 5); S87_FR(f2Cut, 20.f, 20000.f); S87_FR(f2Res, 0.f, 1.f); S87_FR(f2Drv, 0.f, 1.5f); S87_F(f2Env); S87_F(f2Key); S87_FR(f2Wheel, 0.f, 1.5f);
         S87_FR(f3Cut, 20.f, 20000.f); S87_FR(f3Res, 0.f, 1.f); S87_FR(f3Drv, 0.f, 1.5f); S87_F(f3Env); S87_F(f3Key); S87_FR(f3Wheel, 0.f, 1.5f);
         S87_FR(lfo2Rate, 0.05f, 30.f); S87_IR(lfo2Shape, 0, 6); S87_FR(lfo2Depth, 0.f, 1.f); S87_FR(lfo2Fade, 0.f, 5.f); S87_FR(lfo2Start, 0.f, 1.f);
         S87_FR(lfo3Rate, 0.05f, 30.f); S87_IR(lfo3Shape, 0, 6); S87_FR(lfo3Depth, 0.f, 1.f); S87_FR(lfo3Fade, 0.f, 5.f); S87_FR(lfo3Start, 0.f, 1.f);

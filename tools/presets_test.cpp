@@ -393,6 +393,20 @@ int main(int argc, char** argv) {
     CHECK(std::fabs(hiB(FilterMode::LP24, 2000.f, 0) - hiB(FilterMode::LP24, 20000.f, 0)) < 1e-9);   // with a low pass filter the high cut is not used
     std::printf("hi/lo cut: slopes steepen, high cut band-limits next to HP and HP24\n");
   }
+  { // per-filter hi pass / lo pass (filters 2 and 3), and the second hi pass after DYN
+    auto lowBand = [&](const Params& q) { auto x = runP(q); double y1 = 0, y2 = 0, e = 0; for (size_t i = x.size() / 3; i < x.size(); ++i) { y1 += 0.02 * (x[i] - y1); y2 += 0.02 * (y1 - y2); e += y2 * y2; } return e; };
+    auto base2 = [&]() { Params q = baseP(); q.filterMode = FilterMode::LP24; q.cutoff = 18000.f; q.reso = 0.f; q.drive = 0.f; q.envAmt = 0.f; q.noiseLevel = 0.f; q.subLevel = 0.f; q.chorusMix = q.delayMix = q.reverbMix = 0.f; q.dmMix = 0.f; q.f2Mode = FilterMode::LP24; q.f2Cut = 18000.f; q.f2Res = 0.f; return q; };
+    Params a = base2(); double e0 = lowBand(a);
+    Params b = a; b.f2LowCut = 2000.f; b.f2Slope = 3; double e24 = lowBand(b); Params c = b; c.f2Slope = 5; double e96 = lowBand(c);
+    std::printf("filter 2 hi pass 2 kHz low band: off %.4f, 24 dB %.6f, 96 dB %.9f\n", e0, e24, e96); CHECK(e24 < e0 * 0.1); CHECK(e96 < e24 * 0.5); CHECK(std::isfinite(e96));
+    Params d = a; d.f2Mode = FilterMode::Off; Params d2 = d; d2.f2LowCut = 2000.f; d2.f2HighCut = 500.f; CHECK(relDiff(runP(d), runP(d2)) == 0.0);   // a filter that is Off ignores its own hi pass
+    Params f = a; f.f2LowCut = 2000.f; f.f2Slope = 3; f.fRoute = 1; Params g = f; g.f2LowCut = 5.f; CHECK(lowBand(f) < lowBand(g) + 1e-12); CHECK(std::isfinite(lowBand(f)));   // parallel: the other branch still passes the lows
+    Params h = a; h.f2HighCut = 400.f; h.f2Slope = 3; CHECK(brightness(runP(h)) < brightness(runP(a)) * 0.5);   // own lo pass darkens
+    // post-DYN hi pass: with DYN on and a steep hi pass, the low band must stay far below the DYN off level plus the clipper regrowth
+    Params m = base2(); m.f2Mode = FilterMode::Off; m.lowCutHz = 1500.f; m.auxSlope = 5; m.dmMix = 0.4f; double mOn = lowBand(m); Params m0 = m; m0.dmMix = 0.f; double mOff = lowBand(m0);
+    std::printf("DYN regrowth below a 1.5 kHz hi pass: dyn off %.3e, dyn on %.3e\n", mOff, mOn); CHECK(mOn < 1e-6 || mOn < mOff * 100.0);
+    std::printf("per filter hi/lo pass and post DYN hi pass behave\n");
+  }
   { // sub and noise: voices, detune and width. Defaults change nothing; width makes left and right differ
     auto stereoDiff = [&](const Params& q) { std::vector<float> R; auto L = runP(q, &R); double d = 0, e = 1e-12; for (size_t i = 0; i < L.size() && i < R.size(); ++i) { d += (double)(L[i] - R[i]) * (L[i] - R[i]); e += (double)L[i] * L[i]; } return d / e; };
     Params sb = baseP(); sb.layer[0].level = 0.f; sb.layer[1].level = 0.f; sb.layer[2].level = 0.f; sb.subLevel = 0.8f; sb.noiseLevel = 0.f; sb.chorusMix = sb.delayMix = sb.reverbMix = 0.f; sb.dmMix = 0.f; sb.subPreFilter = true;

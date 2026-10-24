@@ -397,7 +397,7 @@ function defaultParams() {
     pitchAmt: 0, pitchTime: 0.09, pitchAttack: 0, pitchFall: 0, pitchFallTime: 1, lfoRate: 6, lfoPwm: 0, lfoPitch: 0, lfoCutoff: 0, lfoDetune: 0, lfoShape: 0, lfoPan: 0, lfoAmp: 0, wheelCutoff: 0, velCutoff: 0, wheelVib: 0, phaseReset: false, drift: 0, detuneRange: 1,
     spread: 0.7, bassMonoHz: 120, mfxMulti: false, mx0Mix: 0, mx0Depth: 0.5, mx0Rate: 0.6, mx0Delay: 12, mx0Width: 1, mx0Fb: 0.5, mx1Mix: 0, mx1Depth: 0.6, mx1Rate: 0.25, mx1Delay: 6, mx1Width: 1, mx1Fb: 0.6, mx2Mix: 0, mx2Depth: 0.7, mx2Rate: 0.35, mx2Delay: 12, mx2Width: 1, mx2Fb: 0.5, chorusMix: 0, chorusDepth: 0.5, chorusRate: 0.6, delayMix: 0, delayTime: 0.25, delayFb: 0.4, delaySync: false, delayDiv: 7, bpm: 120, optoAmt: 0, ottDepth: 0, ottMix: 0, sqzAmt: 0, reverbMix: 0, reverbSize: 0.6, reverbWidth: 0.8, reverbLowCutHz: 150,
     master: 1, clipKnee: 0.72, limiter: true, limCeil: 0.9, polyphony: 12, modWheel: 0, bendRange: 2, bendDown: 2, pitchBend: 0, mpe: true, mpeRange: 48, pressure: 0, slide: 0, dynMix: 1, dmMix: 0.4, dmDrive: 0.5, dmClip: 0.35, dmLow: 0, dmMid: 0, dmHigh: 0, chorusDelay: 12, chorusWidth: 1, delayDamp: 0.7, delayPing: 1, reverbPre: 0, reverbDamp: 0.25, optoGain: 0, optoRel: 1, ottLow: 0, ottMid: 0, ottHigh: 0, ottTime: 1, sqzAtk: 4, sqzRel: 90, sqzMakeup: 0, menvData: "", menvPts: "", menvTime: 0.5, menvInv: false, menvLoop: false, menvSync: false, menvDiv: 6, lfoDepth: 1, lfoFade: 0, lfoStart: 0, pitchHold: 0, pitchCurve: 0, drvDrive: 0, drvXs: 0, drvFuzz: 0, drvMix: 1, eq1On: false, eq1F: 30, eq2On: true, eq2F: 120, eq2G: 0, eq3On: true, eq3F: 500, eq3G: 0, eq3Q: 1, eq4On: true, eq4F: 3000, eq4G: 0, eq4Q: 1, eq5On: true, eq5F: 9000, eq5G: 0, eq6On: false, eq6F: 18000, build: 0, modFxType: 0, chorusFb: 0.5, crushBits: 16, crushRate: 1, crushMix: 0, widMid: 1, widHi: 1, msMid: 0, msSide: 0, ampLink: true, fRoute: 0,
-    f2Mode: "Off", f2Cut: 4000, f2Res: 0.2, f2Drv: 0, f2Env: 0, f2Key: 0, f3Mode: "Off", f3Cut: 4000, f3Res: 0.2, f3Drv: 0, f3Env: 0, f3Key: 0, f2Wheel: 0, f3Wheel: 0,
+    f2LowCut: 5, f2HighCut: 20000, f2Slope: 1, f3LowCut: 5, f3HighCut: 20000, f3Slope: 1, f2Mode: "Off", f2Cut: 4000, f2Res: 0.2, f2Drv: 0, f2Env: 0, f2Key: 0, f3Mode: "Off", f3Cut: 4000, f3Res: 0.2, f3Drv: 0, f3Env: 0, f3Key: 0, f2Wheel: 0, f3Wheel: 0,
     lfo2Rate: 6, lfo2Shape: 0, lfo2Depth: 1, lfo2Fade: 0, lfo2Start: 0, lfo3Rate: 6, lfo3Shape: 0, lfo3Depth: 1, lfo3Fade: 0, lfo3Start: 0,
     menv2Data: "", menv2Pts: "", menv2Time: 0.5, menv2Inv: false, menv2Loop: false, menv2Sync: false, menv2Div: 6, menv3Data: "", menv3Pts: "", menv3Time: 0.5, menv3Inv: false, menv3Loop: false, menv3Sync: false, menv3Div: 6,
     nzSmp: "Off", nzSmpPitch: 0, nzSmpVol: 1, smpPost: false };
@@ -760,13 +760,35 @@ class Dynamics {
   }
 }
 
+/* Butterworth hi pass + lo pass pair, 6..96 dB/oct (orders 1,2,3,4,8,16), stereo. Used per filter (F2, F3) and after DYN. */
+const AUX_ORD = [1, 2, 3, 4, 8, 16];
+class AuxF {
+  constructor() { this.fh = 0; this.fl = 0; this.sl = -1; this.sr = 0; this.h = new Float64Array(8 * 5); this.l = new Float64Array(8 * 5); this.hz = new Float64Array(2 * 2 * 8); this.lz = new Float64Array(2 * 2 * 8); this.ho = new Float64Array(2); this.lo = new Float64Array(2); this.hg = 0; this.lg = 0; this.nh = 0; this.nl = 0; this.hOdd = false; this.lOdd = false; this.hOn = false; this.lOn = false; }
+  /* fh <= 5.5 or fl >= 19990 turns that side off */
+  set(fh, fl, slope, sr) {
+    if (fh === this.fh && fl === this.fl && slope === this.sl && sr === this.sr) return;
+    this.fh = fh; this.fl = fl; this.sl = slope; this.sr = sr;
+    const N = AUX_ORD[Math.max(0, Math.min(5, slope | 0))], ns = N >> 1, odd = (N & 1) === 1;
+    this.hOn = fh > 5.5; this.lOn = fl < 19990; this.nh = this.nl = ns; this.hOdd = this.lOdd = odd;
+    const des = (c, fc, hp) => { const w = Math.tan(kPi * Math.min(fc, 0.45 * sr) / sr); for (let k = 0; k < ns; k++) { const q = 1 / (2 * Math.cos(kPi * (2 * k + 1) / (2 * N))), n = 1 / (1 + w / q + w * w), o = k * 5; if (hp) { c[o] = n; c[o + 1] = -2 * n; c[o + 2] = n; } else { c[o] = w * w * n; c[o + 1] = 2 * c[o]; c[o + 2] = c[o]; } c[o + 3] = 2 * (w * w - 1) * n; c[o + 4] = (1 - w / q + w * w) * n; } return w / (1 + w); };
+    if (this.hOn) this.hg = des(this.h, fh, true); if (this.lOn) this.lg = des(this.l, fl, false);
+  }
+  /* c: 0 left, 1 right */
+  tick(x, c) {
+    if (this.hOn) { const z = this.hz, b = c * 16; for (let k = 0; k < this.nh; k++) { const o = k * 5, zi = b + 2 * k, y = this.h[o] * x + z[zi]; z[zi] = this.h[o + 1] * x - this.h[o + 3] * y + z[zi + 1]; z[zi + 1] = this.h[o + 2] * x - this.h[o + 4] * y; x = y; }
+      if (this.hOdd) { const g = this.hg, v = (x - this.ho[c]) * g, lp = v + this.ho[c]; this.ho[c] = lp + v; x -= lp; } }
+    if (this.lOn) { const z = this.lz, b = c * 16; for (let k = 0; k < this.nl; k++) { const o = k * 5, zi = b + 2 * k, y = this.l[o] * x + z[zi]; z[zi] = this.l[o + 1] * x - this.l[o + 3] * y + z[zi + 1]; z[zi + 1] = this.l[o + 2] * x - this.l[o + 4] * y; x = y; }
+      if (this.lOdd) { const g = this.lg, v = (x - this.lo[c]) * g, lp = v + this.lo[c]; this.lo[c] = lp + v; x = lp; } }
+    return x;
+  }
+}
 /* Dance mastering: 3 band compressor, ADAA clipper, dry/wet. Louder at the same peak ceiling. */
 class Master {
   constructor(sr) {
     this.sr = sr; this.env = [0, 0, 0]; this.gn = [1, 1, 1]; this.gr = [0, 0, 0];
     const mk = (hp, fc) => { const a = [new Lr4(), new Lr4()]; a[0].set(hp, fc, sr); a[1].set(hp, fc, sr); return a; };
     this.lo = mk(false, 150); this.hi1 = mk(true, 150); this.midLo = mk(false, 3000); this.hiHp = mk(true, 3000); this.ap1 = mk(false, 3000); this.ap2 = mk(true, 3000);
-    this.xl = 0; this.xr = 0; this.out = [0, 0]; this.band = [[0, 0, 0], [0, 0, 0]];
+    this.xl = 0; this.xr = 0; this.px = new AuxF(); this.out = [0, 0]; this.band = [[0, 0, 0], [0, 0, 0]];
   }
   static lncosh(u) { const a = Math.abs(u); return a + Math.log1p(Math.exp(-2 * a)) - 0.6931471805599453; }
   clip(x, prev, c) { const d = x - prev; if (Math.abs(d) < 1e-5) return c * Math.tanh(0.5 * (x + prev) / c); return c * c * (Master.lncosh(x / c) - Master.lncosh(prev / c)) / d; }
@@ -790,6 +812,8 @@ class Master {
     const g = 1 + p.dmClip * 1.2, c = 0.85, a = wl * g, b2 = wr * g;
     const yl = this.clip(a, this.xl, c), yr = this.clip(b2, this.xr, c); this.xl = a; this.xr = b2;
     this.out[0] = dl0 * (1 - mix) + yl * mix; this.out[1] = dr0 * (1 - mix) + yr * mix;
+    /* the clipper rebuilds low end out of detuned saws: a second hi pass after DYN, half the voice hi pass, same slope */
+    const pf = p._pxHz || 0; if (pf >= 40) { this.px.set(pf, 20000, p._pxSl | 0, sr); this.out[0] = this.px.tick(this.out[0], 0); this.out[1] = this.px.tick(this.out[1], 1); }
   }
 }
 const MENV_BEATS = [16, 8, 4, 2, 3, 4 / 3, 1, 1.5, 2 / 3, 0.5, 0.75, 1 / 3, 0.25, 0.375, 1 / 6, 0.125];
@@ -797,7 +821,7 @@ const ENV_ORDER = ["amp", "amp2", "amp3", "fenv", "fenv2", "fenv3"], MENV_P = ["
 function newVoice() {
   return { active: false, note: 60, vel: 1, age: 0, ch: 0, bend: 0, press: 0, slide: 0, phase: [new Float64Array(kMaxSaws), new Float64Array(kMaxSaws), new Float64Array(kMaxSaws)], syncPhase: [0, 0, 0],
     noiseHp: 0, noiseHp2: 0, subPhase: 0, subPh: new Float64Array(5), nzS: new Float64Array(20), drift: new Float64Array(kMaxSaws), driftT: new Float64Array(kMaxSaws), lfoPhase: 0, t: 0, ctr: 0, lfoC: 0, pEnv: 0, pcC: [1, 1, 1], psC: [0, 0, 0], fC: [440, 440, 440], cc: [1000, 1000, 1000], laC: 0.01, lyOut: [0, 0, 0], fmSubPh: 0, gl: 0, stackCents: 0, stackGain: 1, rnd: 0, sh: 0, sh0: 0,
-    lp2: [0, 0], sa: [0, 0], sb: [0, 0], lc2: [0, 0], rs: 1, zs: [null, null, null], zn: [-1, -1, -1], spos: [0, 0, 0], sp: [0, 0, 0, 0], sq: [1, 1, 1, 1], svL: new Float64Array(MX_NS),
+    ax2: [new AuxF(), new AuxF()], lp2: [0, 0], sa: [0, 0], sb: [0, 0], lc2: [0, 0], rs: 1, zs: [null, null, null], zn: [-1, -1, -1], spos: [0, 0, 0], sp: [0, 0, 0, 0], sq: [1, 1, 1, 1], svL: new Float64Array(MX_NS),
     ax: new Float64Array(8), bw: new Float64Array(40), bwz: new Float64Array(32), bwF: -1, bwN: 0, bwH: false, hcC: 0.9, amp: new Env(), amp2: new Env(), amp3: new Env(), fenv: new Env(), fenv2: new Env(), fenv3: new Env(), fl: [new Filter(), new Filter(), new Filter()], fr: [new Filter(), new Filter(), new Filter()], hpL: 0, hpR: 0 };
 }
 function lfoRnd(v) { v.rs = (Math.imul(v.rs, 1664525) + 1013904223) >>> 0; return (v.rs >>> 8) / 16777216 * 2 - 1; }
@@ -812,6 +836,14 @@ class SupurrEngine {
     this.tab = [null, null, null]; this.meterL = 0; this.meterR = 0; this.activeCount = 0; this.limEnv = 0; this.gr = this.dyn.gr; this.dmgr = this.dm.gr; this.trips = 0; this.limAtk = 1 - Math.exp(-1 / (0.0004 * sr)); this.limRel = 1 - Math.exp(-1 / (0.12 * sr));
   }
   rnd() { this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0; return (this.seed >>> 8) / 16777216; }
+  /* effective voice hi pass (series: the steepest/highest, parallel: the lowest) -> half of it again after DYN */
+  postHp(p, pe) {
+    const on2 = p.f2Mode !== "Off", on3 = p.f3Mode !== "Off", h2 = on2 ? p.f2LowCut : 0, h3 = on3 ? p.f3LowCut : 0;
+    let hz = p.lowCutHz, sl = p.auxSlope, br = hz, bs = sl;   /* voice-wide stage is always in the path */
+    if (p.fRoute === 1) { const act = []; if (p.filterMode !== "Off") act.push([0, sl]); if (on2) act.push([h2, p.f2Slope]); if (on3) act.push([h3, p.f3Slope]); if (act.length) { act.sort((x, y) => x[0] - y[0]); br = act[0][0]; bs = act[0][1]; } else { br = 0; } if (br > hz) { hz = br; sl = bs; } }
+    else { if (h2 > hz) { hz = h2; sl = p.f2Slope; } if (h3 > hz) { hz = h3; sl = p.f3Slope; } }
+    pe._pxHz = hz >= 80 ? 0.5 * hz : 0; pe._pxSl = sl;
+  }
   setParams(p) { this.p = p; this.pe = Object.create(p); }
   /* drum kit mode: k is null (off) or a list of slots {n: keys that play it, play: key it is played at (null = the key itself), ch: keys it chokes, p: preset}. Each slot is its own small engine, so every drum keeps its own sound and effects. */
   setKit(k) {
@@ -891,7 +923,7 @@ class SupurrEngine {
     { const EV = this.EV; for (let e = 0; e < 6; e++) for (let j = 0; j < 7; j++) EV[e * 7 + j] = p[ENV_ORDER[e] + ENV_KEYS[j]]; }
     this.menvSync(); this.sbI = 0; this.subL.fill(0, 0, n); this.subR.fill(0, 0, n);
     let act = 0; for (const v of this.voices) if (v.active) { act++; this.renderVoice(v, outL, outR, n); }
-    this.activeCount = act; this.globals();
+    this.activeCount = act; this.globals(); this.postHp(p, pe);
     this.eq.update(pe); const a = 1 - Math.exp(-2 * kPi * Math.max(10, p.bassMonoHz) / sr); let mL = 0, mR = 0;
     for (let i = 0; i < n; i++) {
       this.drv.process(pe, outL[i], outR[i], this.subL[i], this.subR[i]); this.crush.process(pe, this.drv.oL, this.drv.oR); outL[i] = this.crush.oL; outR[i] = this.crush.oR; const sbl = this.drv.sL, sbr = this.drv.sR;
@@ -1090,8 +1122,10 @@ class SupurrEngine {
         const ns0 = p.auxSlope | 0; if (ns0 >= 4) { const hp0 = modes[0] === "HP" || modes[0] === "HP24", f0 = hp0 ? Math.max(20, Math.min(0.45 * sr, p.highCutHz)) : Math.max(5, Math.min(0.45 * sr, p.lowCutHz * Math.pow(2, md[13] * 4))), sec0 = ns0 === 4 ? 4 : 8; if (f0 !== v.bwF || sec0 !== v.bwN || hp0 !== v.bwH) { v.bwF = f0; v.bwN = sec0; v.bwH = hp0; bwDesign(v.bw, sec0, f0, sr, !hp0); } } }
       const cc = v.cc, rs = Math.min(1, Math.max(0, p.reso + md[2] * 0.5)), dv = Math.min(1, Math.max(0, p.drive + md[3] * 0.75));
       const rr = [rs, p.f2Res, p.f3Res], dd = [dv, p.f2Drv, p.f3Drv];
-      if (!parallel) { for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; st.L = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr); st.R = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); } }
-      else { let al = 0, ar = 0, cn = 0; for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; al += v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr); ar += v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); cn++; } if (cn) { const k = 1 / Math.sqrt(cn); st.L = al * k; st.R = ar * k; } }
+      const axA = [null, p.f2LowCut > 5.5 || p.f2HighCut < 19990 ? v.ax2[0] : null, p.f3LowCut > 5.5 || p.f3HighCut < 19990 ? v.ax2[1] : null];
+      if (axA[1]) axA[1].set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2].set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
+      if (!parallel) { for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; st.L = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr); st.R = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); if (axA[q]) { st.L = axA[q].tick(st.L, 0); st.R = axA[q].tick(st.R, 1); } } }
+      else { let al = 0, ar = 0, cn = 0; for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; let bl = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr), br2 = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); if (axA[q]) { bl = axA[q].tick(bl, 0); br2 = axA[q].tick(br2, 1); } al += bl; ar += br2; cn++; } if (cn) { const k = 1 / Math.sqrt(cn); st.L = al * k; st.R = ar * k; } }
       if (post) { st.L += smL; st.R += smR; }
       if (!p.distPre) distort();   /* distortion first, so the low cut that follows also removes the bass the distortion would rebuild */
       const la = v.laC, hpT = modes[0] === "HP" || modes[0] === "HP24", ns = p.auxSlope | 0;
@@ -1531,7 +1565,11 @@ const hpDb=(f,fl,n)=>(n|0)>=4?10*Math.log10(Math.pow(f/fl,((n|0)===4?16:32))/(1+
 const lpDb=(f,fh,n)=>(n|0)>=4?-10*Math.log10(1+Math.pow(f/fh,((n|0)===4?16:32))):-10*Math.log10(1+(f/fh)*(f/fh))*(1+(n|0));          // high cut for the high-pass filters
 const isHPT=m=>m==="HP"||m==="HP24";
 const FK=[{mode:"filterMode",cut:"cutoff",res:"reso",drv:"drive",env:"envAmt",key:"keyTrack",wheel:"wheelCutoff",ev:"fenv"},{mode:"f2Mode",cut:"f2Cut",res:"f2Res",drv:"f2Drv",env:"f2Env",key:"f2Key",wheel:"f2Wheel",ev:"fenv2"},{mode:"f3Mode",cut:"f3Cut",res:"f3Res",drv:"f3Drv",env:"f3Env",key:"f3Key",wheel:"f3Wheel",ev:"fenv3"}];
-const kDb=(k,f,fc)=>{const m=P[FK[k].mode];return respDb(f,fc,P[FK[k].res],m)+(k===0?(isHPT(m)?lpDb(f,clamp(P.highCutHz,20,20000),P.auxSlope):hpDb(f,Math.max(5,P.lowCutHz),P.auxSlope)):0);};
+const AUXK=[{lo:"lowCutHz",hi:"highCutHz",sl:"auxSlope"},{lo:"f2LowCut",hi:"f2HighCut",sl:"f2Slope"},{lo:"f3LowCut",hi:"f3HighCut",sl:"f3Slope"}];
+const kDb=(k,f,fc)=>{const m=P[FK[k].mode],A=AUXK[k];let d=respDb(f,fc,P[FK[k].res],m);
+  if(k===0)d+=isHPT(m)?lpDb(f,clamp(P.highCutHz,20,20000),P.auxSlope):hpDb(f,Math.max(5,P.lowCutHz),P.auxSlope);
+  else{if(P[A.lo]>5.5)d+=hpDb(f,P[A.lo],P[A.sl]);if(P[A.hi]<19990)d+=lpDb(f,P[A.hi],P[A.sl]);}
+  return d;};
 const FMIN=20,FMAX=20000;
 const fx_=(f,w)=>Math.log(f/FMIN)/Math.log(FMAX/FMIN)*w;
 const x_f=(x,w)=>FMIN*Math.pow(FMAX/FMIN,clamp(x/w,0,1));
@@ -1553,18 +1591,19 @@ function filterCard(k){
   kn.push(N(K.wheel,"Wheel",0,1.5,0.01,"","Mod wheel opens the cutoff of filter "+(k+1)+"."));
   c.appendChild(knobRow(kn));
   {
-    const ax=el("div","row");ax.style.marginTop="2px";
-    const lcK=knobRow([LG("lowCutHz","Hi pass",20,20000,"Hz","High pass on the whole voice, after the filters (the old Low cut). It removes low end; you see it on the curve and can drag the yellow point. It works with every filter type except HP and HP24, where this spot becomes a Low pass.")]);
-    const hcK=knobRow([LG("highCutHz","Lo pass",20,20000,"Hz","Low pass on the whole voice, after the filters. It appears here because the filter above is a highpass; together they make a band. Drag the yellow point on the curve. At 20 kHz it is off.")]);
-    const slK=select("auxSlope",[[0,"6 dB"],[1,"12 dB"],[2,"18 dB"],[3,"24 dB"],[4,"48 dB"],[5,"96 dB"]],"Steepness of the High pass or Low pass next to it, in dB per octave. 6 dB is the gentle slope the old Low cut had. 48 and 96 dB are very steep (8th and 16th order) for cutting everything below or above a point.");slK.style.width="66px";slK.style.fontSize="11.5px";slK.style.padding="2px";
+    const A=AUXK[k],ax=el("div","row");ax.style.marginTop="2px";
+    const lcK=knobRow([LG(A.lo,"Hi pass",k?5:20,20000,"Hz",k===0?"High pass on the whole voice, after all filters (the old Low cut). It removes low end; you see it on the curve and can drag the yellow point. With HP or HP24 on this filter, this spot becomes a Low pass.":"High pass on this filter only, right after it. At 5 Hz it is off. In series everything after it gets this high pass too; in parallel only this branch has it. Drag the yellow point on the curve.")]);
+    const hcK=knobRow([LG(A.hi,"Lo pass",20,20000,"Hz",k===0?"Low pass on the whole voice, after the filters. It appears here because this filter is a highpass; together they make a band. At 20 kHz it is off.":"Low pass on this filter only, right after it. At 20 kHz it is off. Drag the second yellow point on the curve.")]);
+    const slK=select(A.sl,[[0,"6 dB"],[1,"12 dB"],[2,"18 dB"],[3,"24 dB"],[4,"48 dB"],[5,"96 dB"]],"Steepness of this filter's Hi pass and Lo pass, in dB per octave. 6 dB is gentle. 48 and 96 dB are very steep (8th and 16th order) for cutting everything below or above a point.");slK.style.width="66px";slK.style.fontSize="11.5px";slK.style.padding="2px";
     lcK.style.marginTop=hcK.style.marginTop="0";
     ax.appendChild(lcK);ax.appendChild(hcK);ax.appendChild(el("div","lbl","Slope"));ax.appendChild(slK);c.appendChild(ax);
-    const upd=()=>{const h=isHPT(P.filterMode);lcK.hidden=h;hcK.hidden=!h;};reg(upd);onChange(kk=>{if(kk==="filterMode"||kk==="all")upd();});
+    if(k===0){const upd=()=>{const h=isHPT(P.filterMode);lcK.hidden=h;hcK.hidden=!h;};reg(upd);onChange(kk=>{if(kk==="filterMode"||kk==="all")upd();});}
   }
   let dragging=0;
   const yD=(h,d)=>h-((d+78)/(78+30))*h*0.92-6;
-  const auxKey=()=>isHPT(P.filterMode)?"highCutHz":"lowCutHz";
-  function pts(w,h){const res={cx:fx_(P[K.cut],w),cy:h-8-P[K.res]*(h-30)};if(k===0){const hz_=clamp(P[auxKey()],20,20000);res.hx=fx_(hz_,w);res.hy=yD(h,clamp(kDb(0,hz_,P.cutoff),-78,30));}return res;}
+  const auxKey=()=>k===0?(isHPT(P.filterMode)?"highCutHz":"lowCutHz"):AUXK[k].lo;
+  function pts(w,h){const res={cx:fx_(P[K.cut],w),cy:h-8-P[K.res]*(h-30)};if(k===0){const hz_=clamp(P[auxKey()],20,20000);res.hx=fx_(hz_,w);res.hy=yD(h,clamp(kDb(0,hz_,P.cutoff),-78,30));}
+    else{const A=AUXK[k],h1=clamp(P[A.lo],20,20000),h2=clamp(P[A.hi],20,20000);res.hx=fx_(h1,w);res.hy=yD(h,clamp(kDb(k,h1,P[K.cut]),-78,30));res.lx=fx_(h2,w);res.ly=yD(h,clamp(kDb(k,h2,P[K.cut]),-78,30));}return res;}
   function draw(){
     const {g,w,h,hidden}=hidpi(cv);if(hidden)return;g.clearRect(0,0,w,h);
     g.strokeStyle="#241c52";g.lineWidth=1;g.fillStyle="#7a6fb5";g.font="9px IBM Plex Mono";
@@ -1572,6 +1611,7 @@ function filterCard(k){
     for(const d of [-72,-48,-24,0,24]){const y=yD(h,d);g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();g.fillText(d+" dB",2,y-2);}
     if(k===0){const hp=isHPT(P.filterMode),hz_=clamp(P[auxKey()],20,20000),hx=fx_(hz_,w);
       g.fillStyle="rgba(255,209,0,.10)";if(hp)g.fillRect(hx,0,w-hx,h);else g.fillRect(0,0,hx,h);g.fillStyle="#ffd100";g.textAlign=hp?"right":"left";g.fillText(hp?"low pass":"high pass",hp?w-3:3,10);g.textAlign="left";}
+    else{const A=AUXK[k];g.fillStyle="rgba(255,209,0,.10)";if(P[A.lo]>5.5){const hx=fx_(clamp(P[A.lo],20,20000),w);g.fillRect(0,0,hx,h);}if(P[A.hi]<19990){const lx=fx_(clamp(P[A.hi],20,20000),w);g.fillRect(lx,0,w-lx,h);}}
     if(k===0&&ana&&audioMode!=="off")drawSpecTo(g,w,h,0.3,"f");
     const curve=(fc,color,dash,wd,fill)=>{g.setLineDash(dash||[]);g.strokeStyle=color;g.lineWidth=wd;g.shadowColor=color;g.shadowBlur=dash?0:8;const stp=(P[K.mode]==="Comb+"||P[K.mode]==="Comb-")?0.5:2;g.beginPath();for(let x=0;x<=w;x+=stp){const f=x_f(x,w),y=yD(h,clamp(kDb(k,f,fc),-78,30));x?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();g.shadowBlur=0;g.setLineDash([]);
       if(fill){g.lineTo(w,h);g.lineTo(0,h);g.closePath();g.fillStyle="rgba(2,235,186,.09)";g.fill();}};
@@ -1581,17 +1621,18 @@ function filterCard(k){
       for(let n=1;n<=24;n++){const f=(n+off-(off?0:0))*fc;if(f>19000)break;const x=fx_(f,w);g.fillStyle="rgba(255,123,177,.55)";g.fillRect(x-1,h-14,2,10);if(n<=8){g.fillStyle="#ff7bb1";g.fillText(off?(n-0.5+0.5)+"":n+"",x,h-16);}}
       g.fillStyle="#ff7bb1";g.textAlign="right";g.fillText("comb teeth every "+(fc>=1000?(fc/1000).toFixed(2)+" kHz":Math.round(fc)+" Hz")+", "+(P[K.mode]==="Comb+"?"peaks":"notches")+" at the pink marks",w-4,10);g.textAlign="left";}
     const p=pts(w,h);
-    if(k===0){g.fillStyle=dragging===2?"#fff":"#ffd100";g.beginPath();g.arc(p.hx,p.hy,6,0,7);g.fill();g.strokeStyle="#000";g.lineWidth=1;g.stroke();}
+    {g.fillStyle=dragging===2?"#fff":"#ffd100";g.beginPath();g.arc(p.hx,p.hy,6,0,7);g.fill();g.strokeStyle="#000";g.lineWidth=1;g.stroke();}
+    if(k>0){g.fillStyle=dragging===3?"#fff":"#ffd100";g.beginPath();g.arc(p.lx,p.ly,6,0,7);g.fill();g.strokeStyle="#000";g.lineWidth=1;g.stroke();}
     g.fillStyle=dragging===1?"#fff":"#ff7bb1";g.beginPath();g.arc(p.cx,p.cy,7.5,0,7);g.fill();g.strokeStyle="#000";g.lineWidth=1;g.stroke();
   }
   cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect(),p=pts((r.width/SCALE),(r.height/SCALE)),x=(e.clientX-r.left)/SCALE,y=(e.clientY-r.top)/SCALE;
-    const d1=Math.hypot(x-p.cx,y-p.cy),d2=k===0?Math.hypot(x-p.hx,y-p.hy):1e9;dragging=(d2<d1&&d2<26)?2:1;cv.setPointerCapture(e.pointerId);cv.style.cursor="grabbing";mv(e);});
+    const d1=Math.hypot(x-p.cx,y-p.cy),d2=Math.hypot(x-p.hx,y-p.hy),d3=k>0?Math.hypot(x-p.lx,y-p.ly):1e9;dragging=(d2<d1&&d2<26&&d2<=d3)?2:((d3<d1&&d3<26)?3:1);cv.setPointerCapture(e.pointerId);cv.style.cursor="grabbing";mv(e);});
   const mv=e=>{if(!dragging)return;const r=cv.getBoundingClientRect(),w=(r.width/SCALE),h=(r.height/SCALE),x=(e.clientX-r.left)/SCALE;
     if(dragging===1){setParam(K.cut,fromU(CTRL_SPEC.cutoff,Math.log(x_f(x,w)/20)/Math.log(1000)),true);setParam(K.res,fromU(CTRL_SPEC.reso,(h-8-(e.clientY-r.top))/(h-30)),true);CTRL[K.cut].refresh();CTRL[K.res].refresh();}
-    else{const kk=auxKey();setParam(kk,clamp(Math.round(x_f(x,w)),20,20000),true);CTRL[kk].refresh();}};
+    else{const kk=dragging===3?AUXK[k].hi:auxKey();setParam(kk,clamp(Math.round(x_f(x,w)),20,20000),true);CTRL[kk].refresh();}};
   cv.addEventListener("pointermove",mv);const up=()=>{dragging=0;cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
-  cv.dataset.tip="Pink point: left and right is cutoff, up and down is resonance."+(k===0?" Yellow point: the high pass (or the low pass, when this filter is a highpass). The shaded area is what it removes.":"")+" The dashed line shows where the envelope opens the cutoff.";
-  reg(draw);FDRAWS.push(draw);onChange(kk=>{if([K.cut,K.res,K.mode,K.env,"lowCutHz","highCutHz","auxSlope","filterMode","all"].includes(kk))draw();});
+  cv.dataset.tip="Pink point: left and right is cutoff, up and down is resonance."+(k===0?" Yellow point: the high pass (or the low pass, when this filter is a highpass). The shaded area is what it removes.":" Yellow points: this filter's own high pass (left) and low pass (right). The shaded areas are what they remove.")+" The dashed line shows where the envelope opens the cutoff.";
+  reg(draw);FDRAWS.push(draw);onChange(kk=>{if([K.cut,K.res,K.mode,K.env,"lowCutHz","highCutHz","auxSlope","f2LowCut","f2HighCut","f2Slope","f3LowCut","f3HighCut","f3Slope","filterMode","all"].includes(kk))draw();});
   FILTERDRAW=()=>FDRAWS.forEach(f=>f());return c;
 }
 let FILTERDRAW=null;
@@ -3158,7 +3199,7 @@ const vs=el("select");vs.id="polySel";vs.style.cssText="position:absolute;inset:
 vs.onchange=()=>{if(P){setParam("polyphony",+vs.value,false);CTRL.polyphony&&CTRL.polyphony.refresh();}};
 vb.appendChild(vs);vb.addEventListener("wheel",e=>{e.preventDefault();bump(e.deltaY<0?1:-1);},{passive:false});
 window.__polySync=()=>{if(P&&document.activeElement!==vs)vs.value=P.polyphony|0;};}
-window.__T={get CUR(){return CURBASEKEY},PREFS,BF,favToggle,movePreset,visGroups,loadPreset,renderBrowser,get P(){return P},renderNote,wavBytes,makeZip,crc32};
+window.__T={get CUR(){return CURBASEKEY},PREFS,BF,favToggle,movePreset,visGroups,loadPreset,renderBrowser,get P(){return P},setParam,tabSet,drawAll,renderNote,wavBytes,makeZip,crc32};
 const KITS={k909:{name:"909 kit",slots:[[[36,35],"kick_909",36,1,[]],[[37],"rim_drum",60,0.7,[]],[[38,40],"snare_909",60,0.85,[]],[[39],"clap_drum",60,0.85,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.55,[]],[[49,57],"crash_909",60,0.5,[]],[[51,59],"ride_909",60,0.45,[]],[[56],"cowbell_808",60,0.5,[]],[[70],"shaker_drum",60,0.5,[]]]},
  khard:{name:"Hard kit",slots:[[[36],"kick_click_layered",36,1,[]],[[35],"gabber_kick",36,1,[]],[[38,40],"snare_909",60,0.9,[]],[[39],"clap_drum",60,0.9,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"hat_909_closed",60,0.5,[46]],[[46],"hat_909_open",60,0.6,[]],[[49,57],"crash_909",60,0.55,[]],[[70],"shaker_drum",60,0.5,[]]]},
  kbasic:{name:"Basic kit",slots:[[[36,35],"kick",36,1,[]],[[37],"rim_drum",60,0.7,[]],[[38,40],"snare",48,0.9,[]],[[39],"clap_drum",60,0.85,[]],[[41,43,45,47,48,50],"tom_drum",null,0.8,[]],[[42,44],"closed_hat",60,0.5,[46]],[[46],"open_hat",60,0.55,[]],[[49,57],"crash",60,0.5,[]]]}};

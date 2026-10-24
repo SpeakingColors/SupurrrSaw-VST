@@ -246,6 +246,7 @@ struct Params {
   float menv2[64], menv3[64]; float menv2Time = 0.5f, menv3Time = 0.5f; bool menvSync = false, menv2Sync = false, menv3Sync = false; int menvDiv = 6, menv2Div = 6, menv3Div = 6; bool menv2Loop = false, menv3Loop = false, menv2Inv = false, menv3Inv = false;
   // filters 2 and 3 (the first filter is filterMode / cutoff / reso / drive / envAmt / keyTrack). Off by default. fRoute 0 = in series, 1 = in parallel. Their envelope is fenv2 / fenv3.
   FilterMode f2Mode = FilterMode::Off, f3Mode = FilterMode::Off; int fRoute = 0;
+  float f2LowCut = 5.f, f2HighCut = 20000.f, f3LowCut = 5.f, f3HighCut = 20000.f; int f2Slope = 1, f3Slope = 1;   // own hi pass / lo pass after filter 2 and 3 (5 Hz and 20 kHz = off); slope 0..5 as auxSlope
   float f2Cut = 4000.f, f2Res = 0.2f, f2Drv = 0.f, f2Env = 0.f, f2Key = 0.f, f3Cut = 4000.f, f3Res = 0.2f, f3Drv = 0.f, f3Env = 0.f, f3Key = 0.f, f2Wheel = 0.f, f3Wheel = 0.f;
   // LFO 2 and 3: rate, shape (0 sine, 1 tri, 2 square, 3 saw, 4 random square, 5 random round, 6 ramp down), depth, fade-in and start phase. They feed the mod matrix only.
   float lfo2Rate = 6.f, lfo3Rate = 6.f, lfo2Depth = 1.f, lfo3Depth = 1.f, lfo2Fade = 0.f, lfo3Fade = 0.f, lfo2Start = 0.f, lfo3Start = 0.f; int lfo2Shape = 0, lfo3Shape = 0;
@@ -424,6 +425,31 @@ inline double bwRun(const double* c, double* z, int sections, double x) {
   for (int k = 0; k < sections; ++k) { const int o = k * 5, zi = 2 * k; const double y = c[o] * x + z[zi]; z[zi] = c[o + 1] * x - c[o + 3] * y + z[zi + 1]; z[zi + 1] = c[o + 2] * x - c[o + 4] * y; x = y; }
   return x;
 }
+// Butterworth hi pass + lo pass pair, 6..96 dB/oct (orders 1,2,3,4,8,16), stereo. Same as AuxF in the playground engine.
+struct AuxF {
+  double fh = 0, fl = 0, sr = 0, hg = 0, lg = 0, h[40] = {}, l[40] = {}, hz[32] = {}, lz[32] = {}, ho[2] = {0, 0}, lo[2] = {0, 0}; int sl = -1, nh = 0, nl = 0; bool hOdd = false, lOdd = false, hOn = false, lOn = false;
+  static int ord(int s) { static const int o[6] = {1, 2, 3, 4, 8, 16}; return o[std::max(0, std::min(5, s))]; }
+  static double des(double* c, int ns, int N, double fc, double sr_, bool hp) {
+    const double w = std::tan(kPiD * std::min(fc, 0.45 * sr_) / sr_);
+    for (int k = 0; k < ns; ++k) { const double q = 1.0 / (2.0 * std::cos(kPiD * (2 * k + 1) / (2.0 * N))), n = 1.0 / (1.0 + w / q + w * w); const int o = k * 5;
+      if (hp) { c[o] = n; c[o + 1] = -2.0 * n; c[o + 2] = n; } else { c[o] = w * w * n; c[o + 1] = 2.0 * c[o]; c[o + 2] = c[o]; }
+      c[o + 3] = 2.0 * (w * w - 1.0) * n; c[o + 4] = (1.0 - w / q + w * w) * n; }
+    return w / (1.0 + w);
+  }
+  void set(double fh_, double fl_, int slope, double sr_) {
+    if (fh_ == fh && fl_ == fl && slope == sl && sr_ == sr) return;
+    fh = fh_; fl = fl_; sl = slope; sr = sr_;
+    const int N = ord(slope), ns = N >> 1; hOn = fh_ > 5.5; lOn = fl_ < 19990.0; nh = nl = ns; hOdd = lOdd = (N & 1) == 1;
+    if (hOn) hg = des(h, ns, N, fh_, sr_, true); if (lOn) lg = des(l, ns, N, fl_, sr_, false);
+  }
+  double tick(double x, int c) {
+    if (hOn) { double* z = hz + c * 16; for (int k = 0; k < nh; ++k) { const int o = k * 5, zi = 2 * k; const double y = h[o] * x + z[zi]; z[zi] = h[o + 1] * x - h[o + 3] * y + z[zi + 1]; z[zi + 1] = h[o + 2] * x - h[o + 4] * y; x = y; }
+      if (hOdd) { const double v = (x - ho[c]) * hg, lp = v + ho[c]; ho[c] = lp + v; x -= lp; } }
+    if (lOn) { double* z = lz + c * 16; for (int k = 0; k < nl; ++k) { const int o = k * 5, zi = 2 * k; const double y = l[o] * x + z[zi]; z[zi] = l[o + 1] * x - l[o + 3] * y + z[zi + 1]; z[zi + 1] = l[o + 2] * x - l[o + 4] * y; x = y; }
+      if (lOdd) { const double v = (x - lo[c]) * lg, lp = v + lo[c]; lo[c] = lp + v; x = lp; } }
+    return x;
+  }
+};
 struct Voice {
   bool active = false; int note = 60; double vel = 1.0; uint64_t age = 0;
   double phase[kLayers][kMaxSaws] = {};
@@ -437,7 +463,7 @@ struct Voice {
   // control rate values (updated every 4th sample), the second and third LFO, their own random stream (lfoRnd), procedural sample positions and steps
   int ctr = 0; double lfoC = 0, pEnv = 0, pcC[kLayers] = {1, 1, 1}, psC[kLayers] = {0, 0, 0}, fC[kLayers] = {440, 440, 440}, cc[3] = {1000, 1000, 1000}, laC = 0.01, hcC = 0.9;
   double lp2[2] = {0, 0}, sa[2] = {0, 0}, sb[2] = {0, 0}, lc2[2] = {0, 0}; uint32_t rs = 1;
-  double sp[4] = {0, 0, 0, 0}, sq[4] = {1, 1, 1, 1}, ax[8] = {0, 0, 0, 0, 0, 0, 0, 0}, svL[kMxSrc] = {}, bw[40] = {}, bwz[32] = {}, bwF = -1.0; int bwN = 0; bool bwH = false;
+  double sp[4] = {0, 0, 0, 0}, sq[4] = {1, 1, 1, 1}, ax[8] = {0, 0, 0, 0, 0, 0, 0, 0}, svL[kMxSrc] = {}, bw[40] = {}, bwz[32] = {}, bwF = -1.0; int bwN = 0; bool bwH = false; AuxF ax2[2];
   EnvState amp, amp2, amp3, fenv, fenv2, fenv3; Filter fl[3], fr[3]; double hpL = 0, hpR = 0; bool oneShot = false;
   double lfoRnd() { rs = rs * 1664525u + 1013904223u; return (double)(rs >> 8) / 16777216.0 * 2.0 - 1.0; }
 };
@@ -734,9 +760,9 @@ struct Dynamics {
 
 struct Master {
   double sr = 48000., env[3] = {0, 0, 0}, gn[3] = {1, 1, 1}, gr[3] = {0, 0, 0}, xl = 0., xr = 0., outL = 0., outR = 0.;
-  Lr4 lo[2], hi1[2], midLo[2], hiHp[2], ap1[2], ap2[2];
+  Lr4 lo[2], hi1[2], midLo[2], hiHp[2], ap1[2], ap2[2]; AuxF px; double pxHz = 0.; int pxSl = 0;   // px: second hi pass after the clipper
   void prepare(double s) {
-    sr = s; for (int i = 0; i < 3; ++i) { env[i] = 0.; gn[i] = 1.; gr[i] = 0.; } xl = xr = 0.;
+    sr = s; px = AuxF(); for (int i = 0; i < 3; ++i) { env[i] = 0.; gn[i] = 1.; gr[i] = 0.; } xl = xr = 0.;
     for (int c = 0; c < 2; ++c) { lo[c].set(false, 150., sr); hi1[c].set(true, 150., sr); midLo[c].set(false, 3000., sr); hiHp[c].set(true, 3000., sr); ap1[c].set(false, 3000., sr); ap2[c].set(true, 3000., sr); }
   }
   static double coef(double seconds, double sr) { return 1. - std::exp(-1. / std::max(1., seconds * sr)); }
@@ -764,6 +790,7 @@ struct Master {
     const double gc = 1. + p.dmClip * 1.2, c = 0.85, a = wl * gc, b2 = wr * gc;
     const double yl = clip(a, xl, c), yr = clip(b2, xr, c); xl = a; xr = b2;
     outL = dl0 * (1. - mix) + yl * mix; outR = dr0 * (1. - mix) + yr * mix;
+    if (pxHz >= 40.) { px.set(pxHz, 20000., pxSl, sr); outL = px.tick(outL, 0); outR = px.tick(outR, 1); }
   }
 };
 
@@ -864,6 +891,16 @@ class Engine {
     for (int vi = 0; vi < kMaxVoices; ++vi) if (voices[vi].active) renderVoice(voices[vi], vi, outL, outR, n);
     mtr.active = activeVoices();
     globals();
+    { // effective voice hi pass (series: the highest, parallel: the lowest branch) -> half of it again after DYN
+      const bool on2 = p.f2Mode != FilterMode::Off, on3 = p.f3Mode != FilterMode::Off; const double h2 = on2 ? p.f2LowCut : 0., h3 = on3 ? p.f3LowCut : 0.;
+      double hz = p.lowCutHz; int sl = p.auxSlope;
+      if (p.fRoute == 1) { double br = 1e9; int bs = sl; bool any = false;
+        if (p.filterMode != FilterMode::Off) { br = 0.; bs = p.auxSlope; any = true; }
+        if (on2 && (!any || h2 < br)) { br = h2; bs = p.f2Slope; any = true; } if (on3 && (!any || h3 < br)) { br = h3; bs = p.f3Slope; any = true; }
+        if (!any) br = 0.; if (br > hz) { hz = br; sl = bs; } }
+      else { if (h2 > hz) { hz = h2; sl = p.f2Slope; } if (h3 > hz) { hz = h3; sl = p.f3Slope; } }
+      dm.pxHz = hz >= 80. ? 0.5 * hz : 0.; dm.pxSl = sl;
+    }
     // bass mono: sum everything below bassMonoHz, keep the rest stereo
     eq.update(pe); const double a = 1.0 - std::exp(-2.0 * kPiD * std::max(10.0, (double)p.bassMonoHz) / sr); bool bad = false;
     for (int i = 0; i < n; ++i) {
@@ -1150,8 +1187,10 @@ class Engine {
       }
       const double rs0 = std::min(1.0, std::max(0.0, p.reso + md[2] * 0.5)), dv = std::min(1.0, std::max(0.0, p.drive + md[3] * 0.75));
       const double rrr[3] = {rs0, rr[1], rr[2]}, ddd[3] = {dv, dd[1], dd[2]};
-      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); } }
-      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; al += v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); ar += v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
+      AuxF* axA[3] = {nullptr, (p.f2LowCut > 5.5f || p.f2HighCut < 19990.f) ? &v.ax2[0] : nullptr, (p.f3LowCut > 5.5f || p.f3HighCut < 19990.f) ? &v.ax2[1] : nullptr};
+      if (axA[1]) axA[1]->set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2]->set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
+      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (axA[q]) { L = axA[q]->tick(L, 0); R = axA[q]->tick(R, 1); } } }
+      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; double bl = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr), brr = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (axA[q]) { bl = axA[q]->tick(bl, 0); brr = axA[q]->tick(brr, 1); } al += bl; ar += brr; ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
       if (post) { L += smL; R += smR; }
       if (!p.distPre) distort();   // distortion first, so the low cut that follows also removes the bass the distortion would rebuild
       { // high pass (and, next to a highpass filter, a low pass) on the whole voice
