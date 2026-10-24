@@ -246,7 +246,7 @@ struct Params {
   float menv2[64], menv3[64]; float menv2Time = 0.5f, menv3Time = 0.5f; bool menvSync = false, menv2Sync = false, menv3Sync = false; int menvDiv = 6, menv2Div = 6, menv3Div = 6; bool menv2Loop = false, menv3Loop = false, menv2Inv = false, menv3Inv = false;
   // filters 2 and 3 (the first filter is filterMode / cutoff / reso / drive / envAmt / keyTrack). Off by default. fRoute 0 = in series, 1 = in parallel. Their envelope is fenv2 / fenv3.
   FilterMode f2Mode = FilterMode::Off, f3Mode = FilterMode::Off; int fRoute = 0;
-  float f2Cut = 4000.f, f2Res = 0.2f, f2Drv = 0.f, f2Env = 0.f, f2Key = 0.f, f3Cut = 4000.f, f3Res = 0.2f, f3Drv = 0.f, f3Env = 0.f, f3Key = 0.f;
+  float f2Cut = 4000.f, f2Res = 0.2f, f2Drv = 0.f, f2Env = 0.f, f2Key = 0.f, f3Cut = 4000.f, f3Res = 0.2f, f3Drv = 0.f, f3Env = 0.f, f3Key = 0.f, f2Wheel = 0.f, f3Wheel = 0.f;
   // LFO 2 and 3: rate, shape (0 sine, 1 tri, 2 square, 3 saw, 4 random square, 5 random round, 6 ramp down), depth, fade-in and start phase. They feed the mod matrix only.
   float lfo2Rate = 6.f, lfo3Rate = 6.f, lfo2Depth = 1.f, lfo3Depth = 1.f, lfo2Fade = 0.f, lfo3Fade = 0.f, lfo2Start = 0.f, lfo3Start = 0.f; int lfo2Shape = 0, lfo3Shape = 0;
   // procedural sample on the noise section, and where the samples are mixed in (false: before the filters, true: after them)
@@ -1143,8 +1143,8 @@ class Engine {
       if (p.distPre) distort();
       if (ctl) {
         const double cut = p.cutoff * std::pow(2.0, p.envAmt * fE * 5.0 + p.keyTrack * (double)(v.note - 60) / 12.0 + p.lfoCutoff * lfo * 2.0 + p.wheelCutoff * p.modWheel * 5.0 + p.velCutoff * v.vel * 5.0 + md[1] * 5.0); v.cc[0] = std::min(18000.0, std::max(20.0, cut));
-        v.cc[1] = std::min(18000.0, std::max(20.0, p.f2Cut * std::pow(2.0, p.f2Env * fE2 * 5.0 + p.f2Key * (double)(v.note - 60) / 12.0 + md[14] * 5.0)));
-        v.cc[2] = std::min(18000.0, std::max(20.0, p.f3Cut * std::pow(2.0, p.f3Env * fE3 * 5.0 + p.f3Key * (double)(v.note - 60) / 12.0 + md[15] * 5.0)));
+        v.cc[1] = std::min(18000.0, std::max(20.0, p.f2Cut * std::pow(2.0, p.f2Env * fE2 * 5.0 + p.f2Key * (double)(v.note - 60) / 12.0 + p.f2Wheel * p.modWheel * 5.0 + md[14] * 5.0)));
+        v.cc[2] = std::min(18000.0, std::max(20.0, p.f3Cut * std::pow(2.0, p.f3Env * fE3 * 5.0 + p.f3Key * (double)(v.note - 60) / 12.0 + p.f3Wheel * p.modWheel * 5.0 + md[15] * 5.0)));
         v.laC = 1.0 - std::exp(-2.0 * kPiD * std::max(5.0, std::min(0.45 * sr, p.lowCutHz * std::pow(2.0, md[13] * 4.0))) / sr); v.hcC = 1.0 - std::exp(-2.0 * kPiD * std::max(20.0, std::min(0.45 * sr, (double)p.highCutHz)) / sr);
         { const int ns0 = p.auxSlope; if (ns0 >= 4) { const bool hp0 = modes[0] == FilterMode::HP || modes[0] == FilterMode::HP24; const double f0 = hp0 ? std::max(20.0, std::min(0.45 * sr, (double)p.highCutHz)) : std::max(5.0, std::min(0.45 * sr, p.lowCutHz * std::pow(2.0, md[13] * 4.0))); const int sec0 = ns0 == 4 ? 4 : 8; if (f0 != v.bwF || sec0 != v.bwN || hp0 != v.bwH) { v.bwF = f0; v.bwN = sec0; v.bwH = hp0; bwDesign(v.bw, sec0, f0, sr, !hp0); } } }
       }
@@ -1153,7 +1153,8 @@ class Engine {
       if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); } }
       else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; al += v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); ar += v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
       if (post) { L += smL; R += smR; }
-      { // high pass (and, next to a highpass filter, a low pass) on the whole voice, then distortion
+      if (!p.distPre) distort();   // distortion first, so the low cut that follows also removes the bass the distortion would rebuild
+      { // high pass (and, next to a highpass filter, a low pass) on the whole voice
         const double la = v.laC; const bool hpT = modes[0] == FilterMode::HP || modes[0] == FilterMode::HP24; const int ns = std::max(0, std::min(5, p.auxSlope));
         if (ns >= 4) {
           const int sec = ns == 4 ? 4 : 8;
@@ -1164,7 +1165,6 @@ class Engine {
         if (!hpT) { if (ns > 0) { double* ax = v.ax; for (int s2 = 0; s2 < ns; ++s2) { ax[s2] += la * (L - ax[s2]); L -= ax[s2]; ax[4 + s2] += la * (R - ax[4 + s2]); R -= ax[4 + s2]; } } }
         else if (p.highCutHz < 19990.f) { double* ax = v.ax; const double hc = v.hcC; for (int s2 = 0; s2 <= ns; ++s2) { ax[s2] += hc * (L - ax[s2]); L = ax[s2]; ax[4 + s2] += hc * (R - ax[4 + s2]); R = ax[4 + s2]; } }
         }
-        if (!p.distPre) distort();
       }
       double subS = 0.0, subSR = 0.0; if (!p.subPreFilter && subL > 0.0) { double t2l = 0.0, t2r = 0.0; addSub(v, t2l, t2r, invSr, subL * en); subS = t2l; subSR = t2r; }
       const double g = (link ? ampE : 1.0) * (0.4 + 0.6 * v.vel) * 1.3 * v.stackGain * (1.0 - p.lfoAmp * 0.5 * (1.0 - lfo)) * (hasMx ? std::max(0.0, 1.0 + md[7]) : 1.0);

@@ -132,36 +132,78 @@ def biquad_peak(x, f0, gain_db, q):
     return lfilter(np.array(b) / a[0], np.array(a) / a[0], x)
 
 
-def derive_moist_keys(out, name="Moist Keys", source="Grand Piano"):
-    """A made-up house piano in the spirit of the classic bright PCM dance pianos: the Kawai grand, high-passed, with the hammer
-    and presence boosted, soft-clipped and cut short. Built from the grand piano zones already in OUT, adds one instrument to instruments.json."""
-    from scipy.signal import butter, sosfilt
+def derive_moist_keys(out, name="Moist Keys", source="Grand Piano", ext="flac"):
+    """A made-up house piano in the spirit of the classic dance PCM pianos (the thin, hard, hollow ones that sit in a house mix).
+    Built from the Kawai grand zones already in OUT. What it copies is the character, not a recording of any keyboard:
+      thin low end, a hard hammer front, a presence hump at 2 to 4 kHz, a band-limited top, a lower sample rate with a little grit,
+      and a short looped sustain (a few whole periods repeated) that gives the static hollow 'ahh' after the hit.
+    Adds one instrument to instruments.json. ext is flac for the plugin pack, wav for the web page."""
+    from scipy.signal import butter, sosfilt, resample_poly
     jf = os.path.join(out, "instruments.json")
     J = json.load(open(jf))
     J["instruments"] = [i for i in J["instruments"] if i["name"] != name]
     src = next(i for i in J["instruments"] if i["name"] == source)
     os.makedirs(os.path.join(out, name), exist_ok=True)
-    sos = butter(2, 140 / (SR / 2), "high", output="sos")
+    hp = butter(2, 190 / (SR / 2), "high", output="sos")
+    lp = butter(4, 11500 / (SR / 2), "low", output="sos")
     zones = []
     for idx, z in enumerate(src["zones"]):
         x, sr = sf.read(os.path.join(out, z["file"]), dtype="float64")
         if x.ndim > 1:
             x = x.mean(axis=1)
-        n = min(len(x), int(3.6 * SR))
-        x = x[:n].copy()
+        f0 = 440.0 * 2 ** ((z["root"] - 69) / 12.0)
+        per = SR / f0
+        # 1. keep the real hit, then rebuild the tail from a short loop of whole periods taken just after the hit
+        hit = int(0.55 * SR)
+        x = x[: int(2.0 * SR)].copy()
         pk = np.abs(x).max()
-        x = sosfilt(sos, x)
-        x = biquad_peak(x, 3200, 6.0, 0.8)
-        x = biquad_peak(x, 7500, 4.0, 0.7)
-        x = biquad_peak(x, 250, -3.0, 0.9)
+        L = max(1, int(round(0.09 * f0))) * per            # about 90 ms, a whole number of periods
+        L = int(round(L))
+        a0 = int(0.40 * SR)
+        loop = x[a0:a0 + L].copy()
+        xf = min(int(per), L // 3)
+        if xf > 8:                                          # seam: fade the loop end into its own start
+            w = np.linspace(0, 1, xf)
+            loop[-xf:] = loop[-xf:] * (1 - w) + x[a0 - xf:a0] * w
+        n = int(3.4 * SR)
+        y = np.zeros(n)
+        y[:hit] = x[:hit]
+        pos = hit
+        # match the level at the join, then repeat the loop with a slow fade
+        g = np.sqrt(np.mean(x[hit - L:hit] ** 2) / max(np.mean(loop ** 2), 1e-12))
+        k = 0
+        while pos < n:
+            m = min(L, n - pos)
+            seg = loop[:m] * g
+            if k == 0 and m > 0:
+                c = min(int(0.02 * SR), m)
+                seg[:c] = seg[:c] * np.linspace(0, 1, c) + x[hit:hit + c] * np.linspace(1, 0, c) if hit + c <= len(x) else seg[:c]
+            y[pos:pos + m] = seg
+            pos += m
+            k += 1
         t = np.arange(n) / SR
-        x = x * (0.55 + 0.45 * np.exp(-t / 1.1))   # a little more of the early part
-        x = np.tanh(1.8 * x / max(pk, 1e-9)) / np.tanh(1.8)
-        fo = int(0.5 * SR)
-        x[n - fo:] *= np.linspace(1, 0, fo) ** 1.5
-        x = x / max(np.abs(x).max(), 1e-9) * min(0.8, pk * 1.1)
-        fl = "%s/%03d_n%d.flac" % (name, idx, z["root"])
-        sf.write(os.path.join(out, fl), x.astype(np.float32), SR, subtype="PCM_16")
+        y = y * (0.28 + 0.72 * np.exp(-t / 0.35)) * np.exp(-t / 1.7)    # quick fall into a quiet, steady sustain
+        # 2. the voicing
+        y = sosfilt(hp, y)
+        y = biquad_peak(y, 320, -3.5, 0.9)
+        y = biquad_peak(y, 2400, 7.0, 0.9)
+        y = biquad_peak(y, 4200, 4.5, 0.8)
+        y = sosfilt(lp, y)
+        # 3. lower sample rate, a little grit (32 kHz worth of band, 13 bit steps)
+        d = resample_poly(y, 2, 3)
+        d = np.round(d * 4096.0) / 4096.0
+        y = np.interp(np.arange(n) / 1.0, np.arange(len(d)) * 1.5, d, right=0.0)
+        # 4. pushed hard front, then limited
+        front = 1 + 0.9 * np.exp(-t / 0.03)
+        y = np.tanh(1.5 * y * front / max(pk, 1e-9)) / np.tanh(1.5)
+        fo = int(0.6 * SR)
+        y[n - fo:] *= np.linspace(1, 0, fo) ** 1.5
+        y = y / max(np.abs(y).max(), 1e-9) * min(0.85, pk * 1.15)
+        fl = "%s/%03d_n%d.%s" % (name, idx, z["root"], ext)
+        if ext == "flac":
+            sf.write(os.path.join(out, fl), y.astype(np.float32), SR, subtype="PCM_16")
+        else:
+            sf.write(os.path.join(out, fl), y.astype(np.float32), SR, subtype="PCM_16")
         zones.append({**z, "file": fl, "len": int(n)})
     J["instruments"].append({"name": name, "loop": False, "zones": zones})
     json.dump(J, open(jf, "w"), indent=1)

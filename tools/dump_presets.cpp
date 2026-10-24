@@ -34,7 +34,7 @@ int main() {
       auto F = [&](const char* k, double v) { std::printf(",\"%s\":%g", k, v); }; auto Bo = [&](const char* k, bool v) { std::printf(",\"%s\":%s", k, B(v)); }; auto St = [&](const char* k, const char* v) { std::printf(",\"%s\":\"%s\"", k, v); };
       F("highCutHz", p.highCutHz); F("auxSlope", p.auxSlope); Bo("ampLink", p.ampLink); F("fRoute", p.fRoute); F("build", p.build); F("modFxType", p.modFxType); F("chorusFb", p.chorusFb);
       F("crushBits", p.crushBits); F("crushRate", p.crushRate); F("crushMix", p.crushMix); F("widMid", p.widMid); F("widHi", p.widHi); F("msMid", p.msMid); F("msSide", p.msSide);
-      St("f2Mode", FM(p.f2Mode)); F("f2Cut", p.f2Cut); F("f2Res", p.f2Res); F("f2Drv", p.f2Drv); F("f2Env", p.f2Env); F("f2Key", p.f2Key);
+      St("f2Mode", FM(p.f2Mode)); F("f2Cut", p.f2Cut); F("f2Res", p.f2Res); F("f2Drv", p.f2Drv); F("f2Env", p.f2Env); F("f2Key", p.f2Key); F("f2Wheel", p.f2Wheel); F("f3Wheel", p.f3Wheel);
       St("f3Mode", FM(p.f3Mode)); F("f3Cut", p.f3Cut); F("f3Res", p.f3Res); F("f3Drv", p.f3Drv); F("f3Env", p.f3Env); F("f3Key", p.f3Key);
       F("lfo2Rate", p.lfo2Rate); F("lfo2Shape", p.lfo2Shape); F("lfo2Depth", p.lfo2Depth); F("lfo2Fade", p.lfo2Fade); F("lfo2Start", p.lfo2Start);
       F("lfo3Rate", p.lfo3Rate); F("lfo3Shape", p.lfo3Shape); F("lfo3Depth", p.lfo3Depth); F("lfo3Fade", p.lfo3Fade); F("lfo3Start", p.lfo3Start);
