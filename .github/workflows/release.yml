@@ -157,7 +157,8 @@ jobs:
         run: |
           tag="$GITHUB_REF_NAME"; if [ "$GITHUB_REF_TYPE" != "tag" ]; then tag="${TAGIN:-dev}"; fi
           d="$NAME-$tag"; mkdir -p "$d/windows" "$d/macos" "$d/linux"
-          cp parts/windows/*.exe "$d/windows/"; cp parts/macos/*.pkg "$d/macos/"
+          cp parts/windows/*.exe "$d/windows/"
+          if ls parts/macos/*.pkg >/dev/null 2>&1; then cp parts/macos/*.pkg "$d/macos/"; else rmdir "$d/macos"; fi
           cp parts/linux/* "$d/linux/"
           cp docs/SupurrSaw_Manual.pdf "$d/$NAME-manual.pdf"; cp LICENSE "$d/"
           cp packaging/INSTALL.txt "$d/INSTALL.txt"
