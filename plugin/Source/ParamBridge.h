@@ -171,6 +171,8 @@ inline bool setLayerKey(supurr::LayerParams& l, const std::string& k, const juce
     if (k == "smp")        { l.smp = smpFrom(v.toString()); return true; }
     if (k == "smpPitch")   { l.smpPitch = asFR(v, -24.f, 24.f); return true; }
     if (k == "smpVol")     { l.smpVol = asFR(v, 0.f, 1.5f); return true; }
+    if (k == "dest")       { l.dest = std::max(0, std::min(4, asI(v))); return true; }
+    if (k == "ampSel")     { l.ampSel = std::max(0, std::min(3, asI(v))); return true; }
     if (k == "cycle")      return true;   // handled through the "cyc" message
     if (k == "instrument") return true;   // handled by the processor (it loads the sample set)
     return false;

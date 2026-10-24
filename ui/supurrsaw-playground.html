@@ -383,7 +383,7 @@ function blep(t, dt) {
   return 0;
 }
 function defaultLayer() {
-  return { on: true, wave: "Off", instrument: "", level: 0.7, voices: 7, detune: 0.4, pwm: 0.5, octave: 0, tune: 0, pan: 0, sync: false, syncSemis: 7, syncEnv: 0, syncLfo: 0, syncKey: 0, syncWheel: 0, cents: 0, lfoPitchCents: 0, fmSrc: 0, fmAmt: 0, amSrc: 0, amAmt: 0, smp: "Off", smpPitch: 0, smpVol: 1 };
+  return { on: true, dest: 0, ampSel: 0, wave: "Off", instrument: "", level: 0.7, voices: 7, detune: 0.4, pwm: 0.5, octave: 0, tune: 0, pan: 0, sync: false, syncSemis: 7, syncEnv: 0, syncLfo: 0, syncKey: 0, syncWheel: 0, cents: 0, lfoPitchCents: 0, fmSrc: 0, fmAmt: 0, amSrc: 0, amAmt: 0, smp: "Off", smpPitch: 0, smpVol: 1 };
 }
 const MX_SRC = ["lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"];
 const MX_DST = ["pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"];
@@ -822,7 +822,7 @@ function newVoice() {
   return { active: false, note: 60, vel: 1, age: 0, ch: 0, bend: 0, press: 0, slide: 0, phase: [new Float64Array(kMaxSaws), new Float64Array(kMaxSaws), new Float64Array(kMaxSaws)], syncPhase: [0, 0, 0],
     noiseHp: 0, noiseHp2: 0, subPhase: 0, subPh: new Float64Array(5), nzS: new Float64Array(20), drift: new Float64Array(kMaxSaws), driftT: new Float64Array(kMaxSaws), lfoPhase: 0, t: 0, ctr: 0, lfoC: 0, pEnv: 0, pcC: [1, 1, 1], psC: [0, 0, 0], fC: [440, 440, 440], cc: [1000, 1000, 1000], laC: 0.01, lyOut: [0, 0, 0], fmSubPh: 0, gl: 0, stackCents: 0, stackGain: 1, rnd: 0, sh: 0, sh0: 0,
     ax2: [new AuxF(), new AuxF()], lp2: [0, 0], sa: [0, 0], sb: [0, 0], lc2: [0, 0], rs: 1, zs: [null, null, null], zn: [-1, -1, -1], spos: [0, 0, 0], sp: [0, 0, 0, 0], sq: [1, 1, 1, 1], svL: new Float64Array(MX_NS),
-    ax: new Float64Array(8), bw: new Float64Array(40), bwz: new Float64Array(32), bwF: -1, bwN: 0, bwH: false, hcC: 0.9, amp: new Env(), amp2: new Env(), amp3: new Env(), fenv: new Env(), fenv2: new Env(), fenv3: new Env(), fl: [new Filter(), new Filter(), new Filter()], fr: [new Filter(), new Filter(), new Filter()], hpL: 0, hpR: 0 };
+    ax: new Float64Array(8), bw: new Float64Array(40), bwz: new Float64Array(32), bwF: -1, bwN: 0, bwH: false, hcC: 0.9, amp: new Env(), amp2: new Env(), amp3: new Env(), fenv: new Env(), fenv2: new Env(), fenv3: new Env(), fl: [new Filter(), new Filter(), new Filter()], fr: [new Filter(), new Filter(), new Filter()], fl2: [new Filter(), new Filter(), new Filter()], fr2: [new Filter(), new Filter(), new Filter()], ax3: [new AuxF(), new AuxF()], bL: new Float64Array(5), bR: new Float64Array(5), hpL: 0, hpR: 0 };
 }
 function lfoRnd(v) { v.rs = (Math.imul(v.rs, 1664525) + 1013904223) >>> 0; return (v.rs >>> 8) / 16777216 * 2 - 1; }
 function lfoWave(sh, ph, cur, prev) {
@@ -994,6 +994,7 @@ class SupurrEngine {
     for (let ly = 0; ly < kLayers; ly++) { const q = p.layers[ly]; if (q.on === false || q.wave === "Off" || q.level <= 0) continue;
       if (q.fmAmt > 0 && q.fmSrc >= 1 && q.fmSrc <= 3) used[q.fmSrc - 1] = true; if (q.amAmt > 0 && q.amSrc >= 1 && q.amSrc <= 3) used[q.amSrc - 1] = true;
       if ((q.fmAmt > 0 && q.fmSrc === 4) || (q.amAmt > 0 && q.amSrc === 4)) anySub = true; if ((q.fmAmt > 0 && q.fmSrc === 5) || (q.amAmt > 0 && q.amSrc === 5)) anyNz = true; }
+    let usedD = 0; for (let ly = 0; ly < kLayers; ly++) { const lq = p.layers[ly]; if ((lq.dest | 0) !== 0 && lq.on !== false && (lq.wave !== "Off" || lq.smp !== "Off")) usedD |= 1 << (lq.dest | 0); }
     const dk = 1 + p.dist * 14, dnm = 1 / Math.tanh(dk * 0.6), modes = [p.filterMode, p.f2Mode, p.f3Mode], parallel = p.fRoute === 1, post = !!p.smpPost;
     const lfoS = [p.lfoShape, p.lfo2Shape, p.lfo3Shape];
     for (let i = 0; i < n; i++) {
@@ -1024,15 +1025,15 @@ class SupurrEngine {
         for (let k = 0; k < mxl.length; k += 3) md[mxl[k + 1]] += sv[mxl[k]] * mxl[k + 2];
         if (i === n - 1) v.svL.set(sv);
       }
-      let L = 0, R = 0, smL = 0, smR = 0;
+      let L = 0, R = 0, smL = 0, smR = 0; const bL = v.bL, bR = v.bR; if (usedD & 30) { bL.fill(0); bR.fill(0); }
       srcV[0] = 0; srcV[1] = v.lyOut[0]; srcV[2] = v.lyOut[1]; srcV[3] = v.lyOut[2]; srcV[4] = 0; srcV[5] = 0;
       if (anySub) { srcV[4] = Math.sin(2 * kPi * v.fmSubPh); v.fmSubPh += 440 * Math.pow(2, ((v.note - 69) + p.subOctave * 12 + this.bendSt(v)) / 12) * invSr; if (v.fmSubPh >= 1) v.fmSubPh -= 1; }
       if (anyNz) srcV[5] = 2 * this.rnd() - 1;
       for (let ly = 0; ly < kLayers; ly++) {
-        const lp = p.layers[ly], le = link ? 1 : (ly === 0 ? ampE : (ly === 1 ? aE2 : aE3));
+        const lp = p.layers[ly], as_ = lp.ampSel | 0, le = link ? 1 : ((as_ === 0 ? ly : as_ - 1) === 0 ? ampE : ((as_ === 0 ? ly : as_ - 1) === 1 ? aE2 : aE3)), dlt = lp.dest | 0;
         if (ctl) { const pg = (Math.min(1, Math.max(-1, lp.pan + p.lfoPan * lfo + md[6])) + 1) * kPi * 0.25; v.pcC[ly] = Math.cos(pg) * 1.414; v.psC[ly] = Math.sin(pg) * 1.414; }
         if (lp.smp !== "Off") { const d = this.smp[lp.smp]; if (d) { if (ctl) v.sq[ly] = Math.pow(2, (lp.smpPitch + (SMP_KEYED[lp.smp] ? v.note - 60 + v.gl : 0)) / 12); const pos = v.sp[ly], i0 = pos | 0;
-          if (i0 < d.length - 1) { const f = pos - i0, sm = (d[i0] * (1 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } }
+          if (i0 < d.length - 1) { const f = pos - i0, sm = (d[i0] * (1 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; if (dlt !== 0 && !post) { bL[dlt] += sm * v.pcC[ly]; bR[dlt] += sm * v.psC[ly]; } else { smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } } }
         if (lp.on === false || lp.wave === "Off" || (lp.level <= 0 && !used[ly])) { v.lyOut[ly] = 0; continue; }
         let f; if (ctl) { let semis = (v.note - 69) + v.gl + lp.octave * 12 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + this.bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12;
         f = 440 * Math.pow(2, semis / 12); v.fC[ly] = f; } else f = v.fC[ly];
@@ -1089,7 +1090,7 @@ class SupurrEngine {
         }
         v.lyOut[ly] = 0.5 * (lL + lR);
         if (lp.amAmt > 0 && lp.amSrc >= 1 && lp.amSrc <= 5 && lp.amSrc !== ly + 1) { const am = 1 - lp.amAmt + lp.amAmt * srcV[lp.amSrc]; lL *= am; lR *= am; }
-        L += lp.level * lL * v.pcC[ly] * le; R += lp.level * lR * v.psC[ly] * le;
+        if (dlt === 0) { L += lp.level * lL * v.pcC[ly] * le; R += lp.level * lR * v.psC[ly] * le; } else { bL[dlt] += lp.level * lL * v.pcC[ly] * le; bR[dlt] += lp.level * lR * v.psC[ly] * le; }
       }
       const nzl = Math.max(0, p.noiseLevel + md[12] * 0.5), subL = Math.max(0, p.subLevel + md[11] * 0.7), en = link ? 1 : ampE;
       if (nzl > 0) {
@@ -1126,6 +1127,15 @@ class SupurrEngine {
       if (axA[1]) axA[1].set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2].set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
       if (!parallel) { for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; st.L = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr); st.R = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); if (axA[q]) { st.L = axA[q].tick(st.L, 0); st.R = axA[q].tick(st.R, 1); } } }
       else { let al = 0, ar = 0, cn = 0; for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; let bl = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr), br2 = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); if (axA[q]) { bl = axA[q].tick(bl, 0); br2 = axA[q].tick(br2, 1); } al += bl; ar += br2; cn++; } if (cn) { const k = 1 / Math.sqrt(cn); st.L = al * k; st.R = ar * k; } }
+      if (usedD & 30) {   /* layers sent to one filter only (1..3) or past all filters (4) */
+        const dpre = p.distPre && p.dist > 0;
+        for (let q = 1; q <= 3; q++) { if (!(usedD & (1 << q))) continue; let xl = bL[q], xr = bR[q]; const m = modes[q - 1];
+          if (dpre) { xl = Math.tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = Math.tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; }
+          if (m !== "Off") { xl = v.fl2[q - 1].process(xl, m, cc[q - 1], rr[q - 1], dd[q - 1], sr); xr = v.fr2[q - 1].process(xr, m, cc[q - 1], rr[q - 1], dd[q - 1], sr);
+            if (q > 1) { const a3 = v.ax3[q - 2]; if (p[q === 2 ? "f2LowCut" : "f3LowCut"] > 5.5 || p[q === 2 ? "f2HighCut" : "f3HighCut"] < 19990) { a3.set(p[q === 2 ? "f2LowCut" : "f3LowCut"], p[q === 2 ? "f2HighCut" : "f3HighCut"], p[q === 2 ? "f2Slope" : "f3Slope"], sr); xl = a3.tick(xl, 0); xr = a3.tick(xr, 1); } } }
+          st.L += xl; st.R += xr; }
+        if (usedD & 16) { let xl = bL[4], xr = bR[4]; if (dpre) { xl = Math.tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = Math.tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; } st.L += xl; st.R += xr; }
+      }
       if (post) { st.L += smL; st.R += smR; }
       if (!p.distPre) distort();   /* distortion first, so the low cut that follows also removes the bass the distortion would rebuild */
       const la = v.laC, hpT = modes[0] === "HP" || modes[0] === "HP24", ns = p.auxSlope | 0;
@@ -1522,6 +1532,11 @@ function layerCard(i){
   const sy=el("div");sy.appendChild(el("div","lbl","Hard sync amounts"));sy.style.marginTop="6px";
   sy.appendChild(knobRow([N(p+"syncSemis","Pitch",0,48,0.1,"st","Pitch of the synced oscillator in semitones above the base."),N(p+"syncEnv","Env",0,12,0.1,"st","Filter envelope sweeps the sync pitch by this many semitones."),N(p+"syncLfo","LFO",0,12,0.1,"st","LFO sweeps the sync pitch."),N(p+"syncKey","Key",0,8,0.1,"","Sync pitch changes with the note played."),N(p+"syncWheel","Wheel",0,24,0.1,"st","Mod wheel adds sync pitch.")]));
   c.appendChild(sy);
+  {const rt=el("div");rt.style.cssText="display:flex;flex-direction:column;gap:3px;justify-content:center;align-items:stretch;width:64px;margin-left:2px";
+    const fs=select(p+"dest",[[0,"Chain"],[1,"F1 only"],[2,"F2 only"],[3,"F3 only"],[4,"No filter"]],"Where this layer goes. Chain: through the filters as set on the filter cards (series or parallel), like before. F1, F2 or F3 only: this layer goes through that one filter on its own and skips the others, so two layers can use two different filters. No filter: this layer goes around all filters. A filter that is Off lets the layer pass untouched. Several layers can share a destination. The filter's own Hi pass and Lo pass come along (Filter 1 has the voice wide one, which still applies to everything after).");
+    const es=select(p+"ampSel",[[0,"Own env"],[1,"Env 1"],[2,"Env 2"],[3,"Env 3"]],"Which amp envelope shapes this layer. Own: layer 1 uses envelope 1, layer 2 uses 2, layer 3 uses 3. Pick another to share one envelope between layers or swap them. Only used when Link is off on the amp envelope card; with Link on, envelope 1 shapes everything.");
+    [fs,es].forEach(x=>{x.style.fontSize="10px";x.style.padding="1px";x.style.width="64px";});
+    rt.appendChild(fs);rt.appendChild(es);kr.appendChild(rt);}
   const mkOpts=()=>[[0,"Off"],...[1,2,3].filter(k=>k!==i+1).map(k=>[k,"Layer "+k]),[4,"Sub"],[5,"Noise"]];
   const fsel=select(p+"fmSrc",mkOpts(),"Frequency modulation source: this layer's pitch is pushed up and down by it. The modulator layer must have a wave selected (a layer set to Off does not modulate); level 0 is fine, it stays silent but still modulates. The depth knob next to it must be above 0. Sub is a sine at the sub frequency, Noise is white noise.");
   const asel=select(p+"amSrc",mkOpts(),"Amplitude modulation source: this layer's volume follows it. The source layer needs a wave selected (Off does not modulate) and the depth above 0. Depth 1.00 is ring modulation, lower keeps some of the original.");

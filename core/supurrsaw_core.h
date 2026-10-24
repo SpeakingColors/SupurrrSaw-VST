@@ -146,6 +146,8 @@ struct LayerParams {
   float amAmt = 0.f;           // 0..1; 1 is ring modulation, lower keeps some of the carrier
   int smp = 0;                 // built-in sample played with this layer (index into kSmpIds, 0 = off), pitch in semitones, volume
   float smpPitch = 0.f, smpVol = 1.f;
+  int dest = 0;                // where this layer goes: 0 = through the filter chain, 1..3 = only filter 1, 2 or 3, 4 = past all filters
+  int ampSel = 0;              // which amp envelope shapes this layer when the envelopes are not linked: 0 = its own (layer 1 -> amp, 2 -> amp 2, 3 -> amp 3), 1..3 = amp, amp 2 or amp 3
   std::shared_ptr<const Sample> sample;
   std::shared_ptr<const SampleSet> sampleSet;   // used by Wave::Sample when set (a multisampled instrument); sample is the single-sample fallback
   std::shared_ptr<const WaveTable> table;   // used by Wave::Custom (an imported or drawn cycle, played as a super stack)
@@ -464,7 +466,7 @@ struct Voice {
   int ctr = 0; double lfoC = 0, pEnv = 0, pcC[kLayers] = {1, 1, 1}, psC[kLayers] = {0, 0, 0}, fC[kLayers] = {440, 440, 440}, cc[3] = {1000, 1000, 1000}, laC = 0.01, hcC = 0.9;
   double lp2[2] = {0, 0}, sa[2] = {0, 0}, sb[2] = {0, 0}, lc2[2] = {0, 0}; uint32_t rs = 1;
   double sp[4] = {0, 0, 0, 0}, sq[4] = {1, 1, 1, 1}, ax[8] = {0, 0, 0, 0, 0, 0, 0, 0}, svL[kMxSrc] = {}, bw[40] = {}, bwz[32] = {}, bwF = -1.0; int bwN = 0; bool bwH = false; AuxF ax2[2];
-  EnvState amp, amp2, amp3, fenv, fenv2, fenv3; Filter fl[3], fr[3]; double hpL = 0, hpR = 0; bool oneShot = false;
+  EnvState amp, amp2, amp3, fenv, fenv2, fenv3; Filter fl[3], fr[3], fl2[3], fr2[3]; AuxF ax3[2]; double bL[5] = {}, bR[5] = {}; double hpL = 0, hpR = 0; bool oneShot = false;
   double lfoRnd() { rs = rs * 1664525u + 1013904223u; return (double)(rs >> 8) / 16777216.0 * 2.0 - 1.0; }
 };
 
@@ -1017,6 +1019,7 @@ class Engine {
       const int nv = std::max(1, std::min(kMaxSaws, q.voices)); const double sideFade = q.cents > 0.f ? 1.0 : std::min(1.0, q.detune * 20.0), norm = 1.0 / (1.0 + (double)(nv - 1) * 0.62 * sideFade);
       for (int j = 0; j < nv; ++j) { const double sp = sawSpread(j, nv); const bool centre = (nv % 2 == 1 && j == nv / 2); double g = centre ? 1.0 : 0.62 * sideFade; g *= norm;
         const double ang = (sp * p.spread + 1.0) * kPiD * 0.25; tSp[ly][j] = sp; tOn[ly][j] = g > 0.0; tCl[ly][j] = g * std::cos(ang) * 1.414; tCr[ly][j] = g * std::sin(ang) * 1.414; } }
+    int usedD = 0; for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly]; if (q.dest != 0 && q.on && (q.wave != Wave::Off || q.smp != 0)) usedD |= 1 << std::max(0, std::min(4, q.dest)); }
     const double dk = 1.0 + p.dist * 14.0, dnm = 1.0 / std::tanh(dk * 0.6);
     const FilterMode modes[3] = {p.filterMode, p.f2Mode, p.f3Mode}; const bool parallel = p.fRoute == 1, post = p.smpPost; const int lfoS[3] = {p.lfoShape, p.lfo2Shape, p.lfo3Shape};
     const double rr[3] = {0, p.f2Res, p.f3Res}, dd[3] = {0, p.f2Drv, p.f3Drv}; double srcV[6];
@@ -1057,17 +1060,17 @@ class Engine {
         for (int k = 0; k < mxn; ++k) md[mxd[k]] += sv[mxs[k]] * mxv[k];
         if (i == n - 1) for (int k = 0; k < kMxSrc; ++k) v.svL[k] = sv[k];
       }
-      double L = 0.0, R = 0.0, smL = 0.0, smR = 0.0;
+      double L = 0.0, R = 0.0, smL = 0.0, smR = 0.0; if (usedD & 30) { for (int q = 0; q < 5; ++q) v.bL[q] = v.bR[q] = 0.0; }
       srcV[0] = 0.0; srcV[1] = v.lyOut[0]; srcV[2] = v.lyOut[1]; srcV[3] = v.lyOut[2]; srcV[4] = 0.0; srcV[5] = 0.0;
       if (anyFmSub) { srcV[4] = std::sin(2.0 * kPiD * v.fmSubPh); v.fmSubPh += 440.0 * std::pow(2.0, ((double)(v.note - 69) + (double)p.subOctave * 12.0 + bendSt(v)) / 12.0) * invSr; if (v.fmSubPh >= 1.0) v.fmSubPh -= 1.0; }
       if (anyFmNz) srcV[5] = 2.0 * rng.next() - 1.0;
       for (int ly = 0; ly < kLayers; ++ly) {
-        const LayerParams& lp = p.layer[ly]; const double le = link ? 1.0 : (ly == 0 ? ampE : (ly == 1 ? aE2 : aE3));
+        const LayerParams& lp = p.layer[ly]; const int asel = lp.ampSel == 0 ? ly : std::max(0, std::min(2, lp.ampSel - 1)), dlt = std::max(0, std::min(4, lp.dest)); const double le = link ? 1.0 : (asel == 0 ? ampE : (asel == 1 ? aE2 : aE3));
         if (ctl) { const double pg = (std::min(1.0, std::max(-1.0, lp.pan + p.lfoPan * lfo + md[6])) + 1.0) * kPiD * 0.25; v.pcC[ly] = std::cos(pg) * 1.414; v.psC[ly] = std::sin(pg) * 1.414; }
         if (lp.smp != 0 && bank) { const std::vector<float>& d = bank->d[lp.smp]; if (!d.empty()) {
           if (ctl) v.sq[ly] = std::pow(2.0, (lp.smpPitch + (smpKeyed(lp.smp) ? v.note - 60 + v.gl : 0.0)) / 12.0);
           const double pos = v.sp[ly]; const int i0 = (int)pos;
-          if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } }
+          if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; if (dlt != 0 && !post) { v.bL[dlt] += sm * v.pcC[ly]; v.bR[dlt] += sm * v.psC[ly]; } else { smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } } }
         if (!lp.on || lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
         double f;
         if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
@@ -1150,7 +1153,7 @@ class Engine {
         }
         v.lyOut[ly] = 0.5 * (lL + lR);
         if (lp.amAmt > 0.f && lp.amSrc >= 1 && lp.amSrc <= 5 && lp.amSrc != ly + 1) { const double am = 1.0 - lp.amAmt + lp.amAmt * srcV[lp.amSrc]; lL *= am; lR *= am; }
-        L += lp.level * lL * v.pcC[ly] * le; R += lp.level * lR * v.psC[ly] * le;
+        if (dlt == 0) { L += lp.level * lL * v.pcC[ly] * le; R += lp.level * lR * v.psC[ly] * le; } else { v.bL[dlt] += lp.level * lL * v.pcC[ly] * le; v.bR[dlt] += lp.level * lR * v.psC[ly] * le; }
       }
       const double nzl = std::max(0.0, p.noiseLevel + md[12] * 0.5), subL = std::max(0.0, p.subLevel + md[11] * 0.7), en = link ? 1.0 : ampE;
       if (nzl > 0.0) {  // white noise, high-passed (two poles) so only the top end is added
@@ -1191,6 +1194,16 @@ class Engine {
       if (axA[1]) axA[1]->set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2]->set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
       if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (axA[q]) { L = axA[q]->tick(L, 0); R = axA[q]->tick(R, 1); } } }
       else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; double bl = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr), brr = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (axA[q]) { bl = axA[q]->tick(bl, 0); brr = axA[q]->tick(brr, 1); } al += bl; ar += brr; ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
+      if (usedD & 30) {   // layers sent to one filter only (1..3) or past all filters (4)
+        const bool dpre = p.distPre && p.dist > 0.f;
+        for (int q = 1; q <= 3; ++q) { if (!(usedD & (1 << q))) continue; double xl = v.bL[q], xr = v.bR[q]; const FilterMode m = modes[q - 1];
+          if (dpre) { xl = std::tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = std::tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; }
+          if (m != FilterMode::Off) { xl = v.fl2[q - 1].process(xl, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr); xr = v.fr2[q - 1].process(xr, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr);
+            if (q > 1) { const float lo = q == 2 ? p.f2LowCut : p.f3LowCut, hi = q == 2 ? p.f2HighCut : p.f3HighCut; const int sl = q == 2 ? p.f2Slope : p.f3Slope;
+              if (lo > 5.5f || hi < 19990.f) { AuxF& a3 = v.ax3[q - 2]; a3.set(lo, hi, sl, sr); xl = a3.tick(xl, 0); xr = a3.tick(xr, 1); } } }
+          L += xl; R += xr; }
+        if (usedD & 16) { double xl = v.bL[4], xr = v.bR[4]; if (dpre) { xl = std::tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = std::tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; } L += xl; R += xr; }
+      }
       if (post) { L += smL; R += smR; }
       if (!p.distPre) distort();   // distortion first, so the low cut that follows also removes the bass the distortion would rebuild
       { // high pass (and, next to a highpass filter, a low pass) on the whole voice

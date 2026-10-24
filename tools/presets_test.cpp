@@ -407,6 +407,17 @@ int main(int argc, char** argv) {
     std::printf("DYN regrowth below a 1.5 kHz hi pass: dyn off %.3e, dyn on %.3e\n", mOff, mOn); CHECK(mOn < 1e-6 || mOn < mOff * 100.0);
     std::printf("per filter hi/lo pass and post DYN hi pass behave\n");
   }
+  { // layer routing: each layer can go to one filter only, past all filters, or through the chain; and pick its amp envelope
+    auto rb = [&](const Params& q) { return brightness(runP(q)); };
+    auto mk = [&]() { Params q = baseP(); q.filterMode = FilterMode::LP24; q.cutoff = 18000.f; q.reso = 0.f; q.drive = 0.f; q.envAmt = 0.f; q.noiseLevel = 0.f; q.subLevel = 0.f; q.chorusMix = q.delayMix = q.reverbMix = 0.f; q.dmMix = 0.f; q.f2Mode = FilterMode::LP24; q.f2Cut = 300.f; q.f2Res = 0.f; return q; };
+    Params chain = mk(); Params l1f1 = chain; l1f1.layer[0].dest = 1; Params l1f2 = chain; l1f2.layer[0].dest = 2; Params byp = chain; byp.layer[0].dest = 4;
+    double bc = rb(chain), b1 = rb(l1f1), b2 = rb(l1f2), bb = rb(byp);
+    std::printf("layer routing brightness: chain %.4f, filter 1 only %.4f, filter 2 only %.4f, past filters %.4f\n", bc, b1, b2, bb);
+    CHECK(b1 > bc * 1.5); CHECK(bb > bc * 1.5); CHECK(std::fabs(b2 - bc) < bc * 0.05 || b2 < b1); CHECK(std::isfinite(b1) && std::isfinite(b2) && std::isfinite(bb));
+    { Params q = mk(); q.layer[0].dest = 0; CHECK(relDiff(runP(chain), runP(q)) == 0.0); }   // default keeps the old sound bit for bit
+    { Params a = mk(); a.ampLink = false; a.amp.d = 0.05f; a.amp.s = 0.f; a.amp2.d = 1.5f; a.amp2.s = 1.f; Params b = a; b.layer[0].ampSel = 2; CHECK(relDiff(runP(a), runP(b)) > 0.01); Params c = a; c.layer[0].ampSel = 1; CHECK(relDiff(runP(a), runP(c)) == 0.0); }
+    std::printf("layer routing and per-layer amp envelope behave\n");
+  }
   { // sub and noise: voices, detune and width. Defaults change nothing; width makes left and right differ
     auto stereoDiff = [&](const Params& q) { std::vector<float> R; auto L = runP(q, &R); double d = 0, e = 1e-12; for (size_t i = 0; i < L.size() && i < R.size(); ++i) { d += (double)(L[i] - R[i]) * (L[i] - R[i]); e += (double)L[i] * L[i]; } return d / e; };
     Params sb = baseP(); sb.layer[0].level = 0.f; sb.layer[1].level = 0.f; sb.layer[2].level = 0.f; sb.subLevel = 0.8f; sb.noiseLevel = 0.f; sb.chorusMix = sb.delayMix = sb.reverbMix = 0.f; sb.dmMix = 0.f; sb.subPreFilter = true;
