@@ -18,7 +18,7 @@ jobs:
             name: linux
           - os: windows-latest
             name: windows
-          - os: macos-latest
+          - os: macos-15
             name: macos
     runs-on: ${{ matrix.os }}
     name: SupurrSaw (${{ matrix.name }})
