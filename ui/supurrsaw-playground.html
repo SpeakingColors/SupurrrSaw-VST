@@ -180,7 +180,7 @@ canvas{display:block;max-width:100%}
 .stage .knob{width:51px}.stage .knob svg{width:36px;height:36px}.stage .knob .n{font-size:9px;max-width:51px;letter-spacing:.3px}.stage .knob .v{font-size:10.5px;min-height:13px}
 .stage .knob input{width:48px}
 .stage .note{display:none}
-.stage .dock .row{flex-wrap:nowrap;white-space:nowrap}.stage .dock>.row{gap:6px 8px}.stage #status{max-width:150px;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stage .dock input[type=number]{width:52px!important}
+.stage .dock .row{flex-wrap:nowrap;white-space:nowrap}.stage .dock>.row{gap:6px 5px}.stage .dock>.row .btn.sm{padding-left:8px;padding-right:8px}.stage #midiInfo,.stage .dock>.row>.lbl{display:none}.stage #status{max-width:150px;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stage .dock input[type=number]{width:52px!important}
 .stage #howCard{display:none}
 .stage .dock{position:static;flex:0 0 auto;margin:0;padding:6px 12px 8px;border-radius:12px}
 .stage #kbd{height:62px;margin-top:5px}
@@ -2783,7 +2783,7 @@ function capRender(){
   catch(err){}
   CAP.busy=false;
 }
-function capLabel(){const b=$("#dragWav");if(!b)return;b.textContent=CAP.url?"Drag last note ("+CAP.dur.toFixed(1)+" s)":"Drag last note";b.classList.toggle("on",!!CAP.url);}
+function capLabel(){const b=$("#dragWav");if(!b)return;b.textContent=CAP.url?"Drag note ("+CAP.dur.toFixed(1)+" s)":"Drag last note";b.classList.toggle("on",!!CAP.url);}
 function capInit(){
   const b=$("#dragWav");if(!b)return;
   b.dataset.tip="Plays out as a .wav of the last note or chord you played, as long as you held it, with the current sound and effects. Press and hold this button, drag it onto a track in your DAW or a folder, and drop. Nothing to set up: play a note for 0.1 s and you get a blip, hold it for 2 s and you get that. Click it to save the file instead. Dragging out of the browser page needs Chrome style browsers; in the plugin it uses the host's own drag.";
