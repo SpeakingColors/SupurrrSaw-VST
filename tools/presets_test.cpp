@@ -416,6 +416,7 @@ int main(int argc, char** argv) {
     CHECK(b1 > bc * 1.5); CHECK(bb > bc * 1.5); CHECK(std::fabs(b2 - bc) < bc * 0.05 || b2 < b1); CHECK(std::isfinite(b1) && std::isfinite(b2) && std::isfinite(bb));
     { Params q = mk(); q.layer[0].dest = 0; CHECK(relDiff(runP(chain), runP(q)) == 0.0); }   // default keeps the old sound bit for bit
     { Params a = mk(); a.ampLink = false; a.amp.d = 0.05f; a.amp.s = 0.f; a.amp2.d = 1.5f; a.amp2.s = 1.f; Params b = a; b.layer[0].ampSel = 2; CHECK(relDiff(runP(a), runP(b)) > 0.01); Params c = a; c.layer[0].ampSel = 1; CHECK(relDiff(runP(a), runP(c)) == 0.0); }
+    { Params a = mk(); Params o = a; o.layer[0].octave = 1; Params t = a; t.layer[0].semi = 12; CHECK(relDiff(runP(o), runP(t)) == 0.0); Params u = a; u.layer[0].semi = 7; CHECK(relDiff(runP(a), runP(u)) > 0.05); Params dn = a; dn.layer[0].semi = -12; Params od = a; od.layer[0].octave = -1; CHECK(relDiff(runP(dn), runP(od)) == 0.0); }   // semitone transpose: 12 equals an octave, 7 changes the sound
     std::printf("layer routing and per-layer amp envelope behave\n");
   }
   { // sub and noise: voices, detune and width. Defaults change nothing; width makes left and right differ

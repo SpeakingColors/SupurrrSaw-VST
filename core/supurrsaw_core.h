@@ -128,6 +128,7 @@ struct LayerParams {
   float detune = 0.4f;     // 0..1 (0 = one clean oscillator)
   float pwm = 0.5f;        // pulse width 0.05..0.95
   int octave = 0;          // -3..+3
+  int semi = 0;            // transpose in semitones, -24..+24 (on top of octave and the fine tune in cents)
   float tune = 0.f;        // cents
   float pan = 0.f;         // -1..1 for the whole layer
   // hard sync (Saw, Pulse, Tri, Sine layers): the master runs at the played pitch and restarts the slave every cycle.
@@ -1073,7 +1074,7 @@ class Engine {
           if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; if (dlt != 0 && !post) { v.bL[dlt] += sm * v.pcC[ly]; v.bR[dlt] += sm * v.psC[ly]; } else { smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } } }
         if (!lp.on || lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
         double f;
-        if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
+        if (ctl) { const double semis = (double)(v.note - 69) + v.gl + (double)lp.octave * 12.0 + (double)lp.semi + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12.0;
           f = 440.0 * std::pow(2.0, semis / 12.0); v.fC[ly] = f; } else f = v.fC[ly];
         double fmF = 1.0; if (lp.fmAmt > 0.f && lp.fmSrc >= 1 && lp.fmSrc <= 5 && lp.fmSrc != ly + 1) fmF = std::max(0.02, 1.0 + lp.fmAmt * 3.0 * srcV[lp.fmSrc]);
         const double dt = std::min(0.45, f * invSr * fmF);
