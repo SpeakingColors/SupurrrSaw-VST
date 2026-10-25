@@ -1509,10 +1509,16 @@ const FACWAVES={aah_stab:{name:"Aah stab (classic)",cycle:"TQCXAdEC+wMVBSAGGwcGC
 const WSELS=[];
 function waveSelect(k,tip){
   const s=el("select");s.dataset.tip=tip||"";const base=k.replace(/wave$/,"");
-  const fill=()=>{const cur=s.value;s.innerHTML="";WAVES.forEach((o,i)=>{const op=el("option","",o[1]);op.value="b:"+o[0];s.appendChild(op);});
-    {const g=document.createElement("optgroup");g.label="Voices";Object.keys(FACWAVES).forEach(sl=>{const op=el("option","",FACWAVES[sl].name);op.value="f:"+sl;g.appendChild(op);});s.appendChild(g);}
-    const ks=Object.keys(typeof MYWAVES!=="undefined"?MYWAVES:{});if(ks.length){const g=document.createElement("optgroup");g.label="My waves";ks.forEach(sl=>{const op=el("option","","★ "+MYWAVES[sl].name);op.value="u:"+sl;g.appendChild(op);});s.appendChild(g);}
-    if(typeof INSTLIST!=="undefined"&&INSTLIST.length){const g=document.createElement("optgroup");g.label="Instruments";INSTLIST.filter(i=>!/^D[12] /.test(i.name)).forEach(i=>{const op=el("option","",i.name);op.value="i:"+i.name;g.appendChild(op);});s.appendChild(g);}
+  const fill=()=>{const cur=s.value;s.innerHTML="";
+    const grp=(label,items)=>{if(!items.length)return;const g=document.createElement("optgroup");g.label=label;items.forEach(([t,v])=>{const op=el("option","",t);op.value=v;g.appendChild(op);});s.appendChild(g);};
+    WAVES.filter(o=>o[0]!=="Custom").forEach(o=>{const op=el("option","",o[1]);op.value="b:"+o[0];s.appendChild(op);});
+    {const op=el("option","","Custom wave");op.value="b:Custom";s.appendChild(op);}
+    const inst=(typeof INSTLIST!=="undefined"?INSTLIST:[]).map(i=>i.name).filter(n=>!/^D[12] /.test(n)),used={};
+    const FAM=[["Voices",["Choir","Ooh Ahh Voice","Voice Wave"]],["Pianos and keys",["Grand Piano","Dance Piano","FM Piano","E Piano A","E Piano B","Magic Piano","Moist Keys","Organ","Vibes"]],["Strings",["Solo Violin","Violin Ensemble","Viola Ensemble","Cello Ensemble","Overture"]],["Brass and winds",["Trumpet","Brass","Synth Brass","Flute","Pan Flute"]],["Guitars and plucked",["Guitar","Dist Guitar","Koto Tremolo"]],["Bass",["Synth Bass A","Synth Bass B","Slap Bass"]],["Bells and percussion",["Bottle Bell","Pan Mallet","Timpani and Bells","Wood Block"]]];
+    const mine=(typeof MYWAVES!=="undefined"?MYWAVES:{}),facCyc=Object.keys(FACWAVES).map(x=>FACWAVES[x].cycle);
+    FAM.forEach(([lab,names])=>{const items=[];if(lab==="Voices")Object.keys(FACWAVES).forEach(sl=>items.push([FACWAVES[sl].name,"f:"+sl]));names.forEach(n=>{if(inst.includes(n)){items.push([n,"i:"+n]);used[n]=1;}});grp(lab,items);});
+    grp("Other instruments",inst.filter(n=>!used[n]).map(n=>[n,"i:"+n]));
+    grp("My waves",Object.keys(mine).filter(sl=>!facCyc.includes(mine[sl].cycle)).map(sl=>["★ "+mine[sl].name,"u:"+sl]));
     ref();};
   if(typeof INSTCB!=="undefined")INSTCB.push(fill);
   const ref=()=>{if(!P)return;const v=getV(k);let val="b:"+v;if(v==="Sample"){const nm=getV(base+"instrument")||"";val="i:"+nm;if(![...s.options].some(o=>o.value===val)){const op=el("option","",nm?nm+" (pack not found)":"Instrument");op.value=val;s.appendChild(op);}}if(v==="Custom"){const cy=getV(base+"cycle"),fs=Object.keys(FACWAVES).find(x=>FACWAVES[x].cycle===cy);if(fs)val="f:"+fs;}if(v==="Custom"&&val==="b:Custom"&&typeof MYWAVES!=="undefined"){const cy=getV(base+"cycle"),sl=Object.keys(MYWAVES).find(x=>MYWAVES[x].cycle===cy);if(sl)val="u:"+sl;}s.value=val;if(s.value!==val)s.value="b:Custom";};
