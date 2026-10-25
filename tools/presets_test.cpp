@@ -156,6 +156,17 @@ int main(int argc, char** argv) {
     std::printf("chord comp: single %.3f / %.3f, chord %.3f / %.3f (off / on)\n", pkv[0][0], pkv[1][0], pkv[0][1], pkv[1][1]);
     CHECK(std::fabs(pkv[1][0] - pkv[0][0]) < 0.01); CHECK(pkv[1][1] < pkv[0][1] * 0.8);
   }
+  { // filter Drive does something in every filter type and keeps the average level
+    const FilterMode ms[] = {FilterMode::LP24, FilterMode::LP18, FilterMode::LP12, FilterMode::LP6, FilterMode::Jupiter, FilterMode::Moog, FilterMode::MS20, FilterMode::SEM, FilterMode::Acid, FilterMode::HP, FilterMode::HP24, FilterMode::BP, FilterMode::BP24, FilterMode::Notch, FilterMode::Formant};
+    for (FilterMode m : ms) { double thd[2], rms[2];
+      for (int k = 0; k < 2; ++k) { Filter fl; const double sr = 48000, f0 = 220; const int N = 48000; std::vector<double> o(N); double cut = (m == FilterMode::HP || m == FilterMode::HP24) ? 60 : (m == FilterMode::BP || m == FilterMode::BP24 || m == FilterMode::Formant) ? (m == FilterMode::Formant ? 300 : 220) : 8000; double ss = 0;
+        for (int i = 0; i < N; ++i) { o[i] = fl.process(0.35 * std::sin(2 * 3.14159265358979 * f0 * i / sr), m, cut, 0.1, k ? 1.0 : 0.0, sr); if (i >= N / 2) ss += o[i] * o[i]; }
+        rms[k] = std::sqrt(ss / (N / 2));
+        auto mag = [&](double fr) { double re = 0, im = 0; for (int i = N / 2; i < N; ++i) { const double w = 0.5 - 0.5 * std::cos(2 * 3.14159265358979 * (i - N / 2) / (N / 2)); const double a = 2 * 3.14159265358979 * fr * i / sr; re += o[i] * w * std::cos(a); im += o[i] * w * std::sin(a); } return std::hypot(re, im); };
+        const double m1 = mag(f0); double h = 0; for (int q = 2; q <= 9; ++q) { const double v = mag(f0 * q); h += v * v; } thd[k] = 100 * std::sqrt(h) / std::max(m1, 1e-9); }
+      const double dB = 20 * std::log10(rms[1] / rms[0]); std::printf("filter drive mode %d: THD %.1f -> %.1f %%, level %+.1f dB\n", (int)m, thd[0], thd[1], dB);
+      CHECK(thd[1] - thd[0] > 2.0); CHECK(std::fabs(dB) < 4.0); }
+  }
   { // legato and glide options
     auto mk = [](bool mono, bool leg, float gl, int mode, int curve, bool pg) { Params q; presets::byName("trance_bass", q); q.mono = mono; q.legato = leg; q.glide = gl; q.glideMode = mode; q.glideCurve = curve; q.polyGlide = pg; return q; };
     float L[128], R[128]; auto adv = [&](Engine& e, int n) { for (int i = 0; i < n; ++i) e.render(L, R, 128); };

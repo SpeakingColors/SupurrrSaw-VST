@@ -349,6 +349,7 @@ struct EnvState {
 static const double kFormants[5][3] = {{730, 1090, 2440}, {530, 1840, 2480}, {270, 2290, 3010}, {570, 840, 2410}, {300, 870, 2240}};
 struct Filter {
   double s[4] = {0, 0, 0, 0}, z1 = 0, z2 = 0, z3 = 0, z4 = 0, y[4] = {0, 0, 0, 0}, inE = 0, outE = 0, t[4] = {0, 0, 0, 0}, yy[4] = {0, 0, 0, 0}, fbl = 0, cd = 0, fz[6] = {0, 0, 0, 0, 0, 0}, hp_ = 0, bp_ = 0, lp_ = 0;
+  double se = 0, ssr = 0, sa = 0, sl = 0, sm = 0, mi = 0, mo = 0;   // filter Drive: level tracking saturator in front of every filter type
   double lc = -1, lsr = -1, lg = 0; int ci = 0; float* cb = nullptr; bool cbInit = false;   // cb: 4096 floats for the comb modes, lent by the engine
   void svf(double x, double g, double R, bool st) {
     const double a1 = st ? z3 : z1, a2 = st ? z4 : z2;
@@ -356,8 +357,19 @@ struct Filter {
     if (st) { z3 = g * hp + bp; z4 = g * bp + lp; } else { z1 = g * hp + bp; z2 = g * bp + lp; }
     hp_ = hp; bp_ = bp; lp_ = lp;
   }
+  // Filter Drive, the same for every filter type: it saturates relative to the signal's own level, so the knob does the same on a quiet or a loud sound; peak shape is kept and the average level is matched in and out.
+  double sat(double x, double d, double sr) {
+    d = std::min(1.0, d); const double ax = std::fabs(x);
+    if (sr != ssr) { ssr = sr; sa = 1 - std::exp(-1 / (0.002 * sr)); sl = 1 - std::exp(-1 / (0.08 * sr)); sm = 1 - std::exp(-1 / (0.06 * sr)); }
+    se += (ax > se ? sa : sl) * (ax - se);
+    const double e = std::max(1.57 * se, 1e-5), G = 1 + 10 * d * d; double y = e * std::tanh(G * x / e) / std::tanh(G);
+    mi += sm * (ax - mi); mo += sm * (std::fabs(y) - mo);
+    y *= mo > 1e-7 ? std::min(2.0, mi / mo) : 1.0;
+    return x + (y - x) * std::min(1.0, d * 12);
+  }
   double process(double x, FilterMode m, double cutoffHz, double reso, double drive, double sr) {
     if (m == FilterMode::Off) return x;
+    if (drive > 0.001) { x = sat(x, drive, sr); drive *= (m == FilterMode::Moog || m == FilterMode::Acid) ? 0.15 : 0.4; }   // the ladders keep a little of their own drive on top
     double g; if (cutoffHz == lc && sr == lsr) g = lg; else { const double fc = std::min(cutoffHz, 0.45 * sr); g = std::tan(kPiD * fc / sr); lc = cutoffHz; lsr = sr; lg = g; }
     switch (m) {
       case FilterMode::LP24: case FilterMode::LP18: case FilterMode::LP12: case FilterMode::LP6: case FilterMode::Jupiter: {

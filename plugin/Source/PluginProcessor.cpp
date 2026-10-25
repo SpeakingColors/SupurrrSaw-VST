@@ -12,7 +12,7 @@ SupurrProcessor::SupurrProcessor()
     for (int i = 0; i < 8; ++i) mWet[i].store ((i & 1) ? -1e9f : 1e9f);
     for (auto& a : mGr) a.store (0.f);
     for (auto& a : mDm) a.store (0.f);
-    supurr::presets::byName ("trance_90s", pending);   // same patch the page starts with, so MIDI works before the editor opens
+    supurr::presets::byName ("trance_90s", pending);   // close to the patch the page starts with (trance_90s_pro, which the page loads as soon as the editor opens), so MIDI works before the editor opens
     engine.p = pending;
     Diagnostics::log ("plugin created, version " + juce::String (JucePlugin_VersionString));
 }
