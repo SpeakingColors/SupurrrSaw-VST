@@ -156,6 +156,20 @@ int main(int argc, char** argv) {
     std::printf("chord comp: single %.3f / %.3f, chord %.3f / %.3f (off / on)\n", pkv[0][0], pkv[1][0], pkv[0][1], pkv[1][1]);
     CHECK(std::fabs(pkv[1][0] - pkv[0][0]) < 0.01); CHECK(pkv[1][1] < pkv[0][1] * 0.8);
   }
+  { // legato and glide options
+    auto mk = [](bool mono, bool leg, float gl, int mode, int curve, bool pg) { Params q; presets::byName("trance_bass", q); q.mono = mono; q.legato = leg; q.glide = gl; q.glideMode = mode; q.glideCurve = curve; q.polyGlide = pg; return q; };
+    float L[128], R[128]; auto adv = [&](Engine& e, int n) { for (int i = 0; i < n; ++i) e.render(L, R, 128); };
+    auto top = [](const Engine& e) { return e.newestVoice(); };
+    { Engine e; e.prepare(48000); e.p = mk(true, true, 0.1f, 0, 0, false); e.noteOn(60, 0.9f); adv(e, 40); const double t0 = top(e)->t; e.noteOn(64, 0.9f); adv(e, 1);
+      CHECK(top(e)->t > t0); CHECK(top(e)->note == 64); e.noteOff(64); adv(e, 1); CHECK(top(e)->note == 60 && top(e)->amp.stage != 3); e.noteOff(60); adv(e, 1); CHECK(top(e)->amp.stage == 3); }
+    { Engine e; e.prepare(48000); e.p = mk(true, false, 0.1f, 0, 0, false); e.noteOn(60, 0.9f); adv(e, 40); e.noteOn(64, 0.9f); adv(e, 1); CHECK(top(e)->t < 0.01); }
+    { Engine e; e.prepare(48000); e.p = mk(true, true, 0.1f, 1, 0, false); e.noteOn(60, 0.9f); adv(e, 10); e.noteOff(60); adv(e, 5); e.noteOn(64, 0.9f); CHECK(top(e)->gl == 0.0);
+      Engine g; g.prepare(48000); g.p = mk(true, true, 0.1f, 1, 0, false); g.noteOn(60, 0.9f); adv(g, 10); g.noteOn(64, 0.9f); CHECK(std::fabs(top(g)->gl + 4.0) < 0.01); }
+    { Engine e; e.prepare(48000); e.p = mk(true, true, 0.2f, 0, 1, false); e.noteOn(48, 0.9f); adv(e, 10); e.noteOn(60, 0.9f); int n = 0; while (top(e)->gl != 0.0 && n < 400) { adv(e, 1); ++n; }
+      const double sec = n * 128.0 / 48000.0; std::printf("linear glide: %.3f s (target 0.2)\n", sec); CHECK(std::fabs(sec - 0.2) < 0.01); }
+    { Engine e; e.prepare(48000); e.p = mk(false, false, 0.1f, 0, 0, true); e.noteOn(60, 0.9f); adv(e, 5); e.noteOn(67, 0.9f); CHECK(top(e)->gl == -7.0);
+      Engine g; g.prepare(48000); g.p = mk(false, false, 0.1f, 0, 0, false); g.noteOn(60, 0.9f); g.noteOn(67, 0.9f); CHECK(top(g)->gl == 0.0); }
+  }
   { // polyphony: twelve held notes all sound with the default, and a cap of 4 steals the oldest releasing or oldest voice
     Params q; presets::byName("trance_lead", q);
     for (int cap : {12, 4}) { q.polyphony = cap; Engine e; e.prepare(48000); e.p = q; float L[256], R[256];

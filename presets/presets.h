@@ -449,7 +449,7 @@ inline void crash(Params& p) {
 }  // namespace supurr::presets
 #include "presets_rave.h"
 namespace supurr::presets {
-inline bool byName(const std::string& n, Params& p) {
+inline bool byNameRaw(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
   else if (n == "trance_hybrid") tranceHybrid(p); else if (n == "trance_90s") trance90s(p);
   else if (n == "epiano_dx") epianoDx(p); else if (n == "epiano_wurly") epianoWurly(p); else if (n == "piano") piano(p); else if (n == "felt_piano") feltPiano(p);
@@ -463,6 +463,19 @@ inline bool byName(const std::string& n, Params& p) {
   else if (n == "brejcha_bass") brejchaBass(p); else if (n == "feellove_bass") feelLoveBass(p); else if (n == "nboy_303") nboy303(p); else if (n == "spaghetti_bass") spaghettiBass(p); else if (n == "access_bass") accessBass(p);
   else if (n == "kick") kick(p); else if (n == "snare") snare(p); else if (n == "closed_hat") closedHat(p); else if (n == "open_hat") openHat(p); else if (n == "crash") crash(p);
   else return raveByName(n, p);
+  return true;
+}
+
+
+// Keys, pianos, pads, bells and organs: the Multiband comp clipper is turned down so they stay clean (the default 40 percent mix adds about 4 percent harmonic distortion to a clean tone, this setting about 0.4 percent).
+inline bool cleanKeys(const std::string& n) {
+  static const char* k[] = {"nightcall_keys", "epiano_dx", "epiano_wurly", "piano", "felt_piano", "organ", "clav", "strings", "warm_pad", "glass_pad", "choir", "bell", "house_m1_piano", "hardcore_piano", "dream_trance_piano", "garage_4am_epiano", "donk_organ_keys", "ice_bells", "pizz_pluck_bell", "glass_fm", "formant_pad_90s", "breakbeat_pad_92", "aah_choir_pad", "lush_string_pad", "warm_analog_pad", "wurli_bark_keys", "glass_bell_pad", "vocal_ooh_pad", "marimba_soft", "organ_drawbar_full", "honky_piano", "inst_moist_keys", "inst_moist_keys_pad", "inst_italo_stab_keys", "inst_rave_piano_stab", "inst_epiano_glass_pad", "inst_lullaby_keys", "inst_sub_piano", "inst_strings_and_saws", "inst_jp_string_ensemble", "inst_pluck_strings_trance", "inst_epic_orchestra_pad", "dance_super_aahh", "inst_dance_piano", "inst_dance_piano_stab", "inst_dance_piano_house", "inst_dance_piano_pad", "inst_organ", "inst_choir", "inst_bottle_bell", "inst_pan_mallet", "inst_e_piano_a", "inst_vibes", "inst_magic_piano", "inst_timpani_and_bells", "inst_e_piano_b", "aah_stab_classic"};
+  for (const char* s : k) if (n == s) return true;
+  return false;
+}
+inline bool byName(const std::string& n, Params& p) {
+  if (!byNameRaw(n, p)) return false;
+  if (cleanKeys(n) && p.dmMix > 0.f) { p.dmMix = 0.15f; p.dmDrive = 0.3f; p.dmClip = 0.f; }
   return true;
 }
 

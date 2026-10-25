@@ -57,7 +57,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
 #define S87_B(name) m[#name] = [](Params& p, const juce::var& v) { p.name = asB(v); }
 #define S87_FR(name, lo, hi) m[#name] = [](Params& p, const juce::var& v) { p.name = asFR(v, lo, hi); }
 #define S87_IR(name, lo, hi) m[#name] = [](Params& p, const juce::var& v) { p.name = asIR(v, lo, hi); }
-        S87_F(subLevel); S87_I(subOctave); S87_B(subPreFilter); S87_B(mono); S87_I(stackCount); S87_F(stackCents); S87_F(glide);
+        S87_F(subLevel); S87_I(subOctave); S87_B(subPreFilter); S87_B(mono); S87_I(stackCount); S87_F(stackCents); S87_F(glide); S87_B(legato); S87_IR(glideMode, 0, 1); S87_IR(glideCurve, 0, 1); S87_B(polyGlide);
         S87_F(cutoff); S87_F(reso); S87_F(drive); S87_F(envAmt); S87_F(keyTrack); S87_FR(lowCutHz, 5.f, 20000.f); S87_F(dist); S87_B(distPre);
         S87_F(noiseLevel); S87_F(noiseHpHz); S87_IR(subVoices, 1, 5); S87_F(subDetune); S87_F(subWidth); S87_IR(noiseVoices, 1, 5); S87_F(noiseDetune); S87_F(noiseWidth);
         S87_F(pitchAmt); S87_F(pitchTime); S87_F(pitchAttack); S87_F(pitchFall); S87_F(pitchFallTime);

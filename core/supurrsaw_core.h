@@ -171,6 +171,10 @@ struct Params {
   float cutoff = 4000.f, reso = 0.2f, drive = 0.f, envAmt = 0.f, keyTrack = 0.f;
   bool subPreFilter = false;   // true: the sub oscillator goes through the filter like the other oscillators
   float glide = 0.f;           // seconds of portamento in mono mode (0 = off)
+  bool legato = false;         // mono only: a key played over a held key changes pitch without retriggering the envelopes; letting go of the top key falls back to the key still held
+  int glideMode = 0;           // 0 always, 1 only when a key is held (legato glide)
+  int glideCurve = 0;          // 0 exponential (glide is the time constant), 1 linear (glide is the full time)
+  bool polyGlide = false;      // poly and stack: every new voice slides in from the previous key
   bool mono = false;           // one voice, last note wins, a new note restarts the envelopes without a click
   int stackCount = 1;          // Stack mode (mono off): every key plays this many voices (1..4) spread by stackCents; 1 = plain poly
   float stackCents = 14.f;     // pitch spread of the stacked copies
@@ -459,7 +463,7 @@ struct Voice {
   double phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
   const Sample* zoneS[kLayers] = {}; int zoneN[kLayers] = {-1, -1, -1};   // chosen zone of a multisampled layer, and the note it was chosen for
-  double syncPhase[kLayers] = {}, noiseHp = 0, noiseHp2 = 0, gl = 0, subPh[5] = {}, nzS[20] = {};
+  double syncPhase[kLayers] = {}, noiseHp = 0, noiseHp2 = 0, gl = 0, glStep = 0, subPh[5] = {}, nzS[20] = {};
   double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   double lfoPhase = 0, t = 0, stackCents = 0, stackGain = 1;
   int ch = 0; double bend = 0, press = 0, slide = 0;   // MPE: channel of the note, its own bend (semitones), pressure and slide (0..1)
@@ -867,11 +871,22 @@ class Engine {
   void envsOff(Voice& v) { v.amp.off(); v.amp2.off(); v.amp3.off(); v.fenv.off(); v.fenv2.off(); v.fenv3.off(); }
   double chBend[16] = {}, chPress[16] = {}, chSlide[16] = {};   // last values per MIDI channel (MPE member channels), applied to a note when it starts
   double bendSt(const Voice& v) const { const double w = p.pitchBend; return w * (double)(w >= 0.0 ? p.bendRange : p.bendDown) + v.bend; }
+  int held[16] = {}, nHeld = 0, lastNote = -1;   // keys currently down, newest last; the key before the newest
+  void setGl(Voice& v, int d, bool on) { if (on) { v.gl += (double)d; v.glStep = std::fabs(v.gl) / (std::max(0.001, (double)p.glide) * sr); } else v.gl = 0.0; }
+  void heldRemove(int note) { for (int i = 0; i < nHeld; ++i) if (held[i] == note) { for (int j = i; j + 1 < nHeld; ++j) held[j] = held[j + 1]; --nHeld; return; } }
   void noteOn(int note, float vel, int ch = 0) {
-    if (p.mono) {  // reuse the one sounding voice so tails never pile up
-      Voice* v = nullptr;
-      for (auto& c : voices) if (c.active) { if (!v || c.age > v->age) v = &c; }
-      if (v) { for (auto& c : voices) if (&c != v) c.active = false; v->gl += (double)(v->note - note); v->note = note; v->vel = vel; v->age = ++clock; v->t = 0.0; v->rnd = 2.0 * rng.next() - 1.0; v->sh = v->rnd; envsOn(*v); v->sp[0] = v->sp[1] = v->sp[2] = v->sp[3] = 0.0; return; }
+    Voice* cur = nullptr;
+    for (auto& c : voices) if (c.active) { if (!cur || c.age > cur->age) cur = &c; }
+    if (!cur) nHeld = 0;   // nothing sounds, so no key can still be down
+    const bool anyHeld = nHeld > 0, gOn = p.glide > 0.f && (p.glideMode == 0 || anyHeld);
+    heldRemove(note); if (nHeld == 16) { for (int j = 0; j + 1 < nHeld; ++j) held[j] = held[j + 1]; --nHeld; } held[nHeld++] = note;
+    const int last = lastNote; lastNote = note;
+    if (p.mono && cur) {  // reuse the one sounding voice so tails never pile up
+      Voice* v = cur; for (auto& c : voices) if (&c != v) c.active = false;
+      const bool lg = p.legato && anyHeld && v->amp.stage != 3;   // legato: the envelopes keep going
+      setGl(*v, v->note - note, gOn); v->note = note; v->age = ++clock;
+      if (!lg) { v->vel = vel; v->t = 0.0; v->rnd = 2.0 * rng.next() - 1.0; v->sh = v->rnd; envsOn(*v); v->sp[0] = v->sp[1] = v->sp[2] = v->sp[3] = 0.0; }
+      return;
     }
     const int n = p.mono ? 1 : std::max(1, std::min(4, p.stackCount));   // Stack mode plays several detuned copies per key
     for (int k = 0; k < n; ++k) {
@@ -879,24 +894,31 @@ class Engine {
       *v = Voice(); v->active = true; v->note = note; v->vel = vel; v->rnd = 2.0 * rng.next() - 1.0; v->sh = v->rnd; v->sh0 = 0.0; v->age = ++clock;
       v->rs = ((uint32_t)(note + 1) * 2654435761u) ^ ((uint32_t)v->age * 40503u); v->sa[0] = v->lfoRnd(); v->sa[1] = v->lfoRnd(); v->sb[0] = v->sb[1] = 0.0;   // each voice has its own random stream for LFO 2 and 3
       v->stackCents = n > 1 ? ((double)k / (double)(n - 1) * 2.0 - 1.0) * p.stackCents : 0.0; v->stackGain = 1.0 / std::sqrt((double)n);
+      if (p.polyGlide && gOn && last >= 0) setGl(*v, last - note, true);   // poly glide: slide in from the previous key
       v->ch = ch & 15; if (ch > 0) { v->bend = chBend[ch & 15]; v->press = chPress[ch & 15]; v->slide = chSlide[ch & 15]; }
       for (int l = 0; l < kLayers; ++l) for (int j = 0; j < kMaxSaws; ++j) v->phase[l][j] = p.phaseReset ? 0.0 : rng.next();
       envsOn(*v);
       for (int l = 0; l < kLayers; ++l) if (p.layer[l].wave == Wave::Sample && p.layer[l].sample && p.layer[l].sample->oneShot) v->oneShot = true;
     }
   }
-  void noteOff(int note, int ch = -1) { for (auto& v : voices) if (v.active && v.note == note && (ch < 0 || v.ch == (ch & 15)) && v.amp.stage != 3 && !v.oneShot) envsOff(v); }
+  void noteOff(int note, int ch = -1) {
+    heldRemove(note);
+    if (p.mono && p.legato && nHeld > 0) {   // legato mono: letting go of the top key falls back to the key still held, no retrigger
+      for (auto& v : voices) if (v.active && v.note == note && (ch < 0 || v.ch == (ch & 15)) && v.amp.stage != 3 && !v.oneShot) { const int t = held[nHeld - 1]; setGl(v, v.note - t, p.glide > 0.f); v.note = t; lastNote = t; return; }
+    }
+    for (auto& v : voices) if (v.active && v.note == note && (ch < 0 || v.ch == (ch & 15)) && v.amp.stage != 3 && !v.oneShot) envsOff(v); }
   // MPE member channels: bend in semitones, pressure and slide 0..1, for the note sounding on that channel (and the next one that starts on it)
   void setChanBend(int ch, double semis) { ch &= 15; chBend[ch] = semis; for (auto& v : voices) if (v.active && v.ch == ch && v.amp.stage != 3) v.bend = semis; }
   void setChanPress(int ch, double x) { ch &= 15; chPress[ch] = x; for (auto& v : voices) if (v.active && v.ch == ch && v.amp.stage != 3) v.press = x; }
   void setChanSlide(int ch, double x) { ch &= 15; chSlide[ch] = x; for (auto& v : voices) if (v.active && v.ch == ch && v.amp.stage != 3) v.slide = x; }
   void setNotePress(int note, double x) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3) v.press = x; }   // polyphonic key pressure
-  void allOff() { for (auto& v : voices) v.active = false; }
+  void allOff() { for (auto& v : voices) v.active = false; nHeld = 0; }
   void releaseAll() { for (auto& v : voices) if (v.active && v.amp.stage != 3 && !v.oneShot) envsOff(v); }   // like every key let go: tails ring out
   struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}; };
   void wetTake(float* o) { fx.wetTake(o); }
   Meters meters() const { Meters m = mtr; m.lim = (float)limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = (float)dyn.gr[i]; m.dm[i] = (float)dm.gr[i]; } return m; }
   void reserve(int maxBlock) { if ((int)subBusL.size() < maxBlock) { subBusL.assign(maxBlock, 0.0); subBusR.assign(maxBlock, 0.0); } }
+  const Voice* newestVoice() const { const Voice* v = nullptr; for (const auto& c : voices) if (c.active && (!v || c.age > v->age)) v = &c; return v; }   // for tests and meters
   int activeVoices() const { int n = 0; for (const auto& v : voices) if (v.active) ++n; return n; }
 
   // adds nothing, overwrites outL/outR
@@ -1069,7 +1091,7 @@ class Engine {
         v.pEnv = pitchEnv;
       } else pitchEnv = v.pEnv;
       v.t += invSr;
-      if (v.gl != 0.0) { v.gl *= std::exp(-invSr / std::max(0.001, (double)p.glide)); if (std::fabs(v.gl) < 1e-4) v.gl = 0.0; }
+      if (v.gl != 0.0) { if (p.glideCurve == 1) { if (std::fabs(v.gl) <= v.glStep) v.gl = 0.0; else v.gl -= v.gl > 0.0 ? v.glStep : -v.glStep; } else { v.gl *= std::exp(-invSr / std::max(0.001, (double)p.glide)); if (std::fabs(v.gl) < 1e-4) v.gl = 0.0; } }
       if ((long long)std::floor(v.t * sr) % 512 == 0)
         for (int j = 0; j < kMaxSaws; ++j) v.driftT[j] = p.drift * 0.004 * (2.0 * rng.next() - 1.0);
       if (ctl) for (int j = 0; j < kMaxSaws; ++j) v.drift[j] += 0.002 * (v.driftT[j] - v.drift[j]);
