@@ -143,7 +143,7 @@ canvas{display:block;max-width:100%}
 .stage .pages button{flex:0 0 auto;padding:6px 8px;font-size:13px;letter-spacing:1px;border-radius:10px}.stage .pbtn{min-width:96px;max-width:118px;padding:5px 7px}.stage #power{padding:5px 9px;font-size:12px}.stage #favB{padding:3px 6px}.stage .hbtns{margin-left:0}.stage .topk{gap:0}.stage .topk .knob{width:47px}.stage .lamps2 .lamp{font-size:9px;letter-spacing:.5px;padding:2px 5px}.stage .btn.ic{padding:3px 5px}
 .stage .page{flex:1 1 0;min-height:0}
 .stage .page:not([hidden]){display:block}
-.stage .grid{height:100%;margin-top:0;gap:10px;grid-template-rows:minmax(0,1fr) minmax(0,1fr)}
+.stage .grid{height:100%;margin-top:0;gap:10px;grid-template-rows:minmax(0,1.1fr) minmax(0,1fr)}
 .stage .card{padding:9px 11px 10px;overflow:hidden}
 .stage .card h2{font-size:13px;margin-bottom:6px;letter-spacing:1.4px;gap:4px;flex-wrap:nowrap}.stage .card h2 .seg button{padding:3px 5px}.stage .card h2 .tog,.stage .card h2 .btn{padding:2px 5px;font-size:10px;letter-spacing:0;gap:3px}.stage .card h2{letter-spacing:1px;gap:3px}.stage .card h2>*{flex-shrink:0}.stage .card h2{white-space:nowrap}
 .stage .c2{grid-column:span 2!important}.stage .c3{grid-column:span 3!important}.stage .c4{grid-column:span 4!important}.stage .c5{grid-column:span 5!important}.stage .c6{grid-column:span 6!important}.stage .c7{grid-column:span 7!important}.stage .c8{grid-column:span 8!important}.stage .c9{grid-column:span 9!important}
@@ -1174,7 +1174,7 @@ const EN=new Function(ENGINE_SRC+"\nreturn {Fx,delaySeconds,SupurrEngine,default
 const clone=o=>JSON.parse(JSON.stringify(o));
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const STAGE=innerWidth>=900&&innerHeight>=520;let SCALE=1;const SH=(n,s)=>(STAGE?s:n)+"px";
-const BW=window.__BW||1500,BH=window.__BH||800;let SZ=window.__SUPURR_PLUGIN?"fit":"1";if(!window.__SUPURR_PLUGIN){try{SZ=localStorage.getItem("supurrSize")||"1";}catch(e){}}
+const BW=window.__BW||1500,BH=window.__BH||850;let SZ=window.__SUPURR_PLUGIN?"fit":"1";if(!window.__SUPURR_PLUGIN){try{SZ=localStorage.getItem("supurrSize")||"1";}catch(e){}}
 function fit(){const R=$("#rack");if(!STAGE){return;}document.documentElement.classList.add("stage");const f=Math.min(innerWidth/BW,innerHeight/BH),s=SZ==="fit"?f:Math.min(f,+SZ);SCALE=s;R.style.width=BW+"px";R.style.height=BH+"px";R.style.transform="scale("+s+")";R.style.left=Math.max(0,(innerWidth-BW*s)/2)+"px";R.style.top=Math.max(0,(innerHeight-BH*s)/2)+"px";}
 fit();window.addEventListener("resize",()=>{fit();if(typeof drawAll==="function"&&P)drawAll();});
 
@@ -1532,7 +1532,7 @@ function layerCard(i){
   const top=el("div","row");const wsel=waveSelect(p+"wave","Oscillator type. Off mutes the layer. Custom plays the shape from the Presets and waves page. Your saved waves are listed under My waves.");wsel.style.width="104px";wsel.style.fontSize="12px";top.appendChild(wsel);top.appendChild(toggle(p+"sync","Sync","Locks the layer to a hidden master oscillator, for the talking sound."));
   const eb=el("button","btn sm","Edit");eb.dataset.tip="Edit shape: open the wave lab for this layer.";eb.onclick=()=>{WL.layer=i;$("#wlLayer").value=i;const L=P.layers[i];if(L.wave!=="Custom"&&L.wave!=="Off"){const b=L.wave==="SuperSquare"?"Pulse":(L.wave==="SuperSaw"?"Saw":L.wave);for(let k=0;k<WL.N;k++)WL.cyc[k]=waveAt(L,b,k/WL.N,L.pwm);wlHarmFromCyc();wlDraw();wlStatus("Started from the "+L.wave+" shape. Edit it, then it plays on layer "+(i+1)+".");}else wlSyncFromPatch();showPage("presets");};top.appendChild(eb);
   HD(c,top);
-  const cv=el("canvas","disp wave");cv.style.height=SH(96,22);cv.style.marginTop="4px";cv.dataset.tip="Live picture of this layer: voices spread by the detune setting, moving like a scope. Change Detune, Voices or Cents and the shape follows.";c.appendChild(cv);
+  const cv=el("canvas","disp wave");cv.style.height=SH(96,54);cv.style.marginTop="4px";cv.dataset.tip="Live picture of this layer: voices spread by the detune setting, moving like a scope. Change Detune, Voices or Cents and the shape follows.";c.appendChild(cv);
   const kr=knobRow([N(p+"level","Level",0,1,0.01,"","Layer volume."),N(p+"voices","Voices",1,15,1,"","Stacked voices inside a super wave."),N(p+"detune","Detune",0,1,0.01,"","Spread of the stack on the JP-8000 style curve."),N(p+"cents","Cents",0,60,0.5,"ct","Direct spread in cents. When above 0 it replaces Detune."),N(p+"pwm","Pulse W",0.05,0.95,0.01,"","Pulse width for square and pulse waves."),N(p+"octave","Octave",-3,3,1,"","Octave shift of this layer."),N(p+"semi","Semi",-24,24,1,"st","Transpose this layer in whole semitones (on top of Octave). Use it for fifths, thirds and other interval stacks."),N(p+"tune","Tune",-4800,4800,1,"ct","Fine tune in cents. Click the value to type."),N(p+"pan","Pan",-1,1,0.01,"","Layer position in the stereo field."),N(p+"lfoPitchCents","Vibrato",0,100,1,"ct","How much the LFO moves this layer's pitch.")]);c.appendChild(kr);
   c.insertBefore(sampleRow({smp:p+"smp",pitch:p+"smpPitch",vol:p+"smpVol"},"this layer"),kr);
   const sy=el("div");sy.appendChild(el("div","lbl","Hard sync amounts"));sy.style.marginTop="6px";
