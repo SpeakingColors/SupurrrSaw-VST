@@ -92,7 +92,7 @@ inline void epianoDx(Params& p) {
   p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.f;                                                  // modulator only, silent
   p.layer[2].wave = Wave::Sine; p.layer[2].octave = 2; p.layer[2].level = 0.06f; p.layer[2].fmSrc = 2; p.layer[2].fmAmt = 0.1f;   // tine
   p.cutoff = 5200.f; p.reso = 0.05f; p.envAmt = 0.35f; p.keyTrack = 0.3f; p.velCutoff = 0.25f; p.fenv = {0.001f, 0.6f, 0.2f, 0.3f}; p.lowCutHz = 60.f;
-  p.master = 0.9f; p.amp = {0.002f, 1.8f, 0.12f, 0.35f}; p.lfoRate = 4.2f; p.lfoPan = 0.18f; p.spread = 0.8f;
+  p.master = 0.35f; p.amp = {0.002f, 1.8f, 0.12f, 0.35f}; p.lfoRate = 4.2f; p.lfoPan = 0.18f; p.spread = 0.8f;
   p.chorusMix = 0.35f; p.chorusDepth = 0.35f; p.reverbMix = 0.12f; p.reverbSize = 0.6f; p.reverbLowCutHz = 250.f;
 }
 // Wurlitzer style: reedy pulse and triangle with a little drive and a quick bark on the attack.
@@ -101,24 +101,24 @@ inline void epianoWurly(Params& p) {
   p.layer[0].wave = Wave::Pulse; p.layer[0].pwm = 0.38f; p.layer[0].level = 0.45f;
   p.layer[1].wave = Wave::Tri; p.layer[1].level = 0.5f; p.layer[1].octave = 0;
   p.cutoff = 2400.f; p.reso = 0.12f; p.envAmt = 0.45f; p.keyTrack = 0.35f; p.velCutoff = 0.3f; p.fenv = {0.001f, 0.35f, 0.15f, 0.25f}; p.drive = 0.15f; p.dist = 0.1f; p.lowCutHz = 70.f;
-  p.master = 0.9f; p.amp = {0.002f, 1.2f, 0.1f, 0.3f}; p.lfoRate = 5.f; p.lfoAmp = 0.12f; p.chorusMix = 0.2f; p.reverbMix = 0.1f;
+  p.master = 0.33f; p.amp = {0.002f, 1.2f, 0.1f, 0.3f}; p.lfoRate = 5.f; p.lfoAmp = 0.12f; p.chorusMix = 0.2f; p.reverbMix = 0.1f;
 }
 // Piano: a bright saw and a triangle one octave down, a fast filter decay that follows velocity, long decay with no sustain.
 inline void piano(Params& p) {
   p = Params();
-  p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.4f; p.layer[0].tune = 3.f;
-  p.layer[1].wave = Wave::Tri; p.layer[1].level = 0.5f; p.layer[1].tune = -3.f;
-  p.layer[2].wave = Wave::Sine; p.layer[2].octave = 1; p.layer[2].level = 0.12f;
+  p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.4f; p.layer[0].tune = 3.f; p.layer[0].voices = 3;
+  p.layer[1].wave = Wave::Tri; p.layer[1].level = 0.5f; p.layer[1].tune = -3.f; p.layer[1].voices = 3;
+  p.layer[2].wave = Wave::Sine; p.layer[2].octave = 1; p.layer[2].level = 0.12f; p.layer[2].voices = 1;
   p.cutoff = 2200.f; p.reso = 0.04f; p.envAmt = 0.55f; p.keyTrack = 0.55f; p.velCutoff = 0.45f; p.fenv = {0.001f, 0.9f, 0.1f, 0.3f}; p.lowCutHz = 55.f;
-  p.master = 0.9f; p.amp = {0.002f, 3.0f, 0.04f, 0.5f}; p.spread = 0.6f; p.reverbMix = 0.14f; p.reverbSize = 0.55f; p.reverbLowCutHz = 250.f; p.chorusMix = 0.08f;
+  p.master = 0.5f; p.amp = {0.002f, 3.0f, 0.04f, 0.5f}; p.spread = 0.6f; p.reverbMix = 0.14f; p.reverbSize = 0.55f; p.reverbLowCutHz = 250.f; p.chorusMix = 0.08f;
 }
 // Felt piano: softer and darker.
 inline void feltPiano(Params& p) {
   p = Params();
-  p.layer[0].wave = Wave::Tri; p.layer[0].level = 0.7f;
-  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.35f; p.layer[1].octave = 1;
+  p.layer[0].wave = Wave::Tri; p.layer[0].level = 0.7f; p.layer[0].voices = 3;
+  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.35f; p.layer[1].octave = 1; p.layer[1].voices = 1;
   p.cutoff = 1500.f; p.envAmt = 0.4f; p.keyTrack = 0.4f; p.velCutoff = 0.3f; p.fenv = {0.002f, 0.7f, 0.1f, 0.3f}; p.lowCutHz = 50.f;
-  p.master = 1.2f; p.amp = {0.004f, 2.5f, 0.06f, 0.6f}; p.reverbMix = 0.2f; p.reverbSize = 0.65f; p.reverbLowCutHz = 200.f; p.chorusMix = 0.1f;
+  p.master = 0.6f; p.amp = {0.004f, 2.5f, 0.06f, 0.6f}; p.reverbMix = 0.2f; p.reverbSize = 0.65f; p.reverbLowCutHz = 200.f; p.chorusMix = 0.1f;
 }
 // Drawbar organ: 8', 4' and 2 2/3' sine drawbars plus a sub, a little key click drive and a rotary-style chorus.
 inline void organ(Params& p) {
@@ -128,7 +128,7 @@ inline void organ(Params& p) {
   p.layer[2].wave = Wave::Sine; p.layer[2].level = 0.3f; p.layer[2].octave = 1; p.layer[2].semi = 7; p.layer[2].tune = 2.f;
   p.subLevel = 0.35f; p.subWave = Wave::Sine; p.subOctave = -1;
   p.cutoff = 9000.f; p.dist = 0.12f; p.drive = 0.1f; p.lowCutHz = 40.f;
-  p.master = 0.26f; p.amp = {0.004f, 0.05f, 1.f, 0.06f}; p.chorusMix = 0.5f; p.chorusRate = 6.f; p.chorusDepth = 0.5f; p.reverbMix = 0.1f; p.spread = 0.5f;
+  p.master = 0.22f; p.amp = {0.004f, 0.05f, 1.f, 0.06f}; p.chorusMix = 0.5f; p.chorusRate = 6.f; p.chorusDepth = 0.5f; p.reverbMix = 0.1f; p.spread = 0.5f;
 }
 // Clavinet: narrow pulse, very short filter decay that follows the key.
 inline void clav(Params& p) {
@@ -163,7 +163,7 @@ inline void glassPad(Params& p) {
   p.layer[1].wave = Wave::Sine; p.layer[1].octave = 1; p.layer[1].level = 0.f; p.layer[1].tune = 5.f;
   p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 5; p.layer[2].cents = 7.f; p.layer[2].level = 0.18f; p.layer[2].octave = 1;
   p.cutoff = 5000.f; p.envAmt = 0.2f; p.fenv = {1.5f, 1.f, 0.7f, 1.f}; p.lowCutHz = 120.f; p.lfoRate = 0.3f; p.lfoPan = 0.3f;
-  p.master = 1.3f; p.amp = {0.8f, 0.8f, 0.85f, 1.8f}; p.spread = 1.f; p.chorusMix = 0.4f; p.reverbMix = 0.4f; p.reverbSize = 0.9f; p.reverbLowCutHz = 300.f; p.delayMix = 0.12f; p.delayTime = 0.43f; p.delayFb = 0.4f;
+  p.master = 0.91f; p.amp = {0.8f, 0.8f, 0.85f, 1.8f}; p.spread = 1.f; p.chorusMix = 0.4f; p.reverbMix = 0.4f; p.reverbSize = 0.9f; p.reverbLowCutHz = 300.f; p.delayMix = 0.12f; p.delayTime = 0.43f; p.delayFb = 0.4f;
 }
 // Choir: saws through a band pass filter for a vowel colour.
 inline void choir(Params& p) {
@@ -354,7 +354,7 @@ inline void nightCallKeys(Params& p) {
   p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 2; p.layer[0].cents = 8.f; p.layer[0].level = 1.0f;
   p.noiseLevel = 0.15f; p.noiseHpHz = 200.f;
   p.cutoff = 632.f; p.reso = 0.45f; p.envAmt = 0.9f; p.fenv = {0.001f, 3.7f, 0.f, 0.1f};
-  p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.6f; p.chorusMix = 0.35f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 1.24f;
+  p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.6f; p.chorusMix = 0.35f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 0.74f;
 }
 
 // Aretha Franklin "Freeway of Love" bass: mono saw with a pulse sub, resonant low-pass with full key tracking and a short envelope, chorus.
