@@ -84,6 +84,22 @@ inline void trance90s(Params& p) {
   p.master = 0.9f; p.amp = {0.002f, 0.5f, 0.7f, 0.3f}; p.spread = 0.9f; p.chorusMix = 0.2f; p.delayMix = 0.1f; p.delayTime = 0.214f; p.delayFb = 0.3f; p.reverbMix = 0.1f; p.reverbSize = 0.65f; p.reverbLowCutHz = 400.f;
 }
 
+// trance_90s with the pro processing the page's start preset uses: Jupiter filter, click sample on layer 1,
+// a little multiband clip, dynamic and saturated EQ bands, slow LFO 2 and 3 on pitch, cutoff and detune.
+inline void trance90sPro(Params& p) {
+  trance90s(p);
+  p.layer[0].smp = smpFromId("click_soft"); p.layer[0].smpVol = 0.3f; p.smpPost = true;
+  p.filterMode = FilterMode::Jupiter; p.cutoff = 6500.f; p.drive = 0.3f; p.lowCutHz = 140.f; p.auxSlope = 1;
+  p.amp = {0.002f, 0.5f, 0.7f, 0.3f}; p.master = 0.87f; p.bassMonoHz = 150.f; p.chorusMix = 0.22f;
+  p.dmMix = 0.45f; p.dmLow = 0.1f; p.dmMid = 0.1f;
+  p.eq3F = 280.f; p.eq3G = -1.5f; p.eq3Q = 1.1f;
+  p.eq4F = 3200.f; p.eq4Q = 0.9f; p.eq4Dyn = -4.f; p.eq4Thr = -28.f; p.eq4Atk = 8.f; p.eq4Rel = 140.f;
+  p.eq5F = 9500.f; p.eq5G = 2.f; p.eq5Sat = 0.22f; p.eq5SatT = 1;
+  p.msSide = 0.12f; p.widHi = 1.3f;
+  p.lfo2Rate = 0.2f; p.lfo2Shape = 5; p.lfo3Rate = 0.35f; p.lfo3Shape = 0;
+  p.mx[9][0] = 0.004f; p.mx[9][1] = 0.03f; p.mx[10][5] = 0.06f;   // lfo2 -> pitch, lfo2 -> cutoff, lfo3 -> detune
+}
+
 // ---- keys, pianos, pads and strings (approximations built from the synth's own parts; FM from a second layer makes the bell and tine sounds) ----
 // DX style electric piano: sine carrier frequency modulated by a sine at the same pitch (mellow tine), a faint octave-up layer for the attack ping.
 inline void epianoDx(Params& p) {
@@ -451,7 +467,7 @@ inline void crash(Params& p) {
 namespace supurr::presets {
 inline bool byNameRaw(const std::string& n, Params& p) {
   if (n == "hoover") hoover(p); else if (n == "pick") pick(p); else if (n == "pluck") pluck(p); else if (n == "trance_lead") tranceLead(p);
-  else if (n == "trance_hybrid") tranceHybrid(p); else if (n == "trance_90s") trance90s(p);
+  else if (n == "trance_hybrid") tranceHybrid(p); else if (n == "trance_90s") trance90s(p); else if (n == "trance_90s_pro") trance90sPro(p);
   else if (n == "epiano_dx") epianoDx(p); else if (n == "epiano_wurly") epianoWurly(p); else if (n == "piano") piano(p); else if (n == "felt_piano") feltPiano(p);
   else if (n == "organ") organ(p); else if (n == "clav") clav(p); else if (n == "strings") strings(p); else if (n == "warm_pad") warmPad(p); else if (n == "glass_pad") glassPad(p);
   else if (n == "choir") choir(p); else if (n == "bell") bell(p); else if (n == "brass") brass(p);
