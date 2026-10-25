@@ -130,6 +130,7 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     }
 
     // host MIDI, rendered in slices so notes land on the right sample
+    const auto tRender0 = juce::Time::getHighResolutionTicks();
     int pos = 0;
     auto renderTo = [&] (int end)
     {
@@ -191,6 +192,11 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     }
     volNow = target;
     scopeWp.store (wp, std::memory_order_release);
+    {   // engine load: render time against the time this block covers
+        const double sr = sampleRateNow.load();
+        const double used = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - tRender0);
+        if (sr > 0 && n > 0) { const float x = (float) (used / ((double) n / sr)); float o = loadNow.load(); loadNow.store (o + 0.3f * (x - o)); }
+    }
 
     auto bump = [] (std::atomic<float>& a, float v) { float o = a.load(); while (v > o && ! a.compare_exchange_weak (o, v)) {} };
     bump (mPeakL, pl); bump (mPeakR, pr);

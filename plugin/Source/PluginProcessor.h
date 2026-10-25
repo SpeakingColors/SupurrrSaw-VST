@@ -40,6 +40,7 @@ public:
     void setOutputVolume (float v) { volume.store (v); }
     void setMuted (bool m) { muted.store (m); }
     juce::var getInitState();                        // what the page restores at start
+    float engineLoad() const { return loadNow.load(); }   // 0..1, render time against the block time
 
     // ---- meters and scope, read by the editor timer ----
     struct MeterSnap { float l = 0, r = 0, lim = 0, gr[3] {}, dm[3] {}, wet[8] {}; int active = 0, trips = 0; };
@@ -101,6 +102,7 @@ private:
     std::atomic<float> liveBend { 0.f }, livePress { 0.f }, liveSlide { 0.f };   // pitch wheel, pressure and CC74 on the main channel: from MIDI or from the page
 
     std::atomic<double> sampleRateNow { 48000.0 };
+    std::atomic<float> loadNow { 0.f };
     std::atomic<float> mPeakL { 0 }, mPeakR { 0 }, mLim { 0 }, mGr[3], mDm[3], mWet[8];
     std::atomic<int> mActive { 0 }, mTrips { 0 };
 

@@ -105,9 +105,12 @@ SupurrEditor::SupurrEditor (SupurrProcessor& p) : AudioProcessorEditor (&p), pro
             juce::File f = which == "log" ? Diagnostics::folder ("logs") : Diagnostics::folder (safeName (which).isEmpty() ? "exports" : safeName (which));
             f.revealToUser(); done (true);
         })
-        .withNativeFunction ("copyDiagnostics", [] (const juce::Array<juce::var>&, Completion done)
+        .withNativeFunction ("copyDiagnostics", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>&, Completion done)
         {
-            juce::SystemClipboard::copyTextToClipboard (Diagnostics::report());
+            auto text = Diagnostics::report();
+            if (sp != nullptr)   // current settings, so a report says what the instance really plays
+                text << "\nCurrent state:\n" << juce::JSON::toString (sp->proc.getInitState(), true) << "\n";
+            juce::SystemClipboard::copyTextToClipboard (text);
             done (true);
         })
         .withNativeFunction ("releaseFocus", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>&, Completion done)
@@ -190,7 +193,7 @@ void SupurrEditor::timerCallback()
     for (int i = 0; i < 3; ++i) arr.add (m.gr[i]);
     for (int i = 0; i < 3; ++i) arr.add (m.dm[i]);
     arr.add (m.trips);
-    arr.add (0.f); arr.add (0.f);                         // load, voice cap (page defaults)
+    arr.add (proc.engineLoad()); arr.add (0.f);          // measured engine load; voice cap (page default)
     for (int i = 0; i < 4; ++i) arr.add (0.f);           // EQ live (page computes its own here)
     for (int i = 0; i < 8; ++i) arr.add (m.wet[i]);
     web->emitEventIfBrowserIsVisible ("meters", juce::var (arr));
