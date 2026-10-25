@@ -142,6 +142,12 @@ int main(int argc, char** argv) {
       CHECK(pk <= 1.f); std::printf("%-14s master 2, four notes: peak %.3f\n", n, pk);
     }
   }
+  { // layer Tune is a fine tune: +-100 ct at most (bigger steps use Semi and Octave)
+    for (const char* nm : {"organ", "bell", "sandstorm_lead", "trance_lead"}) { Params q; if (!presets::byName(nm, q)) continue; for (int i = 0; i < kLayers; ++i) CHECK(std::fabs(q.layer[i].tune) <= 100.f); }
+  }
+  { // every built-in attack sample exists, is not silent and is normalised
+    auto bk = sampleBank(48000); for (int i = 1; i < kSmpCount; ++i) { float pk = 0; for (float v : bk->d[i]) pk = std::max(pk, std::fabs(v)); CHECK(pk > 0.8f && pk <= 0.95f); }
+  }
   { // polyphony: twelve held notes all sound with the default, and a cap of 4 steals the oldest releasing or oldest voice
     Params q; presets::byName("trance_lead", q);
     for (int cap : {12, 4}) { q.polyphony = cap; Engine e; e.prepare(48000); e.p = q; float L[256], R[256];

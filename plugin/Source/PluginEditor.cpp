@@ -4,7 +4,7 @@
 
 namespace s87 {
 
-static constexpr int kBaseW = 1500, kBaseH = 850;
+static constexpr int kBaseW = 1500, kBaseH = 920;
 
 juce::String SupurrEditor::safeName (const juce::String& s)
 {

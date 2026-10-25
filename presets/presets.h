@@ -125,7 +125,7 @@ inline void organ(Params& p) {
   p = Params();
   p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.6f;
   p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.4f; p.layer[1].octave = 1;
-  p.layer[2].wave = Wave::Sine; p.layer[2].level = 0.3f; p.layer[2].octave = 1; p.layer[2].tune = 702.f;
+  p.layer[2].wave = Wave::Sine; p.layer[2].level = 0.3f; p.layer[2].octave = 1; p.layer[2].semi = 7; p.layer[2].tune = 2.f;
   p.subLevel = 0.35f; p.subWave = Wave::Sine; p.subOctave = -1;
   p.cutoff = 9000.f; p.dist = 0.12f; p.drive = 0.1f; p.lowCutHz = 40.f;
   p.master = 0.26f; p.amp = {0.004f, 0.05f, 1.f, 0.06f}; p.chorusMix = 0.5f; p.chorusRate = 6.f; p.chorusDepth = 0.5f; p.reverbMix = 0.1f; p.spread = 0.5f;
@@ -177,7 +177,7 @@ inline void choir(Params& p) {
 inline void bell(Params& p) {
   p = Params();
   p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.6f; p.layer[0].fmSrc = 2; p.layer[0].fmAmt = 0.3f;
-  p.layer[1].wave = Wave::Sine; p.layer[1].octave = 1; p.layer[1].tune = 702.f; p.layer[1].level = 0.f;
+  p.layer[1].wave = Wave::Sine; p.layer[1].octave = 1; p.layer[1].semi = 7; p.layer[1].tune = 2.f; p.layer[1].level = 0.f;
   p.layer[2].wave = Wave::Sine; p.layer[2].octave = 2; p.layer[2].level = 0.1f;
   p.cutoff = 9000.f; p.envAmt = 0.2f; p.keyTrack = 0.3f; p.fenv = {0.001f, 1.5f, 0.f, 0.5f}; p.lowCutHz = 100.f;
   p.master = 0.9f; p.amp = {0.001f, 3.5f, 0.f, 1.f}; p.reverbMix = 0.25f; p.reverbSize = 0.75f; p.reverbLowCutHz = 300.f;
@@ -308,7 +308,7 @@ inline void sandstormLead(Params& p) {
   p = Params();
   p.mono = true;
   p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.5f;
-  p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.95f; p.layer[1].tune = 3100.f; p.layer[1].level = 0.5f;
+  p.layer[1].wave = Wave::Pulse; p.layer[1].pwm = 0.95f; p.layer[1].octave = 1; p.layer[1].semi = 19; p.layer[1].tune = 0.f; p.layer[1].level = 0.5f;
   p.cutoff = 2510.f; p.reso = 0.4f; p.dist = 0.6f;
   p.amp = {0.001f, 6.f, 0.f, 0.02f}; p.spread = 0.f; p.reverbMix = 0.1f; p.reverbSize = 0.6f; p.master = 0.73f;
 }

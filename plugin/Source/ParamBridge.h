@@ -154,7 +154,7 @@ inline bool setLayerKey(supurr::LayerParams& l, const std::string& k, const juce
     if (k == "pwm")        { l.pwm = asF(v); return true; }
     if (k == "octave")     { l.octave = asI(v); return true; }
     if (k == "semi")       { l.semi = std::max(-24, std::min(24, asI(v))); return true; }
-    if (k == "tune")       { l.tune = asF(v); return true; }
+    if (k == "tune")       { l.tune = std::max(-100.f, std::min(100.f, asF(v))); return true; }
     if (k == "pan")        { l.pan = asF(v); return true; }
     if (k == "on")         { l.on = asB(v); return true; }
     if (k == "sync")       { l.sync = asB(v); return true; }

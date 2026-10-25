@@ -34,9 +34,9 @@ static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "
 static const char* const kMxDstNames[kMxDst] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
 
 // Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
-constexpr int kSmpCount = 20;
-static const char* const kSmpIds[kSmpCount] = {"Off", "click_soft", "click_hard", "click_tok", "kick_punch", "kick_hard", "sub_thump", "snare_crack", "snare_tight", "clap", "rim", "hat_closed", "hat_open", "pluck_soft", "pluck_hard", "pluck_pizz", "pluck_glass", "chime", "zap", "air_puff"};
-inline bool smpKeyed(int i) { return i >= 13 && i <= 17; }   // the plucks and the chime follow the key
+constexpr int kSmpCount = 34;
+static const char* const kSmpIds[kSmpCount] = {"Off", "click_soft", "click_hard", "click_tok", "kick_punch", "kick_hard", "sub_thump", "snare_crack", "snare_tight", "clap", "rim", "hat_closed", "hat_open", "pluck_soft", "pluck_hard", "pluck_pizz", "pluck_glass", "chime", "zap", "air_puff", "piano_hammer", "piano_tick", "kick_click", "kick_beater", "kick_knock", "bow_bite", "bow_chiff", "breath_chiff", "pick_attack", "mallet_tok", "key_thock", "brass_blat", "vinyl_pop", "tine_ping"};
+inline bool smpKeyed(int i) { return (i >= 13 && i <= 17) || i == 21 || i == 26 || i == 28 || i == 33; }   // the plucks and the chime follow the key
 inline int smpFromId(const char* n) { for (int i = 0; i < kSmpCount; ++i) { const char* a = kSmpIds[i]; const char* b = n; while (*a && *a == *b) { ++a; ++b; } if (!*a && !*b) return i; } return 0; }
 
 // A loaded sample (WAV data already decoded). Shared between layers and voices, read only while playing.
@@ -835,6 +835,21 @@ inline std::shared_ptr<const SampleBank> makeSamples(double sr) {
   { Buf a(N(2.4), 0.f); const double f = 523.25, pr[5] = {1, 2.76, 5.4, 8.93, 11.34}, am[5] = {1, 0.55, 0.3, 0.18, 0.1}, dc[5] = {1.4, 0.7, 0.4, 0.25, 0.15}; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; double v = 0; for (int k = 0; k < 5; ++k) v += am[k] * std::sin(TP * f * pr[k] * t) * std::exp(-t / dc[k]); a[i] = (float)v; } fin(17, a); }
   { Buf a(N(0.22), 0.f); double ph = 0; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, f = 160 + 4200 * std::exp(-t / 0.03); ph += f / sr; a[i] = (float)(sgn(std::sin(TP * ph)) * 0.6 * std::exp(-t / 0.07) + std::sin(TP * ph) * 0.4 * std::exp(-t / 0.07)); } fin(18, a); }
   { Buf a(N(0.5), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(rnd() * std::pow(std::sin(kPiD * std::min(1.0, t / 0.5)), 1.5) * std::exp(-t / 0.3)); } fin(19, bpn(a, 500, 6500)); }
+  auto saw = [](double f, double t) { return 2.0 * std::fmod(f * t, 1.0) - 1.0; };
+  { Buf a(N(0.05), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)(r * 0.5 * std::exp(-t / 0.004) + std::sin(TP * 180 * t) * std::exp(-t / 0.012)); } fin(20, lpn(a, 0.35)); }
+  { Buf a = ks(0.15, 523.25, 0.3, 1.0); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(a[i] * std::exp(-(double)i / sr / 0.03)); fin(21, a); }
+  { Buf a(N(0.006), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)((r * 0.5 + std::sin(TP * 3200 * t)) * std::exp(-t / 0.0005)); } fin(22, hpn(a, 0.2)); }
+  fin(23, sweep(0.03, 1800, 300, 0.006, 0.012, 1.5));
+  fin(24, sweep(0.08, 900, 120, 0.012, 0.04, 2));
+  { Buf a(N(0.09), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, env = (1 - std::exp(-t / 0.004)) * std::exp(-t / 0.035); const double r = rnd(); a[i] = (float)((saw(440, t) * 0.6 + r * 0.7) * env); } fin(25, bpn(a, 1500, 7000)); }
+  { Buf a(N(0.14), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, env = (1 - std::exp(-t / 0.01)) * std::exp(-t / 0.06); const double r = rnd(); a[i] = (float)((std::sin(TP * 261.63 * t) * 0.5 + std::sin(TP * 523.25 * t) * 0.35 + std::sin(TP * 785 * t) * 0.25 + r * 0.5) * env); } fin(26, a); }
+  { Buf a(N(0.15), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, env = (1 - std::exp(-t / 0.006)) * std::exp(-t / 0.05); const double r = rnd(); a[i] = (float)(r * env); } fin(27, bpn(a, 2500, 7000)); }
+  { Buf a = ks(0.06, 261.63, 0.4, 1.0); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(a[i] * std::exp(-(double)i / sr / 0.02)); fin(28, a); }
+  { Buf a(N(0.04), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)((std::sin(TP * 900 * t) * 0.8 + std::sin(TP * 2400 * t) * 0.5 + r * 0.15) * std::exp(-t / 0.006)); } fin(29, a); }
+  { Buf a(N(0.06), 0.f); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.006)); lpn(a, 0.12); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(a[i] + std::sin(TP * 110 * t) * std::exp(-t / 0.02) * 0.8); } fin(30, a); }
+  { Buf a(N(0.12), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, env = (1 - std::exp(-t / 0.01)) * std::exp(-t / 0.04); const double r = rnd(); a[i] = (float)((saw(233, t) * 0.5 + r * 0.6) * env); } fin(31, bpn(a, 500, 5000)); }
+  { Buf a(N(0.03), 0.f); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.002)); fin(32, lpn(a, 0.4)); }
+  { Buf a(N(0.2), 0.f); const double f = 1046.5; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(std::sin(TP * f * t) * std::exp(-t / 0.03) + 0.5 * std::sin(TP * f * 5.4 * t) * std::exp(-t / 0.008)); } fin(33, a); }
   return bank;
 }
 inline std::shared_ptr<const SampleBank> sampleBank(double sr) {   // one bank per sample rate, shared by all engines
