@@ -218,6 +218,7 @@ struct Params {
   float sqzAmt = 0.f;          // 0..1 gentle one-band squeeze (0 = off)
   // output stage: master is a clean linear gain; a soft limiter and a smooth knee clipper keep peaks under 0 dBFS without harshness
   float master = 1.f;
+  float polyNorm = 1.f;        // chord compensation: 0 off, 1 full (gain 1/sqrt(held notes))
   float clipKnee = 0.72f;      // level where the soft clipper starts to bend (linear below it)
   int polyphony = 12;          // voices available (1..kMaxVoices); oldest releasing voice is stolen first
   bool limiter = true;         // slow, smooth peak limiter in front of the clipper
@@ -908,6 +909,11 @@ class Engine {
     mxn = 0; for (int a = 0; a < kMxSrc; ++a) for (int b = 0; b < kMxDst; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
     for (int vi = 0; vi < kMaxVoices; ++vi) if (voices[vi].active) renderVoice(voices[vi], vi, outL, outR, n);
     mtr.active = activeVoices();
+    { // poly normalise: a chord of N held notes is about sqrt(N) louder than one note, so take that off (single notes keep their level)
+      double ne = 0; for (auto& v : voices) if (v.active) ne += v.amp.stage == 3 ? 0.0 : 1.0;
+      ne /= std::max(1, std::min(4, p.stackCount));
+      const double tg = ne > 1.0 ? std::pow(ne, -0.5 * p.polyNorm) : 1.0, g0 = pnG; const double g1 = tg < g0 ? g0 + (tg - g0) * 0.6 : g0 + (tg - g0) * 0.04; pnG = g1;
+      if (std::fabs(g1 - 1.0) > 1e-4 || std::fabs(g0 - 1.0) > 1e-4) for (int i = 0; i < n; ++i) { const double g = g0 + (g1 - g0) * (i + 1) / n; outL[i] = (float)(outL[i] * g); outR[i] = (float)(outR[i] * g); subBusL[i] *= g; subBusR[i] *= g; } }
     globals();
     { // effective voice hi pass (series: the highest, parallel: the lowest branch) -> half of it again after DYN
       const bool on2 = p.f2Mode != FilterMode::Off, on3 = p.f3Mode != FilterMode::Off; const double h2 = on2 ? p.f2LowCut : 0., h3 = on3 ? p.f3LowCut : 0.;
@@ -962,6 +968,7 @@ class Engine {
   int trips = 0;   // how many times the safety guard reset the engine
   Meters mtr; Params pe;   // pe: the settings the effects really use this block (p plus global modulation and the Build macro)
   std::shared_ptr<const SampleBank> bank; std::vector<float> combPool;
+  double pnG = 1.0;
   std::vector<double> subBusL, subBusR; double* sbL = nullptr; double* sbR = nullptr;
   double bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05, limRel = 0.0002;
   int mxs[kMxSrc * kMxDst], mxd[kMxSrc * kMxDst], mxn = 0; double mxv[kMxSrc * kMxDst]; double mgS[kMxDst] = {};

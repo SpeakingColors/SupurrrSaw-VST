@@ -148,6 +148,14 @@ int main(int argc, char** argv) {
   { // every built-in attack sample exists, is not silent and is normalised
     auto bk = sampleBank(48000); for (int i = 1; i < kSmpCount; ++i) { float pk = 0; for (float v : bk->d[i]) pk = std::max(pk, std::fabs(v)); CHECK(pk > 0.8f && pk <= 0.95f); }
   }
+  { // chord compensation: a single note keeps its level, a five note chord comes out much closer to it than without
+    double pkv[2][2];
+    for (int c = 0; c < 2; ++c) for (int k = 0; k < 2; ++k) { Params q; presets::byName("piano", q); q.master = 0.5f; q.limiter = false; q.polyNorm = c ? 1.f : 0.f; Engine e; e.prepare(48000); e.p = q; float L[256], R[256], pk = 0;
+      if (k) for (int n : {43, 55, 66, 71, 74}) e.noteOn(n, 0.9f); else e.noteOn(60, 0.9f);
+      for (int b = 0; b < 120; ++b) { e.render(L, R, 256); for (int i = 0; i < 256; ++i) pk = std::max(pk, std::max(std::fabs(L[i]), std::fabs(R[i]))); } pkv[c][k] = pk; }
+    std::printf("chord comp: single %.3f / %.3f, chord %.3f / %.3f (off / on)\n", pkv[0][0], pkv[1][0], pkv[0][1], pkv[1][1]);
+    CHECK(std::fabs(pkv[1][0] - pkv[0][0]) < 0.01); CHECK(pkv[1][1] < pkv[0][1] * 0.8);
+  }
   { // polyphony: twelve held notes all sound with the default, and a cap of 4 steals the oldest releasing or oldest voice
     Params q; presets::byName("trance_lead", q);
     for (int cap : {12, 4}) { q.polyphony = cap; Engine e; e.prepare(48000); e.p = q; float L[256], R[256];
