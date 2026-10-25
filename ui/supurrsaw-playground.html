@@ -139,6 +139,7 @@ canvas{display:block;max-width:100%}
 .stage .brand{font-size:19px}.stage .brand svg{width:32px;height:32px}.stage .brand small{font-size:9px;letter-spacing:2.4px}
 .stage .btn{font-size:13px;padding:5px 12px}.stage .btn.sm{font-size:12px;padding:3px 9px}
 .stage #preset{min-width:0;width:190px;font-size:13px;padding:4px 6px}
+.stage #preset{flex:0 0 auto}.stage #meter{min-width:110px;flex:0 0 112px}.plug #power{display:none}.plug .stage header.top,.plug header.top{gap:3px}   /* in the plugin the engine starts by itself; the header needs the room for the meter and the preset name */
 .stage .pages{margin:0;flex-wrap:nowrap;gap:6px}
 .stage .pages button{flex:0 0 auto;padding:6px 8px;font-size:13px;letter-spacing:1px;border-radius:10px}.stage .pbtn{min-width:96px;max-width:118px;padding:5px 7px}.stage #power{padding:5px 9px;font-size:12px}.stage #favB{padding:3px 6px}.stage .hbtns{margin-left:0}.stage .topk{gap:0}.stage .topk .knob{width:47px}.stage .lamps2 .lamp{font-size:9px;letter-spacing:.5px;padding:2px 5px}.stage .btn.ic{padding:3px 5px}
 .stage .page{flex:1 1 0;min-height:0}
@@ -3169,8 +3170,31 @@ async function renamePreset(){
   const r=await ask({title:saved?"Rename preset":"Rename and save a copy",msg:saved?"New name for this saved preset.":"Factory presets can't be renamed. Your copy is saved under the new name.",input:CURNAME,buttons:[{t:"Rename",k:"on",def:1},{t:"Cancel"}]});
   if(r.b==="Rename"&&r.v&&r.v.trim()&&r.v.trim()!==CURNAME)await saveChecked(r.v,"",oldSlug);
 }
+
+/* The plugin's web view does not reliably open a native select list, so the preset name opens this own list (same entries as the select, with a search box). */
+function presetMenu(){
+  const old=document.getElementById("pmenu");if(old){old.remove();return;}
+  const s=$("#preset"),r=$("#pbtn").getBoundingClientRect(),m=document.createElement("div");m.id="pmenu";
+  m.style.cssText="position:fixed;z-index:99999;left:"+Math.max(4,r.left)+"px;top:"+(r.bottom+6)+"px;width:300px;max-height:"+Math.max(200,innerHeight-r.bottom-20)+"px;display:flex;flex-direction:column;background:var(--panel,#1B0264);border:1px solid var(--line,#774BF9);border-radius:12px;box-shadow:0 8px 28px #000a;overflow:hidden";
+  const q=document.createElement("input");q.type="text";q.placeholder="Search presets";q.style.cssText="margin:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--line,#774BF9);background:#0c0919;color:#fff;font:13px inherit";
+  const l=document.createElement("div");l.style.cssText="overflow-y:auto;padding:0 6px 6px;flex:1";
+  const close=()=>{m.remove();document.removeEventListener("pointerdown",away,true);};
+  const away=e=>{if(!m.contains(e.target)&&!$("#pbtn").contains(e.target))close();};
+  const fill=()=>{l.textContent="";const f=q.value.trim().toLowerCase();let cur=null;
+    [...s.children].forEach(g=>{const opts=g.tagName==="OPTGROUP"?[...g.children]:[g];let h=null;
+      opts.forEach(o=>{if(f&&!(o.textContent.toLowerCase().includes(f)))return;
+        if(g.tagName==="OPTGROUP"&&!h){h=document.createElement("div");h.textContent=g.label;h.style.cssText="margin:8px 4px 2px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9d92cf";l.appendChild(h);}
+        const it=document.createElement("div");it.textContent=o.textContent;it.dataset.v=o.value;
+        it.style.cssText="padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"+(o.value===CURBASEKEY?";background:#4F10FD":"");
+        it.onpointerenter=()=>{if(o.value!==CURBASEKEY)it.style.background="#3308AF";};it.onpointerleave=()=>{it.style.background=o.value===CURBASEKEY?"#4F10FD":"";};
+        it.onclick=()=>{close();s.value=o.value;loadPreset(o.value);};l.appendChild(it);if(o.value===CURBASEKEY)cur=it;});});
+    return cur;};
+  q.oninput=fill;q.onkeydown=e=>{if(e.key==="Escape")close();else if(e.key==="Enter"){const f=l.querySelector("[data-v]");if(f)f.click();}};
+  m.append(q,l);document.body.appendChild(m);const cur=fill();if(cur)l.scrollTop=Math.max(0,cur.offsetTop-80);
+  document.addEventListener("pointerdown",away,true);q.focus();
+}
 {let t=null;const b=$("#pbtn");
- b.addEventListener("click",()=>{clearTimeout(t);t=setTimeout(()=>{const s=$("#preset");try{s.showPicker();}catch(e){s.style.pointerEvents="auto";s.focus();}},260);});
+ b.addEventListener("click",()=>{clearTimeout(t);t=setTimeout(()=>{if(window.__SUPURR_PLUGIN){presetMenu();return;}const s=$("#preset");try{s.showPicker();}catch(e){s.style.pointerEvents="auto";s.focus();}},260);});
  b.addEventListener("dblclick",()=>{clearTimeout(t);renamePreset();});
  $("#preset").addEventListener("blur",()=>{$("#preset").style.pointerEvents="none";});}
 
