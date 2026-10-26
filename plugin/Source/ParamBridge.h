@@ -88,6 +88,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_FR(lfo3Rate, 0.05f, 30.f); S87_IR(lfo3Shape, 0, 6); S87_FR(lfo3Depth, 0.f, 1.f); S87_FR(lfo3Fade, 0.f, 5.f); S87_FR(lfo3Start, 0.f, 1.f);
         S87_F(menv2Time); S87_B(menv2Inv); S87_B(menv2Loop); S87_F(menv3Time); S87_B(menv3Inv); S87_B(menv3Loop); S87_B(menvSync); S87_B(menv2Sync); S87_B(menv3Sync); S87_IR(menvDiv, 0, 15); S87_IR(menv2Div, 0, 15); S87_IR(menv3Div, 0, 15);
         S87_FR(nzSmpPitch, -24.f, 24.f); S87_FR(nzSmpVol, 0.f, 1.5f); S87_B(smpPost);
+        S87_IR(nzSmpKey, 0, 2);
         S87_FR(eq2Dyn, -18.f, 18.f); S87_FR(eq2Thr, -60.f, 0.f); S87_FR(eq2Atk, 0.5f, 100.f); S87_FR(eq2Rel, 10.f, 1000.f); S87_B(eq2Below); S87_FR(eq2Sat, 0.f, 1.f); S87_IR(eq2SatT, 0, 7);
         S87_FR(eq3Dyn, -18.f, 18.f); S87_FR(eq3Thr, -60.f, 0.f); S87_FR(eq3Atk, 0.5f, 100.f); S87_FR(eq3Rel, 10.f, 1000.f); S87_B(eq3Below); S87_FR(eq3Sat, 0.f, 1.f); S87_IR(eq3SatT, 0, 7);
         S87_FR(eq4Dyn, -18.f, 18.f); S87_FR(eq4Thr, -60.f, 0.f); S87_FR(eq4Atk, 0.5f, 100.f); S87_FR(eq4Rel, 10.f, 1000.f); S87_B(eq4Below); S87_FR(eq4Sat, 0.f, 1.f); S87_IR(eq4SatT, 0, 7);
@@ -172,6 +173,7 @@ inline bool setLayerKey(supurr::LayerParams& l, const std::string& k, const juce
     if (k == "smp")        { l.smp = smpFrom(v.toString()); return true; }
     if (k == "smpPitch")   { l.smpPitch = asFR(v, -24.f, 24.f); return true; }
     if (k == "smpVol")     { l.smpVol = asFR(v, 0.f, 1.5f); return true; }
+    if (k == "smpKey")     { l.smpKey = asIR(v, 0, 2); return true; }
     if (k == "dest")       { l.dest = std::max(0, std::min(4, asI(v))); return true; }
     if (k == "ampSel")     { l.ampSel = std::max(0, std::min(3, asI(v))); return true; }
     if (k == "cycle")      return true;   // handled through the "cyc" message

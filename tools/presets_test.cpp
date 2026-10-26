@@ -536,6 +536,20 @@ int main(int argc, char** argv) {
       KitEngine k; k.build(defs, 48000, 128); std::vector<float> l(1000), r(1000); k.noteOn(36, 0.9f); k.render(l.data(), r.data(), 1000, main.master, main.clipKnee); double e = 0; for (float x : l) e += (double)x * x; CHECK(e > 1e-3); }
     std::printf("drum kit: pads, choke, layers and long blocks work\n");
   }
+  { // sample key track: Keys shortens a click an octave up, Auto and One pitch leave it alone
+    auto clickLen = [](int smpKey, int note) {
+      Params p; p.layer[0].wave = Wave::Off; p.layer[0].smp = smpFromId("click_soft"); p.layer[0].smpVol = 1.f; p.layer[0].smpKey = smpKey;
+      p.subLevel = 0; p.noiseLevel = 0; p.master = 1.f; p.limiter = false; p.chorusMix = 0; p.delayMix = 0; p.reverbMix = 0; p.dmMix = 0; p.dist = 0;
+      Engine e; e.prepare(48000); e.p = p; e.noteOn(note, 0.9f);
+      std::vector<float> l(512), r(512); long last = 0, t = 0;
+      for (int b = 0; b < 40; ++b) { e.render(l.data(), r.data(), 512); for (int i = 0; i < 512; ++i) { if (std::fabs(l[i]) > 5e-4f) last = t; ++t; } }
+      return last; };
+    const long a60 = clickLen(0, 60), a72 = clickLen(0, 72), f60 = clickLen(1, 60), f72 = clickLen(1, 72), x72 = clickLen(2, 72);
+    CHECK(a60 > 100); CHECK(a72 == a60);                      // Auto: a click stays at one pitch
+    CHECK(f60 == a60); CHECK(f72 < f60 * 0.95);               // Keys: the octave up plays it faster, so shorter
+    CHECK(x72 == a60);                                        // One pitch: never follows
+    std::printf("sample key track: Auto %ld, Keys 60/72 %ld/%ld, One pitch %ld\n", a60, f60, f72, x72);
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }

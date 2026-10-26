@@ -147,6 +147,7 @@ struct LayerParams {
   float amAmt = 0.f;           // 0..1; 1 is ring modulation, lower keeps some of the carrier
   int smp = 0;                 // built-in sample played with this layer (index into kSmpIds, 0 = off), pitch in semitones, volume
   float smpPitch = 0.f, smpVol = 1.f;
+  int smpKey = 0;              // sample pitch: 0 auto (per sample), 1 follows the keys, 2 one pitch
   int dest = 0;                // where this layer goes: 0 = through the filter chain, 1..3 = only filter 1, 2 or 3, 4 = past all filters
   int ampSel = 0;              // which amp envelope shapes this layer when the envelopes are not linked: 0 = its own (layer 1 -> amp, 2 -> amp 2, 3 -> amp 3), 1..3 = amp, amp 2 or amp 3
   std::shared_ptr<const Sample> sample;
@@ -259,7 +260,7 @@ struct Params {
   // LFO 2 and 3: rate, shape (0 sine, 1 tri, 2 square, 3 saw, 4 random square, 5 random round, 6 ramp down), depth, fade-in and start phase. They feed the mod matrix only.
   float lfo2Rate = 6.f, lfo3Rate = 6.f, lfo2Depth = 1.f, lfo3Depth = 1.f, lfo2Fade = 0.f, lfo3Fade = 0.f, lfo2Start = 0.f, lfo3Start = 0.f; int lfo2Shape = 0, lfo3Shape = 0;
   // procedural sample on the noise section, and where the samples are mixed in (false: before the filters, true: after them)
-  int nzSmp = 0; float nzSmpPitch = 0.f, nzSmpVol = 1.f; bool smpPost = false;
+  int nzSmp = 0; float nzSmpPitch = 0.f, nzSmpVol = 1.f; int nzSmpKey = 0; bool smpPost = false;
   // build-up macro (0..1): high pass up to about 2.5 kHz, more reverb and delay, harder clipper, narrower highs, a little quieter
   float build = 0.f;
   // mod effect in the chorus slot: 0 chorus, 1 flanger, 2 phaser (chorusMix is the amount); chorusFb is the feedback of the flanger and phaser
@@ -1125,7 +1126,7 @@ class Engine {
         const LayerParams& lp = p.layer[ly]; const int asel = lp.ampSel == 0 ? ly : std::max(0, std::min(2, lp.ampSel - 1)), dlt = std::max(0, std::min(4, lp.dest)); const double le = link ? 1.0 : (asel == 0 ? ampE : (asel == 1 ? aE2 : aE3));
         if (ctl) { const double pg = (std::min(1.0, std::max(-1.0, lp.pan + p.lfoPan * lfo + md[6])) + 1.0) * kPiD * 0.25; v.pcC[ly] = std::cos(pg) * 1.414; v.psC[ly] = std::sin(pg) * 1.414; }
         if (lp.smp != 0 && bank) { const std::vector<float>& d = bank->d[lp.smp]; if (!d.empty()) {
-          if (ctl) v.sq[ly] = std::pow(2.0, (lp.smpPitch + (smpKeyed(lp.smp) ? v.note - 60 + v.gl : 0.0)) / 12.0);
+          if (ctl) v.sq[ly] = std::pow(2.0, (lp.smpPitch + (lp.smpKey == 1 || (lp.smpKey != 2 && smpKeyed(lp.smp)) ? v.note - 60 + v.gl : 0.0)) / 12.0);
           const double pos = v.sp[ly]; const int i0 = (int)pos;
           if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; if (dlt != 0 && !post) { v.bL[dlt] += sm * v.pcC[ly]; v.bR[dlt] += sm * v.psC[ly]; } else { smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } } }
         if (!lp.on || lp.wave == Wave::Off || (lp.level <= 0.f && !usedAsSrc[ly])) { v.lyOut[ly] = 0.0; continue; }
@@ -1231,7 +1232,7 @@ class Engine {
         }
       }
       if (p.nzSmp != 0 && bank) { const std::vector<float>& d = bank->d[p.nzSmp]; if (!d.empty()) {
-        if (ctl) v.sq[3] = std::pow(2.0, (p.nzSmpPitch + (smpKeyed(p.nzSmp) ? v.note - 60 + v.gl : 0.0)) / 12.0);
+        if (ctl) v.sq[3] = std::pow(2.0, (p.nzSmpPitch + (p.nzSmpKey == 1 || (p.nzSmpKey != 2 && smpKeyed(p.nzSmp)) ? v.note - 60 + v.gl : 0.0)) / 12.0);
         const double pos = v.sp[3]; const int i0 = (int)pos;
         if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * p.nzSmpVol * en; v.sp[3] = pos + v.sq[3]; smL += sm; smR += sm; } } }
       if (!post) { L += smL; R += smR; }
