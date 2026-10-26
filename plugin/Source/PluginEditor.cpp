@@ -108,8 +108,11 @@ SupurrEditor::SupurrEditor (SupurrProcessor& p) : AudioProcessorEditor (&p), pro
         .withNativeFunction ("copyDiagnostics", [sp = juce::Component::SafePointer<SupurrEditor> (this)] (const juce::Array<juce::var>&, Completion done)
         {
             auto text = Diagnostics::report();
-            if (sp != nullptr)   // current settings, so a report says what the instance really plays
+            if (sp != nullptr)   // current settings and host inputs, so a report says what the instance really plays
+            {
                 text << "\nCurrent state:\n" << juce::JSON::toString (sp->proc.getInitState(), true) << "\n";
+                text << "\n" << sp->proc.midiLogText();
+            }
             juce::SystemClipboard::copyTextToClipboard (text);
             done (true);
         })

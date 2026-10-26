@@ -147,6 +147,17 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         renderTo (juce::jlimit (0, n, meta.samplePosition));
         if (isMuted) continue;
         const int ch = juce::jlimit (0, 15, msg.getChannel() - 1);
+        {   // diagnostics: remember the event (type 1 on, 2 off, 3 bend, 4 pressure, 5 cc, 6 aftertouch, 0 other)
+            MidiEv ev { juce::Time::currentTimeMillis(), 0, ch, 0, 0 };
+            if (msg.isNoteOn()) { ev.type = 1; ev.a = msg.getNoteNumber(); ev.b = msg.getVelocity(); }
+            else if (msg.isNoteOff()) { ev.type = 2; ev.a = msg.getNoteNumber(); }
+            else if (msg.isPitchWheel()) { ev.type = 3; ev.a = msg.getPitchWheelValue(); }
+            else if (msg.isChannelPressure()) { ev.type = 4; ev.a = msg.getChannelPressureValue(); }
+            else if (msg.isController()) { ev.type = 5; ev.a = msg.getControllerNumber(); ev.b = msg.getControllerValue(); }
+            else if (msg.isAftertouch()) { ev.type = 6; ev.a = msg.getNoteNumber(); ev.b = msg.getAfterTouchValue(); }
+            midiLog[midiWp.load (std::memory_order_relaxed) & 63] = ev;
+            midiWp.store (midiWp.load (std::memory_order_relaxed) + 1, std::memory_order_release);
+        }
         const bool member = engine.p.mpe && ch > 0;   // MPE: channels 2 to 16 belong to single notes, channel 1 is the main channel
         if (msg.isNoteOn()) noteOnAny (msg.getNoteNumber(), msg.getFloatVelocity(), engine.p.mpe ? ch : 0);
         else if (msg.isNoteOff()) noteOffAny (msg.getNoteNumber(), engine.p.mpe ? ch : -1);
@@ -372,6 +383,31 @@ void SupurrProcessor::setUiState (const juce::var& ui)
 {
     const juce::ScopedLock sl (stateLock);
     uiJson = ui;
+}
+
+juce::String SupurrProcessor::midiLogText() const
+{
+    static const char* names[] = { "other", "note on", "note off", "bend", "pressure", "CC", "poly AT" };
+    const int wp = midiWp.load (std::memory_order_acquire);
+    juce::String out;
+    out << "Live inputs: bend " << liveBend.load() << ", wheel (CC1) " << (wheelSeen ? juce::String (wheelCC) : juce::String ("never sent"))
+        << ", pressure " << livePress.load() << ", slide (CC74) " << liveSlide.load()
+        << ", sample rate " << sampleRateNow.load() << ", engine load " << loadNow.load() << "\n";
+    out << "Last MIDI from the host (newest last):\n";
+    for (int i = juce::jmax (0, wp - 64); i < wp; ++i)
+    {
+        const auto& e = midiLog[i & 63];
+        out << "  " << juce::Time (e.ms).toString (false, true, true, true) << "  ch " << (e.ch + 1) << "  " << names[e.type];
+        if (e.type == 1) out << " " << e.a << " vel " << e.b;
+        else if (e.type == 2) out << " " << e.a;
+        else if (e.type == 3) out << " " << (e.a - 8192);
+        else if (e.type == 4) out << " " << e.a;
+        else if (e.type == 5) out << " " << e.a << " = " << e.b;
+        else if (e.type == 6) out << " note " << e.a << " = " << e.b;
+        out << "\n";
+    }
+    if (wp == 0) out << "  none yet\n";
+    return out;
 }
 
 juce::var SupurrProcessor::getInitState()
