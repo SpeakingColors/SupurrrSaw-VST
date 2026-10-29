@@ -551,9 +551,9 @@ int main(int argc, char** argv) {
     std::printf("sample key track: Auto %ld, Keys 60/72 %ld/%ld, One pitch %ld\n", a60, f60, f72, x72);
   }
   { // free mod slots: every listed knob moves with its source, restores when the slot is off, and stays finite
-    CHECK(kFreeDst == 45 && kFreeN == 8);
+    CHECK(kFreeNFx == 45 && kFreeDst == 73 && kFreeN == 8);
     int moved = 0;
-    for (int d = 1; d <= kFreeDst; ++d) {
+    for (int d = 1; d <= kFreeNFx; ++d) {
       auto run = [&](float amt) {
         Params p; p.fsSrc[0] = 7; p.fsDst[0] = d; p.fsAmt[0] = amt; p.limiter = false;   // 7 = velocity, a steady 0.9 for this note
         Engine e; e.prepare(48000); e.p = p; e.noteOn(60, 0.9f);
@@ -565,8 +565,32 @@ int main(int argc, char** argv) {
       CHECK(up >= kFreeDstTab[d - 1].lo - 1e-4f && up <= kFreeDstTab[d - 1].hi + 1e-4f && dn >= kFreeDstTab[d - 1].lo - 1e-4f && dn <= kFreeDstTab[d - 1].hi + 1e-4f);
       if (std::fabs(up - base) > 1e-4f || std::fabs(dn - base) > 1e-4f) ++moved; else std::printf("free slot %s did not move\n", kFreeDstNames[d - 1]);
     }
-    CHECK(moved == kFreeDst);
-    std::printf("free mod slots: %d of %d knobs move\n", moved, (int)kFreeDst);
+    CHECK(moved == kFreeNFx);
+    std::printf("free mod slots: %d of %d effect knobs move\n", moved, (int)kFreeNFx);
+  }
+  { // voice slots: every voice knob changes the sound of the voice, and the base value is back after the block
+    auto patch = [](Params& p) {
+      for (int l = 0; l < 3; ++l) { p.layer[l].wave = Wave::SuperSquare; p.layer[l].voices = 5; p.layer[l].level = 0.5f; p.layer[l].detune = 0.4f; p.layer[l].fmSrc = (l + 1) % 3 + 1; p.layer[l].fmAmt = 0.3f; p.layer[l].amSrc = (l + 2) % 3 + 1; p.layer[l].amAmt = 0.3f; p.layer[l].pwm = 0.5f; }
+      p.f2Mode = FilterMode::LP24; p.f3Mode = FilterMode::LP24; p.f2Env = 0.5f; p.f3Env = 0.5f; p.f2Res = 0.4f; p.f3Res = 0.4f; p.f2Drv = 0.5f; p.f3Drv = 0.5f; p.cutoff = 4000.f;
+      p.subLevel = 0.5f; p.subVoices = 3; p.subDetune = 0.3f; p.subWidth = 0.5f; p.noiseLevel = 0.4f; p.noiseVoices = 3; p.noiseDetune = 0.4f; p.noiseWidth = 0.5f; p.noiseHpHz = 800.f;
+      p.dist = 0.3f; p.drift = 0.5f; p.spread = 0.5f; p.limiter = false; p.chorusMix = 0; p.delayMix = 0; p.reverbMix = 0; p.dmMix = 0;
+      p.mx[0][0] = 0.15f; p.mx[9][0] = 0.3f; p.mx[10][0] = 0.15f; p.mx[1][1] = 0.2f; p.lfoRate = 6.f; p.lfoDepth = 0.8f; p.lfo2Depth = 0.8f; p.lfo3Depth = 0.8f; };
+    int moved = 0;
+    for (int d = kFreeNFx + 1; d <= kFreeDst; ++d) {
+      auto run = [&](float amt, float* baseOut) {
+        Params p; patch(p); p.fsSrc[0] = 7; p.fsDst[0] = d; p.fsAmt[0] = amt;   // 7 = velocity
+        const FreeDst& fd = kFreeDstTab[d - 1]; const float base = fd.layer >= 0 ? p.layer[fd.layer].*(fd.lm) : p.*(fd.m); if (baseOut) *baseOut = base;
+        Engine e; e.prepare(48000); e.p = p; e.noteOn(60, 0.9f);
+        std::vector<float> l(256), r(256); double sum = 0; bool fin = true;
+        for (int b = 0; b < 30; ++b) { e.render(l.data(), r.data(), 256); for (int i = 0; i < 256; ++i) { if (!std::isfinite(l[i]) || !std::isfinite(r[i])) fin = false; sum += (double)l[i] * l[i] + (double)r[i] * r[i]; } }
+        CHECK(fin); const float after = fd.layer >= 0 ? e.p.layer[fd.layer].*(fd.lm) : e.p.*(fd.m); CHECK(after == base);   // restored
+        return sum; };
+      float base = 0; const double off = run(0.f, &base), up = run(0.4f, nullptr), dn = run(-0.4f, nullptr);
+      const double rel = std::max(std::fabs(up - off), std::fabs(dn - off)) / (off + 1e-9);
+      if (rel > 1e-4) ++moved; else std::printf("voice slot %s did not change the sound (%.2e)\n", kFreeDstNames[d - 1], rel);
+    }
+    CHECK(moved == kFreeDst - kFreeNFx);
+    std::printf("voice slots: %d of %d voice knobs change the sound\n", moved, (int)(kFreeDst - kFreeNFx));
   }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;

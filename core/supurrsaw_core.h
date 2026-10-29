@@ -32,8 +32,8 @@ inline FilterMode filterModeFromName(const char* n) { for (int i = 0; i < kFilte
 constexpr int kMxSrc = 18, kMxDst = 23;
 static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"};
 static const char* const kMxDstNames[kMxDst] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
-constexpr int kFreeN = 8, kFreeDst = 45;   // free mod slots: one source to any knob in the list below, amount 1 = the whole knob range
-static const char* const kFreeDstNames[kFreeDst] = {"master","dmMix","dmDrive","dmClip","dmLow","dmMid","dmHigh","widMid","widHi","msMid","msSide","optoAmt","optoRel","optoGain","crushMix","crushBits","crushRate","drvDrive","drvXs","drvFuzz","drvMix","ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime","chorusMix","chorusDepth","chorusRate","chorusWidth","chorusFb","sqzAmt","sqzAtk","sqzRel","sqzMakeup","delayMix","delayFb","delayDamp","delayPing","reverbMix","reverbWidth","reverbLowCutHz","reverbDamp","dynMix"};
+constexpr int kFreeN = 8, kFreeNFx = 45, kFreeDst = 73;   // free mod slots: one source to any knob in the list below, amount 1 = the whole knob range
+static const char* const kFreeDstNames[kFreeDst] = {"master","dmMix","dmDrive","dmClip","dmLow","dmMid","dmHigh","widMid","widHi","msMid","msSide","optoAmt","optoRel","optoGain","crushMix","crushBits","crushRate","drvDrive","drvXs","drvFuzz","drvMix","ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime","chorusMix","chorusDepth","chorusRate","chorusWidth","chorusFb","sqzAmt","sqzAtk","sqzRel","sqzMakeup","delayMix","delayFb","delayDamp","delayPing","reverbMix","reverbWidth","reverbLowCutHz","reverbDamp","dynMix","f2Res","f2Drv","f3Res","f3Drv","f2Env","f3Env","dist","lfoRate","lfoDepth","lfo2Rate","lfo2Depth","lfo3Rate","lfo3Depth","spread","subDetune","subWidth","noiseDetune","noiseWidth","noiseHpHz","L0_level","L0_fmAmt","L0_amAmt","L1_level","L1_fmAmt","L1_amAmt","L2_level","L2_fmAmt","L2_amAmt"};
 
 // Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
 constexpr int kSmpCount = 34;
@@ -285,7 +285,7 @@ struct Params {
   Params() { for (int i = 0; i < 64; ++i) menv[i] = menv2[i] = menv3[i] = (float)std::exp(-4.0 * i / 63.0); }
 };
 
-struct FreeDst { float Params::* m; float lo, hi; int lg; };
+struct FreeDst { float Params::* m; float lo, hi; int lg; float LayerParams::* lm = nullptr; int layer = -1; };   // layer >= 0: the knob is that layer's member lm
 static const FreeDst kFreeDstTab[kFreeDst] = {
   {&Params::master, 0, 2, 0},
   {&Params::dmMix, 0, 1, 0},
@@ -331,7 +331,36 @@ static const FreeDst kFreeDstTab[kFreeDst] = {
   {&Params::reverbWidth, 0, 1, 0},
   {&Params::reverbLowCutHz, 20, 800, 1},
   {&Params::reverbDamp, 0, 0.9, 0},
-  {&Params::dynMix, 0, 1, 0}};
+  {&Params::dynMix, 0, 1, 0},
+  {&Params::f2Res, 0, 1, 0},
+  {&Params::f2Drv, 0, 1.5, 0},
+  {&Params::f3Res, 0, 1, 0},
+  {&Params::f3Drv, 0, 1.5, 0},
+  {&Params::f2Env, -1, 1, 0},
+  {&Params::f3Env, -1, 1, 0},
+  {&Params::dist, 0, 1, 0},
+  {&Params::lfoRate, 0.05, 30, 1},
+  {&Params::lfoDepth, 0, 1, 0},
+  {&Params::lfo2Rate, 0.05, 30, 1},
+  {&Params::lfo2Depth, 0, 1, 0},
+  {&Params::lfo3Rate, 0.05, 30, 1},
+  {&Params::lfo3Depth, 0, 1, 0},
+  {&Params::spread, 0, 1, 0},
+  {&Params::subDetune, 0, 1, 0},
+  {&Params::subWidth, 0, 1, 0},
+  {&Params::noiseDetune, 0, 1, 0},
+  {&Params::noiseWidth, 0, 1, 0},
+  {&Params::noiseHpHz, 100, 12000, 1},
+  {nullptr, 0, 1, 0, &LayerParams::level, 0},
+  {nullptr, 0, 1, 0, &LayerParams::fmAmt, 0},
+  {nullptr, 0, 1, 0, &LayerParams::amAmt, 0},
+  {nullptr, 0, 1, 0, &LayerParams::level, 1},
+  {nullptr, 0, 1, 0, &LayerParams::fmAmt, 1},
+  {nullptr, 0, 1, 0, &LayerParams::amAmt, 1},
+  {nullptr, 0, 1, 0, &LayerParams::level, 2},
+  {nullptr, 0, 1, 0, &LayerParams::fmAmt, 2},
+  {nullptr, 0, 1, 0, &LayerParams::amAmt, 2}
+};
 
 // smooth knee clipper: identity below T, then T + w*tanh((|x|-T)/w); C2-continuous at T, tops out at exactly 1
 inline double softClip(double x, double T) {
@@ -535,7 +564,7 @@ struct Voice {
   // control rate values (updated every 4th sample), the second and third LFO, their own random stream (lfoRnd), procedural sample positions and steps
   int ctr = 0; double lfoC = 0, pEnv = 0, pcC[kLayers] = {1, 1, 1}, psC[kLayers] = {0, 0, 0}, fC[kLayers] = {440, 440, 440}, cc[3] = {1000, 1000, 1000}, laC = 0.01, hcC = 0.9;
   double lp2[2] = {0, 0}, sa[2] = {0, 0}, sb[2] = {0, 0}, lc2[2] = {0, 0}; uint32_t rs = 1;
-  double sp[4] = {0, 0, 0, 0}, sq[4] = {1, 1, 1, 1}, ax[8] = {0, 0, 0, 0, 0, 0, 0, 0}, svL[kMxSrc] = {}, bw[40] = {}, bwz[32] = {}, bwF = -1.0; int bwN = 0; bool bwH = false; AuxF ax2[2];
+  double sp[4] = {0, 0, 0, 0}, sq[4] = {1, 1, 1, 1}, ax[8] = {0, 0, 0, 0, 0, 0, 0, 0}, svL[kMxSrc] = {}, fzv[kFreeN] = {}, bw[40] = {}, bwz[32] = {}, bwF = -1.0; int bwN = 0; bool bwH = false; AuxF ax2[2];
   EnvState amp, amp2, amp3, fenv, fenv2, fenv3; Filter fl[3], fr[3], fl2[3], fr2[3]; AuxF ax3[2]; double bL[5] = {}, bR[5] = {}; double hpL = 0, hpR = 0; bool oneShot = false;
   double lfoRnd() { rs = rs * 1664525u + 1013904223u; return (double)(rs >> 8) / 16777216.0 * 2.0 - 1.0; }
 };
@@ -995,7 +1024,8 @@ class Engine {
     if (!bank) bank = sampleBank(sr);
     mxn = 0; for (int a = 0; a < kMxSrc; ++a) for (int b = 0; b < kMxDst; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
     for (int i = 0; i < kFreeN; ++i) if (p.fsSrc[i] > 0 && p.fsSrc[i] <= kMxSrc && p.fsDst[i] > 0 && p.fsDst[i] <= kFreeDst && p.fsAmt[i] != 0.f) { mxs[mxn] = p.fsSrc[i] - 1; mxd[mxn] = 0; mxv[mxn] = 0.0; ++mxn; }   // forces the source value to be computed; the amount is applied in freeMods
-    for (int vi = 0; vi < kMaxVoices; ++vi) if (voices[vi].active) renderVoice(voices[vi], vi, outL, outR, n);
+    { const bool vm = mxn > 0 && voiceSlotsOn(); VSave sv[kFreeN];
+      for (int vi = 0; vi < kMaxVoices; ++vi) if (voices[vi].active) { const int ns = vm ? voiceMods(voices[vi], sv) : 0; renderVoice(voices[vi], vi, outL, outR, n); for (int k = ns - 1; k >= 0; --k) *sv[k].ptr = sv[k].old; } }
     mtr.active = activeVoices();
     { // poly normalise: a chord of N held notes is about sqrt(N) louder than one note, so take that off (single notes keep their level)
       double ne = 0; for (auto& v : voices) if (v.active) ne += v.amp.stage == 3 ? 0.0 : 1.0;
@@ -1085,11 +1115,29 @@ class Engine {
     pe.master = (float)(p.master * std::pow(10.0, -2.5 * b / 20));
     freeMods(y);
   }
+  // voice slots: for one voice, move the voice knobs of the free slots by that voice's own source values (last sample of its previous block), render, then put the base values back
+  struct VSave { float* ptr; float old; };
+  int voiceMods(Voice& v, VSave* sv) {
+    int n = 0;
+    for (int i = 0; i < kFreeN; ++i) {
+      const int sr_ = p.fsSrc[i], di = p.fsDst[i]; const double am = p.fsAmt[i];
+      const bool on = sr_ > 0 && sr_ <= kMxSrc && di > kFreeNFx && di <= kFreeDst && am != 0.0;
+      v.fzv[i] += 0.35 * ((on ? v.svL[sr_ - 1] : 0.0) - v.fzv[i]);
+      if (!on || std::fabs(v.fzv[i]) < 1e-6) continue;
+      const FreeDst& d = kFreeDstTab[di - 1]; float* ptr = d.layer >= 0 ? &(p.layer[d.layer].*(d.lm)) : &(p.*(d.m));
+      const double base = *ptr, lo = d.lo, hi = d.hi;
+      double u = d.lg ? std::log(std::max(base, lo) / lo) / std::log(hi / lo) : (base - lo) / (hi - lo);
+      u = std::min(1.0, std::max(0.0, u + am * v.fzv[i]));
+      sv[n++] = {ptr, *ptr}; *ptr = (float)(d.lg ? lo * std::pow(hi / lo, u) : lo + u * (hi - lo));
+    }
+    return n;
+  }
+  bool voiceSlotsOn() const { for (int i = 0; i < kFreeN; ++i) if (p.fsDst[i] > kFreeNFx && p.fsAmt[i] != 0.f && p.fsSrc[i] > 0) return true; return false; }
   // free slots: source value of the newest voice, smoothed, moves the chosen knob by amount x its whole range (log knobs move in octaves of their range)
   void freeMods(const Voice* y) {
     for (int i = 0; i < kFreeN; ++i) {
       const int sr_ = p.fsSrc[i], di = p.fsDst[i]; const double am = p.fsAmt[i];
-      const bool on = sr_ > 0 && sr_ <= kMxSrc && di > 0 && di <= kFreeDst && am != 0.0;
+      const bool on = sr_ > 0 && sr_ <= kMxSrc && di > 0 && di <= kFreeNFx && am != 0.0;
       const double tg = (on && y) ? y->svL[sr_ - 1] : 0.0; fzS[i] += 0.35 * (tg - fzS[i]);
       if (!on || std::fabs(fzS[i]) < 1e-6) continue;
       const FreeDst& d = kFreeDstTab[di - 1]; const double v = pe.*(d.m), lo = d.lo, hi = d.hi;
