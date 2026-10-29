@@ -32,6 +32,8 @@ inline FilterMode filterModeFromName(const char* n) { for (int i = 0; i < kFilte
 constexpr int kMxSrc = 18, kMxDst = 23;
 static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"};
 static const char* const kMxDstNames[kMxDst] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
+constexpr int kFreeN = 8, kFreeDst = 45;   // free mod slots: one source to any knob in the list below, amount 1 = the whole knob range
+static const char* const kFreeDstNames[kFreeDst] = {"master","dmMix","dmDrive","dmClip","dmLow","dmMid","dmHigh","widMid","widHi","msMid","msSide","optoAmt","optoRel","optoGain","crushMix","crushBits","crushRate","drvDrive","drvXs","drvFuzz","drvMix","ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime","chorusMix","chorusDepth","chorusRate","chorusWidth","chorusFb","sqzAmt","sqzAtk","sqzRel","sqzMakeup","delayMix","delayFb","delayDamp","delayPing","reverbMix","reverbWidth","reverbLowCutHz","reverbDamp","dynMix"};
 
 // Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
 constexpr int kSmpCount = 34;
@@ -250,7 +252,8 @@ struct Params {
   float dynMix = 1.f, dmMix = 0.4f, dmDrive = 0.5f, dmClip = 0.35f, dmLow = 0.f, dmMid = 0.f, dmHigh = 0.f;
   // Full mod matrix: mx[source][destination], -1..1. Sources: LFO, filter env, amp env, pitch env, wheel, key, velocity, random, drawn mod envelope.
   // Destinations: pitch(12 st), cutoff(5 oct), reso, drive, pwm, detune, pan, volume, sync1..3 (12 st), sub, noise, low cut(4 oct).
-  float mx[kMxSrc][kMxDst] = {};   // rows 8, 13 and 14 are the drawn mod envelopes 1 to 3
+  float mx[kMxSrc][kMxDst] = {};
+  int fsSrc[kFreeN] = {}, fsDst[kFreeN] = {}; float fsAmt[kFreeN] = {};   // free mod slots: source 1..18 (0 off), destination 1..kFreeDst (0 off), amount -1..1   // rows 8, 13 and 14 are the drawn mod envelopes 1 to 3
   float menv[64]; float menvTime = 0.5f; bool menvLoop = false, menvInv = false;   // drawn modulation envelope (0..1 over menvTime seconds, one shot or loop)
   float menv2[64], menv3[64]; float menv2Time = 0.5f, menv3Time = 0.5f; bool menvSync = false, menv2Sync = false, menv3Sync = false; int menvDiv = 6, menv2Div = 6, menv3Div = 6; bool menv2Loop = false, menv3Loop = false, menv2Inv = false, menv3Inv = false;
   // filters 2 and 3 (the first filter is filterMode / cutoff / reso / drive / envAmt / keyTrack). Off by default. fRoute 0 = in series, 1 = in parallel. Their envelope is fenv2 / fenv3.
@@ -281,6 +284,54 @@ struct Params {
   float eq5Dyn = 0.f, eq5Thr = -24.f, eq5Atk = 10.f, eq5Rel = 120.f, eq5Sat = 0.f; bool eq5Below = false; int eq5SatT = 0;
   Params() { for (int i = 0; i < 64; ++i) menv[i] = menv2[i] = menv3[i] = (float)std::exp(-4.0 * i / 63.0); }
 };
+
+struct FreeDst { float Params::* m; float lo, hi; int lg; };
+static const FreeDst kFreeDstTab[kFreeDst] = {
+  {&Params::master, 0, 2, 0},
+  {&Params::dmMix, 0, 1, 0},
+  {&Params::dmDrive, 0, 1, 0},
+  {&Params::dmClip, 0, 1, 0},
+  {&Params::dmLow, -1, 1, 0},
+  {&Params::dmMid, -1, 1, 0},
+  {&Params::dmHigh, -1, 1, 0},
+  {&Params::widMid, 0, 2, 0},
+  {&Params::widHi, 0, 2, 0},
+  {&Params::msMid, 0, 1, 0},
+  {&Params::msSide, 0, 1, 0},
+  {&Params::optoAmt, 0, 1, 0},
+  {&Params::optoRel, 0.3, 3, 0},
+  {&Params::optoGain, -6, 6, 0},
+  {&Params::crushMix, 0, 1, 0},
+  {&Params::crushBits, 1, 16, 0},
+  {&Params::crushRate, 1, 40, 0},
+  {&Params::drvDrive, 0, 1, 0},
+  {&Params::drvXs, 0, 1, 0},
+  {&Params::drvFuzz, 0, 1, 0},
+  {&Params::drvMix, 0, 1, 0},
+  {&Params::ottDepth, 0, 1, 0},
+  {&Params::ottMix, 0, 1, 0},
+  {&Params::ottLow, -9, 9, 0},
+  {&Params::ottMid, -9, 9, 0},
+  {&Params::ottHigh, -9, 9, 0},
+  {&Params::ottTime, 0.3, 3, 0},
+  {&Params::chorusMix, 0, 1, 0},
+  {&Params::chorusDepth, 0, 1, 0},
+  {&Params::chorusRate, 0.05, 5, 1},
+  {&Params::chorusWidth, 0, 1, 0},
+  {&Params::chorusFb, -0.95, 0.95, 0},
+  {&Params::sqzAmt, 0, 1, 0},
+  {&Params::sqzAtk, 0.3, 60, 1},
+  {&Params::sqzRel, 10, 1000, 1},
+  {&Params::sqzMakeup, -6, 6, 0},
+  {&Params::delayMix, 0, 1, 0},
+  {&Params::delayFb, 0, 0.95, 0},
+  {&Params::delayDamp, 0, 1, 0},
+  {&Params::delayPing, 0, 1, 0},
+  {&Params::reverbMix, 0, 1, 0},
+  {&Params::reverbWidth, 0, 1, 0},
+  {&Params::reverbLowCutHz, 20, 800, 1},
+  {&Params::reverbDamp, 0, 0.9, 0},
+  {&Params::dynMix, 0, 1, 0}};
 
 // smooth knee clipper: identity below T, then T + w*tanh((|x|-T)/w); C2-continuous at T, tops out at exactly 1
 inline double softClip(double x, double T) {
@@ -932,6 +983,7 @@ class Engine {
   Meters meters() const { Meters m = mtr; m.lim = (float)limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = (float)dyn.gr[i]; m.dm[i] = (float)dm.gr[i]; } return m; }
   void reserve(int maxBlock) { if ((int)subBusL.size() < maxBlock) { subBusL.assign(maxBlock, 0.0); subBusR.assign(maxBlock, 0.0); } }
   const Voice* newestVoice() const { const Voice* v = nullptr; for (const auto& c : voices) if (c.active && (!v || c.age > v->age)) v = &c; return v; }   // for tests and meters
+  const Params& effective() const { return pe; }   // the settings the effects really used in the last block (base plus modulation)
   int activeVoices() const { int n = 0; for (const auto& v : voices) if (v.active) ++n; return n; }
 
   // adds nothing, overwrites outL/outR
@@ -942,6 +994,7 @@ class Engine {
     if (combPool.empty()) combPool.assign((size_t)kMaxVoices * 6 * 4096, 0.f);
     if (!bank) bank = sampleBank(sr);
     mxn = 0; for (int a = 0; a < kMxSrc; ++a) for (int b = 0; b < kMxDst; ++b) if (p.mx[a][b] != 0.f) { mxs[mxn] = a; mxd[mxn] = b; mxv[mxn] = p.mx[a][b]; ++mxn; }
+    for (int i = 0; i < kFreeN; ++i) if (p.fsSrc[i] > 0 && p.fsSrc[i] <= kMxSrc && p.fsDst[i] > 0 && p.fsDst[i] <= kFreeDst && p.fsAmt[i] != 0.f) { mxs[mxn] = p.fsSrc[i] - 1; mxd[mxn] = 0; mxv[mxn] = 0.0; ++mxn; }   // forces the source value to be computed; the amount is applied in freeMods
     for (int vi = 0; vi < kMaxVoices; ++vi) if (voices[vi].active) renderVoice(voices[vi], vi, outL, outR, n);
     mtr.active = activeVoices();
     { // poly normalise: a chord of N held notes is about sqrt(N) louder than one note, so take that off (single notes keep their level)
@@ -966,8 +1019,8 @@ class Engine {
       drv.process(pe, outL[i], outR[i], sbL[i], sbR[i]); crush.process(pe, drv.oL, drv.oR); const double sbl = drv.sL, sbr = drv.sR;
       double fl = crush.oL, fr = crush.oR; fx.process(pe, fl, fr);
       double dl = fl, dr = fr;
-      dyn.process(p, dl, dr);
-      dl = fl + (dl - fl) * p.dynMix; dr = fr + (dr - fr) * p.dynMix;
+      dyn.process(pe, dl, dr);
+      dl = fl + (dl - fl) * pe.dynMix; dr = fr + (dr - fr) * pe.dynMix;
       bl += a * (dl - bl); bl2 += a * (bl - bl2);
       br += a * (dr - br); br2 += a * (br - br2);
       const double m = 0.5 * (bl2 + br2);
@@ -1006,7 +1059,7 @@ class Engine {
   double pnG = 1.0;
   std::vector<double> subBusL, subBusR; double* sbL = nullptr; double* sbR = nullptr;
   double bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05, limRel = 0.0002;
-  int mxs[kMxSrc * kMxDst], mxd[kMxSrc * kMxDst], mxn = 0; double mxv[kMxSrc * kMxDst]; double mgS[kMxDst] = {};
+  int mxs[kMxSrc * kMxDst + kFreeN], mxd[kMxSrc * kMxDst + kFreeN], mxn = 0; double mxv[kMxSrc * kMxDst + kFreeN]; double fzS[kFreeN] = {}; double mgS[kMxDst] = {};
 
   // drawn modulation envelope k (0..2) at time t
   double menvAt(int k, double t) const {
@@ -1030,6 +1083,20 @@ class Engine {
     const double lm = g[21]; pe.eq6On = p.eq6On || lm < -0.002; pe.eq6F = (float)std::min(20000.0, std::max(20.0, p.eq6F * std::pow(2.0, 6 * std::min(0.0, lm))));
     pe.widHi = (float)(std::min(2.0, std::max(0.0, p.widHi + g[22])) * (1 - 0.3 * b)); pe.widMid = (float)(std::min(2.0, std::max(0.0, p.widMid + 0.5 * g[22])) * (1 - 0.15 * b));
     pe.master = (float)(p.master * std::pow(10.0, -2.5 * b / 20));
+    freeMods(y);
+  }
+  // free slots: source value of the newest voice, smoothed, moves the chosen knob by amount x its whole range (log knobs move in octaves of their range)
+  void freeMods(const Voice* y) {
+    for (int i = 0; i < kFreeN; ++i) {
+      const int sr_ = p.fsSrc[i], di = p.fsDst[i]; const double am = p.fsAmt[i];
+      const bool on = sr_ > 0 && sr_ <= kMxSrc && di > 0 && di <= kFreeDst && am != 0.0;
+      const double tg = (on && y) ? y->svL[sr_ - 1] : 0.0; fzS[i] += 0.35 * (tg - fzS[i]);
+      if (!on || std::fabs(fzS[i]) < 1e-6) continue;
+      const FreeDst& d = kFreeDstTab[di - 1]; const double v = pe.*(d.m), lo = d.lo, hi = d.hi;
+      double u = d.lg ? std::log(std::max(v, lo) / lo) / std::log(hi / lo) : (v - lo) / (hi - lo);
+      u = std::min(1.0, std::max(0.0, u + am * fzS[i]));
+      pe.*(d.m) = (float)(d.lg ? lo * std::pow(hi / lo, u) : lo + u * (hi - lo));
+    }
   }
 
   // sub oscillator (mono, centred). After the filter by default so the low end stays solid; before it when subPreFilter is set.

@@ -550,6 +550,24 @@ int main(int argc, char** argv) {
     CHECK(x72 == a60);                                        // One pitch: never follows
     std::printf("sample key track: Auto %ld, Keys 60/72 %ld/%ld, One pitch %ld\n", a60, f60, f72, x72);
   }
+  { // free mod slots: every listed knob moves with its source, restores when the slot is off, and stays finite
+    CHECK(kFreeDst == 45 && kFreeN == 8);
+    int moved = 0;
+    for (int d = 1; d <= kFreeDst; ++d) {
+      auto run = [&](float amt) {
+        Params p; p.fsSrc[0] = 7; p.fsDst[0] = d; p.fsAmt[0] = amt; p.limiter = false;   // 7 = velocity, a steady 0.9 for this note
+        Engine e; e.prepare(48000); e.p = p; e.noteOn(60, 0.9f);
+        std::vector<float> l(512), r(512); bool fin = true;
+        for (int b = 0; b < 12; ++b) { e.render(l.data(), r.data(), 512); for (int i = 0; i < 512; ++i) if (!std::isfinite(l[i]) || !std::isfinite(r[i])) fin = false; }
+        CHECK(fin); return e.effective().*(kFreeDstTab[d - 1].m); };
+      const float base = Params().*(kFreeDstTab[d - 1].m), up = run(0.4f), dn = run(-0.4f), off = run(0.f);
+      CHECK(std::fabs(off - base) < 1e-4f * (1.f + std::fabs(base)));
+      CHECK(up >= kFreeDstTab[d - 1].lo - 1e-4f && up <= kFreeDstTab[d - 1].hi + 1e-4f && dn >= kFreeDstTab[d - 1].lo - 1e-4f && dn <= kFreeDstTab[d - 1].hi + 1e-4f);
+      if (std::fabs(up - base) > 1e-4f || std::fabs(dn - base) > 1e-4f) ++moved; else std::printf("free slot %s did not move\n", kFreeDstNames[d - 1]);
+    }
+    CHECK(moved == kFreeDst);
+    std::printf("free mod slots: %d of %d knobs move\n", moved, (int)kFreeDst);
+  }
   if (!fails) std::puts("presets_test: all passed");
   return fails ? 1 : 0;
 }

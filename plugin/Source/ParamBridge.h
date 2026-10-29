@@ -140,6 +140,12 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         for (int s = 0; s < supurr::kMxSrc; ++s)
             for (int d = 0; d < supurr::kMxDst; ++d)
                 m[std::string("mx_") + supurr::kMxSrcNames[s] + "_" + supurr::kMxDstNames[d]] = [s, d](Params& p, const juce::var& v) { p.mx[s][d] = asF(v); };
+        for (int i = 0; i < supurr::kFreeN; ++i) {   // free mod slots: source, destination (index into kFreeDstTab, 1 based) and amount
+            const std::string b = "fs" + std::to_string (i) + "_";
+            m[b + "src"] = [i](Params& p, const juce::var& v) { p.fsSrc[i] = asIR (v, 0, supurr::kMxSrc); };
+            m[b + "dst"] = [i](Params& p, const juce::var& v) { p.fsDst[i] = asIR (v, 0, supurr::kFreeDst); };
+            m[b + "amt"] = [i](Params& p, const juce::var& v) { p.fsAmt[i] = std::min (1.f, std::max (-1.f, asF (v))); };
+        }
         return m;
     }();
     return t;
