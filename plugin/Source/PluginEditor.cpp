@@ -200,6 +200,7 @@ void SupurrEditor::timerCallback()
     for (int i = 0; i < 4; ++i) arr.add (0.f);           // EQ live (page computes its own here)
     for (int i = 0; i < 8; ++i) arr.add (m.wet[i]);
     for (int i = 0; i < 3; ++i) arr.add (m.lph[i]);        // newest voice LFO phases, -1 when no voice
+    arr.add (m.lphAge);                                    // seconds since the audio thread took them
     web->emitEventIfBrowserIsVisible ("meters", juce::var (arr));
     if (m.trips > tripsSeen) { tripsSeen = m.trips; Diagnostics::log ("safety guard reset the engine (count " + juce::String (m.trips) + ")"); }
 

@@ -227,7 +227,7 @@ canvas{display:block;max-width:100%}
 .pbr input{width:100%;box-sizing:border-box;padding:9px 12px;font-size:15px}.pbr .chips{gap:6px}.pbr .chip{padding:4px 11px;font-size:12px;letter-spacing:1px;text-transform:uppercase}
 .pbr .chip.on{background:#ffa600;border-color:#ffa600;color:#241600}.pbbanks .chip.on{background:#ffa600;border-color:#ffa600;color:#241600}
 .pbfoot{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:10px 22px 14px;border-top:1px solid var(--line)}.pbfoot .pill{margin-right:auto}
-@media(max-width:760px){.pbbody{flex-direction:column;overflow-y:auto}.pbl{flex:0 0 auto;height:320px}.pbr{overflow:visible}}
+
 .dlg{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:50}.dlg[hidden]{display:none}
 .dbox{background:#150f33;border:1px solid var(--mint);border-radius:14px;padding:18px 20px;width:min(420px,92vw);box-shadow:0 10px 40px #000a}
 .dbox h3{margin:0 0 8px;font-family:Fredoka,sans-serif;letter-spacing:1px;color:var(--mint)}.dbox p{margin:0 0 12px;color:var(--fg);line-height:1.5;font-size:13.5px}
@@ -1361,7 +1361,7 @@ async function startAudio(){
     const url=URL.createObjectURL(new Blob([src],{type:"application/javascript"}));
     await ctx.audioWorklet.addModule(url);
     node=new AudioWorkletNode(ctx,"supurr",{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
-    node.port.onmessage=e=>{const d=e.data;meter.l=d[0];meter.r=d[1];meter.act=d[2];meter.lim=d[3];meter.gr[0]=d[4];meter.gr[1]=d[5];meter.gr[2]=d[6];meter.dm[0]=d[7];meter.dm[1]=d[8];meter.dm[2]=d[9];meter.load=d[11]||0;meter.cap=d[12]||15;meter.eqd[0]=d[13]||0;meter.eqd[1]=d[14]||0;meter.eqd[2]=d[15]||0;meter.eqd[3]=d[16]||0;if(d.length>=25)wetPush(d.slice(17,25));if(d.length>=28){meter.lph=[d[25],d[26],d[27]];meter.lphT=performance.now();}if(d[10]>meter.trips){meter.trips=d[10];setStatus("safety guard reset the engine",true);}};
+    node.port.onmessage=e=>{const d=e.data;meter.l=d[0];meter.r=d[1];meter.act=d[2];meter.lim=d[3];meter.gr[0]=d[4];meter.gr[1]=d[5];meter.gr[2]=d[6];meter.dm[0]=d[7];meter.dm[1]=d[8];meter.dm[2]=d[9];meter.load=d[11]||0;meter.cap=d[12]||15;meter.eqd[0]=d[13]||0;meter.eqd[1]=d[14]||0;meter.eqd[2]=d[15]||0;meter.eqd[3]=d[16]||0;if(d.length>=25)wetPush(d.slice(17,25));if(d.length>=28){meter.lph=[d[25],d[26],d[27]];meter.lphT=performance.now()-(d[28]||0)*1000;}if(d[10]>meter.trips){meter.trips=d[10];setStatus("safety guard reset the engine",true);}};
     node.connect(outGain);audioMode="worklet";
   }catch(err){
     fb=new EN.SupurrEngine(ctx.sampleRate);fb.setParams(EN.defaultParams());
@@ -3258,6 +3258,8 @@ const MB={bank:"All",q:"",type:"",genre:""};
 function presetBrowser(){
   const old=document.getElementById("pbm");if(old){old.remove();return;}
   const ov=el("div","pbm");ov.id="pbm";const bx=el("div","pbbox");bx.setAttribute("role","dialog");bx.setAttribute("aria-label","Preset browser");ov.appendChild(bx);
+  /* the dialog is laid out at a fixed design size and scaled like the rack, so it looks the same share of the window at any window size */
+  const DW=860,DH=650,sz=()=>{const k=Math.min(STAGE?SCALE:1,(innerWidth-16)/DW,(innerHeight-16)/DH);bx.style.width=DW+"px";bx.style.height=DH+"px";bx.style.maxWidth="none";bx.style.flex="0 0 auto";bx.style.transform="scale("+k+")";bx.style.transformOrigin="center center";};sz();window.addEventListener("resize",sz);
   bx.appendChild(el("h3","","Preset browser"));
   const body=el("div","pbbody");bx.appendChild(body);const L=el("div","pbl"),R=el("div","pbr");body.append(L,R);
   const bk=el("div","pbbanks");L.appendChild(bk);const list=el("div","pblist");L.appendChild(list);
@@ -3267,7 +3269,7 @@ function presetBrowser(){
   R.appendChild(el("label","","History (click to go back)"));const hc=el("div","chips");R.appendChild(hc);
   const note=el("div","pill","All shows every sound. Banks A to D are factory, E to G are yours (128 slots each).");note.style.marginTop="6px";R.appendChild(note);
   const foot=el("div","pbfoot");const cnt=el("span","pill");foot.appendChild(cnt);const cl=el("button","btn","Close");foot.appendChild(cl);bx.appendChild(foot);
-  const close=()=>{MB.q=q.value;ov.remove();document.removeEventListener("keydown",key,true);};
+  const close=()=>{MB.q=q.value;ov.remove();window.removeEventListener("resize",sz);document.removeEventListener("keydown",key,true);};
   const key=e=>{if(e.key==="Escape"){e.stopPropagation();close();}else if(e.key==="Enter"&&document.activeElement===q){const f=list.querySelector("[data-v]");if(f)f.click();}};
   cl.onclick=close;ov.addEventListener("pointerdown",e=>{if(e.target===ov)close();});document.addEventListener("keydown",key,true);
   const chipSet=(box,items,k)=>{box.textContent="";items.forEach(t=>{const b=el("button","chip"+(MB[k]===t?" on":""),t);b.onclick=()=>{MB[k]=MB[k]===t?"":t;draw();};box.appendChild(b);});};

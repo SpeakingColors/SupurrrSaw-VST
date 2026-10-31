@@ -214,6 +214,7 @@ void SupurrProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const auto m = engine.meters();
     mLim.store (m.lim); mActive.store (kitLive ? kitLive->activePads() : m.active); mTrips.store (m.trips);
     for (int i = 0; i < 3; ++i) { mGr[i].store (m.gr[i]); mDm[i].store (m.dm[i]); mLph[i].store (m.lph[i]); }
+    mLphMs.store (juce::Time::getMillisecondCounterHiRes());
     {   // wet signal range of delay and reverb since the last editor read
         float w[8]; engine.wetTake (w);
         for (int i = 0; i < 8; ++i) { auto& a = mWet[i]; float o = a.load(); if (i & 1) { while (w[i] > o && ! a.compare_exchange_weak (o, w[i])) {} } else { while (w[i] < o && ! a.compare_exchange_weak (o, w[i])) {} } }
@@ -226,6 +227,7 @@ SupurrProcessor::MeterSnap SupurrProcessor::takeMeters()
     s.l = mPeakL.exchange (0.f); s.r = mPeakR.exchange (0.f);
     s.lim = mLim.load(); s.active = mActive.load(); s.trips = mTrips.load();
     for (int i = 0; i < 3; ++i) { s.gr[i] = mGr[i].load(); s.dm[i] = mDm[i].load(); s.lph[i] = mLph[i].load(); }
+    s.lphAge = (float) juce::jlimit (0.0, 0.5, (juce::Time::getMillisecondCounterHiRes() - mLphMs.load()) / 1000.0);
     for (int i = 0; i < 8; ++i) { const float v = mWet[i].exchange ((i & 1) ? -1e9f : 1e9f); s.wet[i] = std::abs (v) > 1e8f ? 0.f : v; }
     return s;
 }
