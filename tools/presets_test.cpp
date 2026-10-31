@@ -360,6 +360,12 @@ int main(int argc, char** argv) {
     auto bank = sampleBank(48000.0); for (int i = 1; i < kSmpCount; ++i) { const auto& d = bank->d[i]; CHECK(d.size() > 100); double pk = 0; for (float v : d) { CHECK(std::isfinite(v)); pk = std::max(pk, (double)std::fabs(v)); } CHECK(std::fabs(pk - 0.9) < 0.01); }
     CHECK(bank->d[0].empty()); CHECK(sampleBank(48000.0) == bank);
     for (int i = 1; i < kSmpCount; ++i) { Params q; q.dmMix = 0.f; q.layer[0].wave = Wave::Off; q.layer[1].wave = Wave::Off; q.layer[2].wave = Wave::Off; q.layer[0].smp = i; q.cutoff = 18000.f; q.limiter = false; Engine e; e.prepare(48000); e.p = q; e.noteOn(60, 0.9f); float L[2400], R[2400]; e.render(L, R, 2400); double s = 0; for (int k = 0; k < 2400; ++k) { CHECK(std::isfinite(L[k])); s += (double)L[k] * L[k]; } CHECK(s > 1e-4); }
+    { // FX knob: 1 leaves the effects as set, 0 equals chorus, delay and reverb all off, in between sits between
+      auto en = [&](float fx, bool fxOff) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 18000.f; e.p.chorusMix = fxOff ? 0.f : 0.5f; e.p.delayMix = fxOff ? 0.f : 0.4f; e.p.reverbMix = fxOff ? 0.f : 0.5f; e.p.fxMix = fx;
+        Result r = render(e, 60, 0.4f, 1.5f); double t = 0; for (size_t i = 0; i < r.l.size(); ++i) t += (double)r.l[i] * r.l[i] + (double)r.r[i] * r.r[i]; return t; };
+      const double full = en(1.f, false), half = en(0.5f, false), zero = en(0.f, false), none = en(1.f, true);
+      CHECK(std::fabs(zero - none) < 1e-6 * none); CHECK(std::fabs(full - zero) > 1e-3 * none && std::fabs(half - full) > 1e-4 * none && std::fabs(half - zero) > 1e-4 * none);
+      std::printf("FX knob: 0 equals all effects off, 1 keeps them, 0.5 is different from both\n"); }
     { // the layer switch mutes the layer sample too, and a layer with no wave still plays its sample when on
       for (int on = 0; on < 2; ++on) { Params q; q.dmMix = 0.f; for (auto& ly : q.layer) ly.wave = Wave::Off; q.layer[0].smp = smpFromId("click_soft"); q.layer[0].on = on != 0; q.cutoff = 18000.f; q.limiter = false; Engine e; e.prepare(48000); e.p = q; e.noteOn(60, 0.9f); float L[2400], R[2400]; e.render(L, R, 2400); double s = 0; for (int k = 0; k < 2400; ++k) s += (double)L[k] * L[k]; if (on) CHECK(s > 1e-4); else CHECK(s < 1e-9); }
       std::printf("layer switch: wave Off plays its sample when on, silent when off\n"); }

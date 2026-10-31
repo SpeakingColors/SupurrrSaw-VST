@@ -139,9 +139,9 @@ canvas{display:block;max-width:100%}
 .stage .brand{font-size:19px}.stage .brand svg{width:32px;height:32px}.stage .brand small{font-size:9px;letter-spacing:2.4px}
 .stage .btn{font-size:13px;padding:5px 12px}.stage .btn.sm{font-size:12px;padding:3px 9px}
 .stage #preset{min-width:0;width:190px;font-size:13px;padding:4px 6px}
-.stage #preset{flex:0 0 auto}.stage #meter{min-width:110px;flex:0 0 112px}.plug #power{display:none}.plug .stage header.top,.plug header.top{gap:3px}   /* in the plugin the engine starts by itself; the header needs the room for the meter and the preset name */
+.stage #preset{flex:0 0 auto}.stage #meter{min-width:102px;flex:0 0 104px}.plug .stage header.top,.plug header.top{gap:3px}   /* in the plugin the engine starts by itself; the header needs the room for the meter and the preset name */
 .stage .pages{margin:0;flex-wrap:nowrap;gap:6px}
-.stage .pages button{flex:0 0 auto;padding:6px 8px;font-size:13px;letter-spacing:1px;border-radius:10px}.stage .pbtn{min-width:96px;max-width:118px;padding:5px 7px}.stage #power{padding:5px 9px;font-size:12px}.stage #favB{padding:3px 6px}.stage .hbtns{margin-left:0}.stage .topk{gap:0}.stage .topk .knob{width:47px}.stage .lamps2 .lamp{font-size:9px;letter-spacing:.5px;padding:2px 5px}.stage .btn.ic{padding:3px 5px}
+.stage .pages button{flex:0 0 auto;padding:6px 8px;font-size:13px;letter-spacing:1px;border-radius:10px}.stage .pbtn{min-width:90px;max-width:108px;padding:5px 7px}.stage #power{padding:5px 9px;font-size:12px}.stage #favB{padding:3px 6px}.stage .hbtns{margin-left:0}.stage .topk{gap:0}.stage .topk .knob{width:47px}.stage .lamps2 .lamp{font-size:9px;letter-spacing:.5px;padding:2px 5px}.stage .btn.ic{padding:3px 5px}
 .stage .page{flex:1 1 0;min-height:0}
 .stage .page:not([hidden]){display:block}
 .stage .grid{height:100%;margin-top:0;gap:10px;grid-template-rows:minmax(0,1.1fr) minmax(0,1fr)}
@@ -229,6 +229,7 @@ canvas{display:block;max-width:100%}
 .pbfoot{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:10px 22px 14px;border-top:1px solid var(--line)}.pbfoot .pill{margin-right:auto}
 
 .fxpw{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;min-width:0}.fxar{all:unset;box-sizing:border-box;cursor:pointer;width:15px;height:21px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#a99fdc;border-radius:5px}.fxar:hover{color:#ffa600;background:#2a2060}.fxar:active{transform:scale(.92)}
+.btn.ico{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px}.btn.ico svg{width:17px;height:17px;display:block}
 .dlg{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:50}.dlg[hidden]{display:none}
 .dbox{background:#150f33;border:1px solid var(--mint);border-radius:14px;padding:18px 20px;width:min(420px,92vw);box-shadow:0 10px 40px #000a}
 .dbox h3{margin:0 0 8px;font-family:Fredoka,sans-serif;letter-spacing:1px;color:var(--mint)}.dbox p{margin:0 0 12px;color:var(--fg);line-height:1.5;font-size:13.5px}
@@ -249,7 +250,7 @@ canvas{display:block;max-width:100%}
 <div class="rack" id="rack">
 <header class="top">
   <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#14161A"/><g transform="translate(36,96) scale(11)"><path d="M5 26 L5 10 L10 4 L14 10 L26 10 L30 4 L35 10 L35 26" fill="none" stroke="#FF5FA2" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M14 18 h2 M24 18 h2 M2 20 l8 1 M2 24 l8 -1 M38 20 l-8 1 M38 24 l-8 -1" stroke="#3FE0D0" stroke-width="1.6" stroke-linecap="round"/></g></svg><div>SupurrSaw<small>Playground</small></div></div>
-  <button class="btn hot" id="power" data-tip="Starts the audio engine. Browsers only allow sound after a click.">Power on</button>
+  <button class="btn hot ico" id="power" data-tip="Starts the audio engine. Browsers only allow sound after a click."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
   <div class="nav">
     <button class="btn sm" id="prev" data-tip="Previous preset.">◀</button>
     <div class="pwrap" id="pwrap"><button class="pbtn" id="pbtn" data-tip="Click to pick a preset. Double-click to rename it."><span id="pbn">Preset</span><i>▾</i></button><select id="preset" aria-label="Preset" tabindex="-1"></select></div>
@@ -300,13 +301,12 @@ canvas{display:block;max-width:100%}
 
 <div class="dock">
   <div class="row">
-    <button class="btn sm" id="octd" data-tip="Octave down (key Z).">Oct −</button><span id="octv" class="pill" style="min-width:34px;text-align:center"></span><button class="btn sm" id="octu" data-tip="Octave up (key X).">Oct +</button>
+    <button class="btn sm" id="octd" data-tip="Octave down (key Z).">Oct −</button><button class="btn sm" id="octu" data-tip="Octave up (key X).">Oct +</button>
     <button class="btn sm" id="mpe" data-tip="MPE: per-note expression. On, a note sent on MIDI channels 2 to 16 bends, slides (CC74) and presses on its own, so you can bend one note of a chord. Channel 1 is the main channel and moves every note. Off, every channel is treated alike. The Mod matrix has Pressure, Slide and Bend sources.">MPE</button>
     <label class="row" data-tip="Pitch bend range of a single MPE note, in semitones. 48 is the MPE standard and what most MPE keyboards and DAWs use. Change it only if your controller uses another range."><span class="lbl">MPE range</span><select id="mpeRange" class="sel"><option value="12">12</option><option value="24">24</option><option value="48">48</option><option value="96">96</option></select></label>
-    <button class="btn sm" id="midi" data-tip="Use a MIDI keyboard. Needs permission, may be blocked inside this page.">MIDI in</button>
+    <button class="btn sm ico" id="midi" data-tip="MIDI in: connect a hardware MIDI keyboard (notes, mod wheel, pitch bend, MPE). Needs permission in a browser. In a DAW the plugin already receives the track's MIDI."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="6.5" cy="12" r="1" fill="currentColor"/><circle cx="8.2" cy="7.8" r="1" fill="currentColor"/><circle cx="12" cy="6.2" r="1" fill="currentColor"/><circle cx="15.8" cy="7.8" r="1" fill="currentColor"/><circle cx="17.5" cy="12" r="1" fill="currentColor"/><path d="M10 17.5h4"/></svg></button>
     <button class="btn sm" id="modBtn" data-tip="Mod sources. Opens a tray of sources (LFOs, envelopes, wheel, pressure and more). Drag one onto a knob to modulate it, then set the amount; the coloured dot that appears on the knob can be dragged onto another knob to copy it, and double-clicking it opens the list. Works on the knobs that have a column in the Mod matrix.">Mod ▴</button>
-    <button class="btn sm" id="panic" data-tip="Stops every note.">Panic</button>
-    <button class="btn sm" id="dragWav" draggable="true">Drag last note</button>
+    <button class="btn sm ico" id="dragWav" draggable="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M7 6v12M11 3v18M15 7v10M19 9v6"/></svg></button>
     <span id="midiInfo" class="pill"></span>
     <span class="grow"></span>
     <input type="range" id="vol" min="0" max="1" step="0.01" value="0.7" hidden>
@@ -315,12 +315,12 @@ canvas{display:block;max-width:100%}
     <button class="btn sm" id="help" data-tip="">?</button>
     <label class="row pill" data-tip="Window size. Fit fills the window, the others cap the size. It always keeps its shape."><select id="sizeSel" style="padding:2px 4px"><option value="fit">Fit</option><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select></label>
     <span class="lbl">Demo</span>
-    <button class="btn sm" id="demoPrev" data-tip="Previous demo. If a demo is playing, the new one starts right away.">◀</button>
+    <button class="btn sm ico" id="midiImp" data-tip="Import a MIDI file (.mid). Opens your file picker; the pattern is added to the list under Your own and ready to play."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4h16v-4M12 4v11M8 8l4-4 4 4"/></svg></button><button class="btn sm ico" id="demoExp" data-tip="Save the selected pattern as a .mid file, at the BPM and Trans shown. Drum grooves go on channel 10 and are not transposed. In the plugin the file lands in the Exports folder (Files menu)."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4h16v-4M12 4v11M8 11l4 4 4-4"/></svg></button><button class="btn sm ico" id="midiDrag" draggable="true" data-tip="Drag the selected pattern as a .mid file onto a track in your DAW or into a folder, at the BPM and Trans shown. Click it to save the file instead."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M9 12h11M6 17h9"/></svg></button><button class="btn sm" id="demoPrev" data-tip="Previous demo. If a demo is playing, the new one starts right away.">◀</button>
     <select id="demo" data-tip="Original demo lines in many styles. Picking one sets the BPM. The last entry loads your own MIDI file."></select>
     <button class="btn sm" id="demoNext" data-tip="Next demo. If a demo is playing, the new one starts right away.">▶</button>
     <label class="row pill" data-tip="Tempo of the demo loop and of the synced delay.">BPM <input type="number" id="bpm" value="140" min="40" max="240" style="width:60px"></label><label class="row pill" data-tip="Lock the tempo. On: choosing another demo keeps the BPM you set, so you can scroll through the MIDI at your song tempo. Off: each demo sets its own BPM."><input type="checkbox" id="bpmLock"> Lock</label>
     <label class="row pill">Trans <input type="number" id="trs" value="0" min="-36" max="36" style="width:56px"></label>
-    <select id="kitSel" style="padding:2px 4px;font-size:12px" data-tip="Drum kit mode. With a kit on, the keys play drums instead of the patch: C1 kick, C#1 rim, D1 snare, D#1 clap, F#1 closed hat (it chokes the open hat), A#1 open hat, C#2 crash, D#2 ride, G#2 cowbell, F1 G1 A1 B1 C2 D2 toms (pitched by key), A#3 shaker. Use Oct - to reach the low keys, or play the drum grooves in the demo list. Picking any normal sound turns the kit off."></select><button class="btn sm" id="demoPlay" data-tip="Loops your MIDI melody through the current patch. Keep moving the knobs while it plays.">Play</button><button class="btn sm" id="demoExp" data-tip="Export MIDI: saves the selected pattern as a standard .mid file, at the BPM and Trans shown. Drum grooves go on channel 10 and are not transposed. In the plugin the file lands in the Exports folder (Files menu).">Export MIDI</button>
+    <select id="kitSel" style="padding:2px 4px;font-size:12px" data-tip="Drum kit mode. With a kit on, the keys play drums instead of the patch: C1 kick, C#1 rim, D1 snare, D#1 clap, F#1 closed hat (it chokes the open hat), A#1 open hat, C#2 crash, D#2 ride, G#2 cowbell, F1 G1 A1 B1 C2 D2 toms (pitched by key), A#3 shaker. Use Oct - to reach the low keys, or play the drum grooves in the demo list. Picking any normal sound turns the kit off."></select><button class="btn sm" id="demoPlay" data-tip="Loops your MIDI melody through the current patch. Keep moving the knobs while it plays.">Play</button>
   </div>
   <div id="modtray" hidden></div>
   <div class="kbrow">
@@ -411,6 +411,7 @@ const MX_NS = MX_SRC.length, MX_ND = MX_DST.length;
 const FREE_DST = [["master",0,2,0],["dmMix",0,1,0],["dmDrive",0,1,0],["dmClip",0,1,0],["dmLow",-1,1,0],["dmMid",-1,1,0],["dmHigh",-1,1,0],["widMid",0,2,0],["widHi",0,2,0],["msMid",0,1,0],["msSide",0,1,0],["optoAmt",0,1,0],["optoRel",0.3,3,0],["optoGain",-6,6,0],["crushMix",0,1,0],["crushBits",1,16,0],["crushRate",1,40,0],["drvDrive",0,1,0],["drvXs",0,1,0],["drvFuzz",0,1,0],["drvMix",0,1,0],["ottDepth",0,1,0],["ottMix",0,1,0],["ottLow",-9,9,0],["ottMid",-9,9,0],["ottHigh",-9,9,0],["ottTime",0.3,3,0],["chorusMix",0,1,0],["chorusDepth",0,1,0],["chorusRate",0.05,5,1],["chorusWidth",0,1,0],["chorusFb",-0.95,0.95,0],["sqzAmt",0,1,0],["sqzAtk",0.3,60,1],["sqzRel",10,1000,1],["sqzMakeup",-6,6,0],["delayMix",0,1,0],["delayFb",0,0.95,0],["delayDamp",0,1,0],["delayPing",0,1,0],["reverbMix",0,1,0],["reverbWidth",0,1,0],["reverbLowCutHz",20,800,1],["reverbDamp",0,0.9,0],["dynMix",0,1,0],
   /* voice knobs: move per voice, from that voice's own source values */
   ["f2Res",0,1,0],["f2Drv",0,1.5,0],["f3Res",0,1,0],["f3Drv",0,1.5,0],["f2Env",-1,1,0],["f3Env",-1,1,0],["dist",0,1,0],["lfoRate",0.05,30,1],["lfoDepth",0,1,0],["lfo2Rate",0.05,30,1],["lfo2Depth",0,1,0],["lfo3Rate",0.05,30,1],["lfo3Depth",0,1,0],["spread",0,1,0],["subDetune",0,1,0],["subWidth",0,1,0],["noiseDetune",0,1,0],["noiseWidth",0,1,0],["noiseHpHz",100,12000,1],["L0_level",0,1,0],["L0_fmAmt",0,1,0],["L0_amAmt",0,1,0],["L1_level",0,1,0],["L1_fmAmt",0,1,0],["L1_amAmt",0,1,0],["L2_level",0,1,0],["L2_fmAmt",0,1,0],["L2_amAmt",0,1,0]];
+const FXMIX_KEYS = ["chorusMix", "mx0Mix", "mx1Mix", "mx2Mix", "delayMix", "reverbMix"];
 const FREE_NFX = 45, FREE_N = 8, FREE_G = new Set(["master", "dmClip", "widMid", "widHi", "drvDrive", "delayMix", "reverbMix", "reverbLowCutHz"]);   // keys the globals pass already rewrites each block
 
 const MX_KEYS = []; for (let a = 0; a < MX_NS; a++) for (let b = 0; b < MX_ND; b++) MX_KEYS.push("mx_" + MX_SRC[a] + "_" + MX_DST[b]);
@@ -420,7 +421,7 @@ function defaultParams() {
     subLevel: 0, subWave: "Sine", subOctave: -1, subVoices: 1, subDetune: 0, subWidth: 0, noiseVoices: 1, noiseDetune: 0, noiseWidth: 0, subPreFilter: false, mono: false, stackCount: 1, stackCents: 14, glide: 0, legato: false, glideMode: 0, glideCurve: 0, polyGlide: false, filterMode: "LP24", cutoff: 4000, reso: 0.2, drive: 0, envAmt: 0, keyTrack: 0, lowCutHz: 20, highCutHz: 20000, auxSlope: 0,
     dist: 0, distPre: false, noiseLevel: 0, noiseHpHz: 3000, ampA: 0.002, ampD: 0.3, ampS: 0.8, ampR: 0.3, fenvA: 0.002, fenvD: 0.3, fenvS: 0.8, fenvR: 0.3, ampCA: 0, ampCD: -0.4, ampCR: -0.4, fenvCA: 0, fenvCD: -0.4, fenvCR: -0.4,
     pitchAmt: 0, pitchTime: 0.09, pitchAttack: 0, pitchFall: 0, pitchFallTime: 1, lfoRate: 6, lfoPwm: 0, lfoPitch: 0, lfoCutoff: 0, lfoDetune: 0, lfoShape: 0, lfoPan: 0, lfoAmp: 0, wheelCutoff: 0, velCutoff: 0, wheelVib: 0, phaseReset: false, drift: 0, detuneRange: 1,
-    spread: 0.7, bassMonoHz: 120, mfxMulti: false, mx0Mix: 0, mx0Depth: 0.5, mx0Rate: 0.6, mx0Delay: 12, mx0Width: 1, mx0Fb: 0.5, mx1Mix: 0, mx1Depth: 0.6, mx1Rate: 0.25, mx1Delay: 6, mx1Width: 1, mx1Fb: 0.6, mx2Mix: 0, mx2Depth: 0.7, mx2Rate: 0.35, mx2Delay: 12, mx2Width: 1, mx2Fb: 0.5, chorusMix: 0, chorusDepth: 0.5, chorusRate: 0.6, delayMix: 0, delayTime: 0.25, delayFb: 0.4, delaySync: false, delayDiv: 7, bpm: 120, optoAmt: 0, ottDepth: 0, ottMix: 0, sqzAmt: 0, reverbMix: 0, reverbSize: 0.6, reverbWidth: 0.8, reverbLowCutHz: 150,
+    spread: 0.7, bassMonoHz: 120, fxMix: 1, mfxMulti: false, mx0Mix: 0, mx0Depth: 0.5, mx0Rate: 0.6, mx0Delay: 12, mx0Width: 1, mx0Fb: 0.5, mx1Mix: 0, mx1Depth: 0.6, mx1Rate: 0.25, mx1Delay: 6, mx1Width: 1, mx1Fb: 0.6, mx2Mix: 0, mx2Depth: 0.7, mx2Rate: 0.35, mx2Delay: 12, mx2Width: 1, mx2Fb: 0.5, chorusMix: 0, chorusDepth: 0.5, chorusRate: 0.6, delayMix: 0, delayTime: 0.25, delayFb: 0.4, delaySync: false, delayDiv: 7, bpm: 120, optoAmt: 0, ottDepth: 0, ottMix: 0, sqzAmt: 0, reverbMix: 0, reverbSize: 0.6, reverbWidth: 0.8, reverbLowCutHz: 150,
     master: 1, polyNorm: 1, clipKnee: 0.72, limiter: true, limCeil: 0.9, polyphony: 12, modWheel: 0, bendRange: 2, bendDown: 2, pitchBend: 0, mpe: true, mpeRange: 48, pressure: 0, slide: 0, dynMix: 1, dmMix: 0.4, dmDrive: 0.5, dmClip: 0.35, dmLow: 0, dmMid: 0, dmHigh: 0, chorusDelay: 12, chorusWidth: 1, delayDamp: 0.7, delayPing: 1, reverbPre: 0, reverbDamp: 0.25, optoGain: 0, optoRel: 1, ottLow: 0, ottMid: 0, ottHigh: 0, ottTime: 1, sqzAtk: 4, sqzRel: 90, sqzMakeup: 0, menvData: "", menvPts: "", menvTime: 0.5, menvInv: false, menvLoop: false, menvSync: false, menvDiv: 6, lfoDepth: 1, lfoFade: 0, lfoStart: 0, pitchHold: 0, pitchCurve: 0, drvDrive: 0, drvXs: 0, drvFuzz: 0, drvMix: 1, eq1On: false, eq1F: 30, eq2On: true, eq2F: 120, eq2G: 0, eq3On: true, eq3F: 500, eq3G: 0, eq3Q: 1, eq4On: true, eq4F: 3000, eq4G: 0, eq4Q: 1, eq5On: true, eq5F: 9000, eq5G: 0, eq6On: false, eq6F: 18000, build: 0, modFxType: 0, chorusFb: 0.5, crushBits: 16, crushRate: 1, crushMix: 0, widMid: 1, widHi: 1, msMid: 0, msSide: 0, ampLink: true, fRoute: 0,
     f2LowCut: 5, f2HighCut: 20000, f2Slope: 1, f3LowCut: 5, f3HighCut: 20000, f3Slope: 1, f2Mode: "Off", f2Cut: 4000, f2Res: 0.2, f2Drv: 0, f2Env: 0, f2Key: 0, f3Mode: "Off", f3Cut: 4000, f3Res: 0.2, f3Drv: 0, f3Env: 0, f3Key: 0, f2Wheel: 0, f3Wheel: 0,
     lfo2Rate: 6, lfo2Shape: 0, lfo2Depth: 1, lfo2Fade: 0, lfo2Start: 0, lfo3Rate: 6, lfo3Shape: 0, lfo3Depth: 1, lfo3Fade: 0, lfo3Start: 0,
@@ -981,6 +982,9 @@ class SupurrEngine {
     pe.widHi = Math.min(2, Math.max(0, p.widHi + g[22])) * (1 - 0.3 * b); pe.widMid = Math.min(2, Math.max(0, p.widMid + 0.5 * g[22])) * (1 - 0.15 * b);
     pe.master = p.master * Math.pow(10, -2.5 * b / 20);
     this.freeMods(p, pe, y);
+    /* FX knob: one dry/wet over the space and modulation effects (chorus family, delay, reverb); the other FX keep their own settings */
+    { const f = p.fxMix == null ? 1 : p.fxMix < 0 ? 0 : p.fxMix > 1 ? 1 : p.fxMix, fk = this._fk || [];
+      for (const k of FXMIX_KEYS) pe[k] = (fk.includes(k) || FREE_G.has(k) ? pe[k] : p[k]) * f; }
   }
   /* voice slots: for one voice, move the voice knobs of the free slots by that voice's own source values (last sample of its previous block), render, then put the base values back */
   voiceMods(v) {
@@ -1374,9 +1378,11 @@ async function startAudio(){
   userStopped=false;powerLabel();
 }
 let userStopped=false;
-function powerLabel(){const b=$("#power");const on=ctx&&ctx.state==="running"&&!userStopped;b.textContent=!ctx?"Power on":(on?"Audio on":"Audio off");b.classList.toggle("hot",!on);b.classList.toggle("on",on);b.dataset.tip=on?"Audio is running. Click to stop all sound at once (kill switch). Click again to bring it back.":(ctx?"Audio is stopped. Click to start again.":"Starts the audio engine. Browsers only allow sound after a click.");}
+const SPK_ON="<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 5 6 9H3v6h3l5 4z\" fill=\"currentColor\"/><path d=\"M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13\"/></svg>",SPK_OFF="<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 5 6 9H3v6h3l5 4z\" fill=\"currentColor\"/><path d=\"m16 9 5 6m0-6-5 6\"/></svg>";
+function powerLabel(){const b=$("#power");const on=ctx&&ctx.state==="running"&&!userStopped;b.innerHTML=on?SPK_ON:SPK_OFF;b.classList.toggle("hot",!on);b.classList.toggle("on",on);b.dataset.tip=on?"Audio is running. Speaker: audio is running. Click to stop all sound at once (this is also the panic button: every note is cut). Click again to bring audio back.":(ctx?"Audio is stopped. Click to start again.":"Starts the audio engine. Browsers only allow sound after a click.");if(window.__SUPURR_PLUGIN&&ctx){b.dataset.tip="Panic: stops every note at once. The host runs the audio, so there is no on/off here.";}}
 $("#power").onclick=async()=>{
   if(!ctx){await startAudio();userStopped=false;powerLabel();return;}
+  if(window.__SUPURR_PLUGIN){try{panic();}catch(e){}return;}   // in the plugin the host runs the audio: the speaker is the panic button
   if(!userStopped){userStopped=true;try{panic();}catch(e){}try{await ctx.suspend();}catch(e){}}
   else{userStopped=false;try{await ctx.resume();}catch(e){}}
   powerLabel();
@@ -3108,7 +3114,7 @@ function capRender(){
   catch(err){}
   CAP.busy=false;
 }
-function capLabel(){const b=$("#dragWav");if(!b)return;b.textContent=CAP.url?"Drag note ("+CAP.play.toFixed(1)+" s)":"Drag last note";b.dataset.tip=CAP.url?"Drag this onto a track in your DAW. The file is "+CAP.dur.toFixed(1)+" s long: the "+CAP.play.toFixed(1)+" s you played plus the release and effect tail.":"Play a note or phrase, then drag it from here into your DAW as an audio file.";b.classList.toggle("on",!!CAP.url);}
+function capLabel(){const b=$("#dragWav");if(!b)return;b.dataset.tip=CAP.url?"Drag this onto a track in your DAW. The file is "+CAP.dur.toFixed(1)+" s long: the "+CAP.play.toFixed(1)+" s you played plus the release and effect tail.":"Play a note or phrase, then drag it from here into your DAW as an audio file.";b.classList.toggle("on",!!CAP.url);}
 function capInit(){
   const b=$("#dragWav");if(!b)return;
   b.dataset.tip="Plays out as a .wav of the last note or chord you played, as long as you held it, with the current sound and effects. Press and hold this button, drag it onto a track in your DAW or a folder, and drop. Nothing to set up: play a note for 0.1 s and you get a blip, hold it for 2 s and you get that. Click it to save the file instead. Dragging out of the browser page needs Chrome style browsers; in the plugin it uses the host's own drag.";
@@ -3368,7 +3374,7 @@ function buildKbd(){
   whites.forEach(n=>{const k=el("div","k",(n%12===0)?"C"+(Math.floor(n/12)-1):"");k.dataset.n=n;kb.appendChild(k);});
   const w=100/whites.length;
   for(let n=lo;n<=hi;n++)if(BLACK.includes(n%12)){const idx=whites.indexOf(n-1);const b=el("div","kb");b.dataset.n=n;b.style.left=((idx+1)*w-w*0.3)+"%";b.style.width=(w*0.6)+"%";kb.appendChild(b);}
-  held.forEach(n=>lightKey(n,1));$("#octv").textContent="C"+oct;
+  held.forEach(n=>lightKey(n,1));
 }
 let kbdDown=null;
 $("#kbd").addEventListener("pointerdown",e=>{const t=e.target.closest("[data-n]");if(!t)return;e.preventDefault();const r=t.getBoundingClientRect(),n=+t.dataset.n;kbdDown=n;noteOn(n,Math.min(1,0.45+0.55*(e.clientY-r.top)/r.height));});
@@ -3386,7 +3392,7 @@ window.addEventListener("keyup",e=>{const k=e.key.toLowerCase();if(keyNote.has(k
 window.addEventListener("blur",()=>{if(window.__SUPURR_PLUGIN){[...held].forEach(n=>noteOff(n));keyNote.clear();return;}panic();});   /* in the plugin, clicking the DAW must not cut sound that is playing */
 function setOct(o){oct=clamp(o,0,7);buildKbd();}
 function panic(){held.forEach(n=>lightKey(n,0));held.clear();keyNote.clear();send({t:"all"});stopDemo();}
-$("#octd").onclick=()=>setOct(oct-1);$("#octu").onclick=()=>setOct(oct+1);$("#panic").onclick=panic;
+$("#octd").onclick=()=>setOct(oct-1);$("#octu").onclick=()=>setOct(oct+1);
 /* wheels: the pitch wheel springs back and is live, never part of a patch; the mod wheel stays put. Bend range up and down is saved with the patch; the MPE switch and range are settings. */
 const liveSet=(k,v)=>{putV(k,v);send({t:"p",k,v});};
 function drawWheels(){[["#pwheel","#bend",-1,1],["#mwheel","#wheel",0,1]].forEach(([w,i,lo,hi])=>{const e=$(w),c=e.firstChild,v=+$(i).value,t=1-(v-lo)/(hi-lo);c.style.top=(t*Math.max(0,e.clientHeight-c.offsetHeight))+"px";});}
@@ -3652,6 +3658,7 @@ const DEMOS={};
  const og=el("optgroup");og.label="Your own";const lo=el("option","","Load a MIDI file ...");lo.value="__file";og.appendChild(lo);sel.appendChild(og);sel.value=DEMO.demos[0].id;
  const fi=el("input");fi.type="file";fi.accept=".mid,.midi,audio/midi";fi.style.display="none";document.body.appendChild(fi);
  const prev={v:sel.value};
+ $("#midiImp").onclick=()=>{fi.value="";fi.click();};
  sel.onchange=()=>{if(sel.value==="__file"){sel.value=prev.v;fi.value="";fi.click();return;}prev.v=sel.value;const o=sel.selectedOptions[0];kitSet(o&&o.dataset.kit?o.dataset.kit:"off");if(o&&o.dataset.bpm&&!$("#bpmLock").checked){$("#bpm").value=o.dataset.bpm;$("#bpm").oninput();}if(demoT){demoOffs.forEach(o=>send({t:"off",n:o.n}));demoOffs=[];demoLoad();}};
  fi.onchange=async()=>{const f=fi.files[0];if(!f)return;try{const r=parseMidi(new Uint8Array(await f.arrayBuffer()));if(!r.ev.length)throw 0;
    const id="mid_"+Date.now();DEMOS[id]=r.ev;const o=el("option","","MIDI: "+f.name.replace(/\.[^.]+$/,"")+" ("+Math.round(r.bpm)+")");o.value=id;o.dataset.bpm=Math.round(r.bpm);
@@ -3681,10 +3688,15 @@ function buildMidi(ev,bpm,trans,drums,name){ // standard MIDI file, format 0, 48
   const eot=Math.max(last,Math.round(loop*PPQ));b.push(...vl(eot-last),0xff,0x2f,0);
   const L=b.length,h=[0x4d,0x54,0x68,0x64,0,0,0,6,0,0,0,1,PPQ>>8,PPQ&255,0x4d,0x54,0x72,0x6b,(L>>24)&255,(L>>16)&255,(L>>8)&255,L&255];
   return new Uint8Array([...h,...b]);}
-$("#demoExp").onclick=()=>{const sel=$("#demo"),o=sel.selectedOptions[0],ev=DEMOS[sel.value];if(!ev||!ev.length){setStatus("nothing to export",true);return;}
+function midiFile(){const sel=$("#demo"),o=sel.selectedOptions[0],ev=DEMOS[sel.value];if(!ev||!ev.length)return null;
   const bpm=clamp(+$("#bpm").value||120,40,240),tr=+$("#trs").value||0,drums=!!(o&&o.dataset.kit&&o.dataset.kit!=="off");
   const nm=(o?o.textContent:"pattern").replace(/\s*\(\d+\)\s*$/,"");
-  saveFile((slugOf(nm).slice(0,48).replace(/-+$/,"")||"pattern")+"_"+bpm+"bpm.mid",new Blob([buildMidi(ev,bpm,tr,drums,nm)],{type:"audio/midi"})).then(()=>setStatus("MIDI exported: "+nm));};
+  return {nm,name:(slugOf(nm).slice(0,48).replace(/-+$/,"")||"pattern")+"_"+bpm+"bpm.mid",blob:new Blob([buildMidi(ev,bpm,tr,drums,nm)],{type:"audio/midi"})};}
+$("#demoExp").onclick=()=>{const f=midiFile();if(!f){setStatus("nothing to export",true);return;}saveFile(f.name,f.blob).then(()=>setStatus("MIDI exported: "+f.nm));};
+{const b=$("#midiDrag");
+ b.addEventListener("dragstart",e=>{const f=midiFile();if(!f){e.preventDefault();setStatus("nothing to drag",true);return;}const url=URL.createObjectURL(f.blob);setTimeout(()=>URL.revokeObjectURL(url),60000);
+  try{e.dataTransfer.effectAllowed="copy";e.dataTransfer.setData("DownloadURL","audio/midi:"+f.name+":"+url);e.dataTransfer.setData("text/uri-list",url);e.dataTransfer.setData("text/plain",f.name);}catch(x){}});
+ b.addEventListener("click",()=>$("#demoExp").onclick());}
 let demoT=null,demoOffs=[],demoIdx=0,demoLap=0,demoStart=0,demoLoopLen=16,demoEv=null;
 function demoStep(d){const sel=$("#demo"),opts=[...sel.options].filter(o=>o.value!=="__file");if(!opts.length)return;let i=opts.findIndex(o=>o.value===sel.value);i=i<0?0:(i+d+opts.length)%opts.length;
   sel.value=opts[i].value;sel.onchange();}
@@ -3919,6 +3931,7 @@ buildPanels();buildKbd();
  tk.appendChild(knob(N("dmMix","Loud",0,1,0.01,"","Dance master dry/wet: 3 band compressor, clipper and limiter. Turn it up to make the whole sound louder and denser at the same peak level. Details on the FX page."),{}));
  tk.appendChild(knob(N("build","Build",0,1,0.005,"","Build-up macro for risers and drops. One knob does what you do by hand before the drop: at 50 percent the high pass sits near 150 Hz and then rises to about 2.5 kHz at the top, reverb and delay mix rise, the reverb low cut climbs towards 500 Hz, the clipper pushes in, width narrows a little and the output comes down about 2.5 dB so the loudness stays steady. Automate it from 0 up to 1 over the build, then snap it back to 0 on the drop."),{}));
  tk.appendChild(knob(N("dynMix","Dyn",0,1,0.01,"","Dry/wet of the whole Opto, OTT and Squeeze section in one knob. 0 is bypassed."),{}));
+ tk.appendChild(knob(N("fxMix","FX",0,1,0.01,"","Overall dry/wet of the effects, from any page. It scales the chorus, flanger and phaser, the delay and the reverb together; 1 is the amounts you set on the FX page, 0 is all of them off. Drive, Dance master, EQ and width are not touched."),{}));
  {const mk=knob(N("master","Master",0,2,0.01,"","Master gain, the last gain stage before the limiter. The number under the knob is the gain you add or take away (0 dB is unity). The meter next to it shows the level that comes out, which also depends on the sound, the Loud macro and the limiter. Peaks are limited and soft-clipped, so turning it up stays smooth.",{f:v=>v<0.001?"-inf dB":(20*Math.log10(v)>=0?"+":"")+(20*Math.log10(v)).toFixed(1)+" dB"}),{});mk.classList.add("mst");tk.appendChild(mk);}
  $("#lampLim").classList.add("btnlike");$("#lampClip").classList.add("btnlike");$("#lampLim").onclick=$("#lampClip").onclick=()=>showPage("fx");}
 window.__S87T={slotWrite,BOV,sxPreset,sxDecode,slotInfo,slotParams,flatDiff,applyFlat,initParams,factoryBanks,flat,SLOTS,loadPreset,clone,getP:()=>P};

@@ -135,7 +135,7 @@
   }
   window.addEventListener("DOMContentLoaded", () => {
     const power = document.getElementById("power"); if (!power) return;
-    const b = document.createElement("button"); b.className = "btn"; b.id = "filesBtn"; b.textContent = "Files"; b.dataset.tip = "Open the folders where presets, waves, exports and the log are kept, or copy a diagnostics report.";
+    const b = document.createElement("button"); b.className = "btn sm ico"; b.id = "filesBtn"; b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'; b.dataset.tip = "Files: open the folders where presets, waves, exports and the log are kept, or copy a diagnostics report.";
     power.after(b);
     const menu = document.createElement("div"); menu.hidden = true;
     menu.style.cssText = "position:fixed;z-index:99998;background:var(--panel,#1B0264);border:1px solid var(--line,#774BF9);border-radius:12px;padding:6px;display:flex;flex-direction:column;gap:4px;box-shadow:0 8px 28px #0008";

@@ -213,6 +213,7 @@ struct Params {
   // effects, all built to stay mono compatible (side-only chorus, mid/side reverb)
   float chorusMix = 0.f, chorusDepth = 0.5f, chorusRate = 0.6f;
   float delayMix = 0.f, delayTime = 0.25f, delayFb = 0.4f;
+  float fxMix = 1.f;   // FX knob: dry/wet over chorus family, delay and reverb
   bool delaySync = false;      // true: delay time follows the tempo (bpm) with delayDiv, false: delayTime in seconds
   int delayDiv = 7;            // index into kDelayBeats (7 = 1/8 note, 4 = 1/4 note)
   float bpm = 120.f;           // set by the host
@@ -1114,6 +1115,10 @@ class Engine {
     pe.widHi = (float)(std::min(2.0, std::max(0.0, p.widHi + g[22])) * (1 - 0.3 * b)); pe.widMid = (float)(std::min(2.0, std::max(0.0, p.widMid + 0.5 * g[22])) * (1 - 0.15 * b));
     pe.master = (float)(p.master * std::pow(10.0, -2.5 * b / 20));
     freeMods(y);
+    {   // FX knob: one dry/wet over the chorus family, delay and reverb (after the free slots, so it scales their result too)
+      const float f = std::min(1.f, std::max(0.f, p.fxMix));
+      pe.chorusMix *= f; pe.mx0Mix *= f; pe.mx1Mix *= f; pe.mx2Mix *= f; pe.delayMix *= f; pe.reverbMix *= f;
+    }
   }
   // voice slots: for one voice, move the voice knobs of the free slots by that voice's own source values (last sample of its previous block), render, then put the base values back
   struct VSave { float* ptr; float old; };
