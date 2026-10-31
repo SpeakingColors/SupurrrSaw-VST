@@ -1139,7 +1139,7 @@ class SupurrEngine {
       for (let ly = 0; ly < kLayers; ly++) {
         const lp = p.layers[ly], as_ = lp.ampSel | 0, le = link ? 1 : ((as_ === 0 ? ly : as_ - 1) === 0 ? ampE : ((as_ === 0 ? ly : as_ - 1) === 1 ? aE2 : aE3)), dlt = lp.dest | 0;
         if (ctl) { const pg = (Math.min(1, Math.max(-1, lp.pan + p.lfoPan * lfo + md[6])) + 1) * kPi * 0.25; v.pcC[ly] = Math.cos(pg) * 1.414; v.psC[ly] = Math.sin(pg) * 1.414; }
-        if (lp.smp !== "Off") { const d = this.smp[lp.smp]; if (d) { if (ctl) v.sq[ly] = Math.pow(2, (lp.smpPitch + (lp.smpKey === 1 || (lp.smpKey !== 2 && SMP_KEYED[lp.smp]) ? v.note - 60 + v.gl : 0)) / 12); const pos = v.sp[ly], i0 = pos | 0;
+        if (lp.on !== false && lp.smp !== "Off") { const d = this.smp[lp.smp]; if (d) { if (ctl) v.sq[ly] = Math.pow(2, (lp.smpPitch + (lp.smpKey === 1 || (lp.smpKey !== 2 && SMP_KEYED[lp.smp]) ? v.note - 60 + v.gl : 0)) / 12); const pos = v.sp[ly], i0 = pos | 0;
           if (i0 < d.length - 1) { const f = pos - i0, sm = (d[i0] * (1 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; if (dlt !== 0 && !post) { bL[dlt] += sm * v.pcC[ly]; bR[dlt] += sm * v.psC[ly]; } else { smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } } }
         if (lp.on === false || lp.wave === "Off" || (lp.level <= 0 && !used[ly])) { v.lyOut[ly] = 0; continue; }
         let f; if (ctl) { let semis = (v.note - 69) + v.gl + lp.octave * 12 + (lp.semi | 0) + lp.tune * 0.01 + pitchEnv + p.lfoPitch * lfo * 0.3 + lp.lfoPitchCents * 0.01 * lfo + v.stackCents * 0.01 + this.bendSt(v) + p.wheelVib * p.modWheel * 0.01 * lfo + md[0] * 12;
@@ -1597,10 +1597,10 @@ function waveAt(L,base,t,pw){
 }
 function drawOsc(o,time){
   const {g,w,h,hidden}=hidpi(o.cv);if(hidden)return;const L=P.layers[o.i];g.clearRect(0,0,w,h);
-  const on=L.wave!=="Off";o.card.style.opacity=(on&&L.on!==false)?1:0.62;
+  const on=L.wave!=="Off";o.card.style.opacity=L.on!==false?1:0.62;
   g.strokeStyle="#2a2060";g.lineWidth=1;g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();
   for(let i=1;i<8;i++){g.beginPath();g.moveTo(i*w/8,0);g.lineTo(i*w/8,h);g.strokeStyle="#1d1650";g.stroke();}
-  if(!on){g.fillStyle="#a99fdc";g.font="12px IBM Plex Mono";g.fillText("off",8,h/2+4);return;}
+  if(!on){g.fillStyle="#a99fdc";g.font="12px IBM Plex Mono";g.fillText(L.smp&&L.smp!=="Off"?"no wave, sample only":"no wave",8,h/2+4);return;}
   const live=held.size>0||keyNote.size>0||!!demoT,lvl=clamp((meter.l+meter.r)*1.6,0,1);
   const amp=(h/2-7)*(0.34+0.66*clamp(L.level,0,1))*(live?(0.78+0.22*lvl):0.6);
   const stack=L.wave==="SuperSaw"||L.wave==="SuperSquare"||L.wave==="Custom";
@@ -1643,13 +1643,7 @@ function waveSelect(k,tip){
 function wselRefill(){WSELS.forEach(f=>f());}
 function layerCard(i){
   const c=card("Layer "+(i+1),"","c3 a-mint"),p="L"+i+"_";
-  {/* the On switch is the one thing that says if the layer sounds: lit means it plays, dim means it is off (greyed, but its wave stays visible). With no wave chosen the layer cannot sound, so the switch shows off; pressing it then loads the default wave and turns the layer on. */
-    const lt=el("button","tog","On");lt.dataset.tip="Layer switch. Off mutes this layer but keeps its wave and every setting, so you can compare with and without it. If no wave is chosen yet, switching on loads the default wave (Super saw).";lt.setAttribute("aria-pressed","false");
-    const eff=()=>!!P&&P.layers[i].on!==false&&P.layers[i].wave!=="Off";
-    lt.onclick=()=>{if(P.layers[i].wave==="Off"){setParam(p+"wave","SuperSaw",true);if(CTRL[p+"wave"])CTRL[p+"wave"].refresh();setParam(p+"on",true,true);}else setParam(p+"on",!(P.layers[i].on!==false),true);CTRL[p+"on"].refresh();};
-    addCtrl(p+"on",{refresh(){const e=eff();lt.classList.toggle("on",e);lt.setAttribute("aria-pressed",e);},mark(){}});
-    c.querySelector("h2").appendChild(lt);
-    const dim=()=>{c.style.opacity=eff()?1:0.62;const e=eff();if(lt.classList.contains("on")!==e)CTRL[p+"on"].refresh();};onChange(k=>{if(k===p+"on"||k===p+"wave"||k==="all")dim();});reg(dim);}
+  {const lt=toggle(p+"on","On","Layer switch. Off mutes this layer, wave and sample, but keeps every setting, so you can compare with and without it. It does not depend on the wave: a layer with no wave can still play its sample.");c.querySelector("h2").appendChild(lt);const dim=()=>{c.style.opacity=(P&&P.layers[i].on===false)?0.62:1;};onChange(k=>{if(k===p+"on"||k==="all")dim();});reg(dim);}
   const top=el("div","row");const wsel=waveSelect(p+"wave","Oscillator type. Off mutes the layer. Custom plays the shape from the Presets and waves page. Your saved waves are listed under My waves.");wsel.style.width="96px";wsel.style.fontSize="12px";
   const stepW=d=>{const o=wsel.options,n=o.length;if(!n)return;wsel.selectedIndex=(wsel.selectedIndex+d+n)%n;wsel.dispatchEvent(new Event("change"));};
   const arr=(t,d,tp)=>{const b=el("button","btn sm",t);b.style.cssText="padding:2px 4px;min-width:0;font-size:10px;flex:0 0 auto";b.dataset.tip=tp;b.onclick=()=>stepW(d);return b;};

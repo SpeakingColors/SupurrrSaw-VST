@@ -1240,7 +1240,7 @@ class Engine {
       for (int ly = 0; ly < kLayers; ++ly) {
         const LayerParams& lp = p.layer[ly]; const int asel = lp.ampSel == 0 ? ly : std::max(0, std::min(2, lp.ampSel - 1)), dlt = std::max(0, std::min(4, lp.dest)); const double le = link ? 1.0 : (asel == 0 ? ampE : (asel == 1 ? aE2 : aE3));
         if (ctl) { const double pg = (std::min(1.0, std::max(-1.0, lp.pan + p.lfoPan * lfo + md[6])) + 1.0) * kPiD * 0.25; v.pcC[ly] = std::cos(pg) * 1.414; v.psC[ly] = std::sin(pg) * 1.414; }
-        if (lp.smp != 0 && bank) { const std::vector<float>& d = bank->d[lp.smp]; if (!d.empty()) {
+        if (lp.on && lp.smp != 0 && bank) { const std::vector<float>& d = bank->d[lp.smp]; if (!d.empty()) {
           if (ctl) v.sq[ly] = std::pow(2.0, (lp.smpPitch + (lp.smpKey == 1 || (lp.smpKey != 2 && smpKeyed(lp.smp)) ? v.note - 60 + v.gl : 0.0)) / 12.0);
           const double pos = v.sp[ly]; const int i0 = (int)pos;
           if (i0 < (int)d.size() - 1) { const double f = pos - i0, sm = (d[i0] * (1.0 - f) + d[i0 + 1] * f) * lp.smpVol * le; v.sp[ly] = pos + v.sq[ly]; if (dlt != 0 && !post) { v.bL[dlt] += sm * v.pcC[ly]; v.bR[dlt] += sm * v.psC[ly]; } else { smL += sm * v.pcC[ly]; smR += sm * v.psC[ly]; } } } }
