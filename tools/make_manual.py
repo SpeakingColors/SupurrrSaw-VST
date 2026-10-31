@@ -58,7 +58,7 @@ S += [Paragraph("2. The window", H2),
                     "<b>LIM</b> lights when the limiter works, <b>CLIP</b> when the soft clipper bends the output. Click either to open the FX page."),
           ("Pages", "<b>Sound</b>, <b>Kit</b>, <b>Mod</b>, <b>FX</b>, <b>Presets</b>."),
           ("Bottom bar", "Keyboard with Oct - / Oct +, mod wheel and pitch wheel, bend range boxes, the MPE switch and MPE range, Panic (stops every note), a volume that only changes this window, window size (Fit, 100%, 85%, 70%; double-click the wooden side to go back to 100%), "
-                         "demo lines with BPM and Play, and <b>Drag last note</b> in the standalone and browser versions."),
+                         "demo lines with BPM and Play (including Disco and funk patterns and drum grooves), <b>Export MIDI</b> (saves the chosen pattern as a .mid file at the BPM and Trans shown; drums go on channel 10; in the plugin the file goes to the Exports folder), and <b>Drag last note</b> in the standalone and browser versions."),
           ("Tips", "Hover any control for about a second to see what it does. Drag a knob up or down (hold Shift for fine), use the mouse wheel, click the value to type it, double-click to reset it. "
                    "Pink dots show what you changed.")], [26 * mm, W - 26 * mm])]
 
