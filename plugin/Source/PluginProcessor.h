@@ -45,7 +45,7 @@ public:
     struct MidiEv { juce::int64 ms; int type; int ch; int a; int b; };
 
     // ---- meters and scope, read by the editor timer ----
-    struct MeterSnap { float l = 0, r = 0, lim = 0, gr[3] {}, dm[3] {}, wet[8] {}; int active = 0, trips = 0; };
+    struct MeterSnap { float l = 0, r = 0, lim = 0, gr[3] {}, dm[3] {}, wet[8] {}, lph[3] { -1.f, -1.f, -1.f }; int active = 0, trips = 0; };
     MeterSnap takeMeters();
     int readScope (float* dest, int maxCount);       // new samples since the last call (mono), newest last
 
@@ -107,7 +107,7 @@ private:
     std::atomic<float> loadNow { 0.f };
     MidiEv midiLog[64] = {};
     std::atomic<int> midiWp { 0 };
-    std::atomic<float> mPeakL { 0 }, mPeakR { 0 }, mLim { 0 }, mGr[3], mDm[3], mWet[8];
+    std::atomic<float> mPeakL { 0 }, mPeakR { 0 }, mLim { 0 }, mGr[3], mDm[3], mWet[8], mLph[3] { -1.f, -1.f, -1.f };
     std::atomic<int> mActive { 0 }, mTrips { 0 };
 
     static constexpr int kScope = 65536;

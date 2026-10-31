@@ -214,10 +214,10 @@ canvas{display:block;max-width:100%}
 
 /* popup preset browser, opened from the preset name in the header */
 .pbm{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:70;padding:12px;box-sizing:border-box}
-.pbbox{background:#150f33;border:1px solid #ffa600;border-radius:14px;box-shadow:0 10px 40px #000b;width:min(1040px,100%);height:min(660px,100%);display:flex;flex-direction:column;overflow:hidden}
+.pbbox{background:#150f33;border:1px solid #ffa600;border-radius:14px;box-shadow:0 10px 40px #000b;width:min(100%,860px,max(600px,60%));height:min(100%,600px,max(420px,70%));display:flex;flex-direction:column;overflow:hidden}
 .pbbox h3{margin:0;padding:16px 22px 12px;font-family:Fredoka,sans-serif;letter-spacing:3px;color:#ffa600;font-size:26px;font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--line)}
 .pbbody{flex:1;min-height:0;display:flex;gap:22px;padding:14px 22px}
-.pbl{flex:0 0 340px;display:flex;flex-direction:column;min-height:0;gap:8px}.pbr{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.pbl{flex:0 0 300px;display:flex;flex-direction:column;min-height:0;gap:8px}.pbr{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .pbbanks{display:flex;gap:6px;flex-wrap:wrap}.pbbanks .chip{padding:4px 12px;font-size:13px}
 .pblist{flex:1;min-height:0;overflow-y:auto;background:var(--inset);border-radius:10px;padding:6px;scrollbar-width:thin}
 .pblist .bhead{margin:10px 6px 4px}.pblist .brow{justify-content:space-between;margin-bottom:2px;font-size:15px}.pblist .brow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -963,6 +963,7 @@ class SupurrEngine {
       for (const v of this.voices) if (v.active && v.note === note && (ch == null || ch < 0 || v.ch === (ch & 15)) && v.amp.stage !== 3) { const t = held[held.length - 1]; this.setGl(v, v.note - t, p.glide > 0); v.note = t; this.lastNote = t; return; }
     }
     for (const v of this.voices) if (v.active && v.note === note && (ch == null || ch < 0 || v.ch === (ch & 15)) && v.amp.stage !== 3) this.envsOff(v); }
+  lfoPhases() { let n = null; for (const v of this.voices) if (v.active && (!n || v.age > n.age)) n = v; return n ? [n.lfoPhase, n.lp2[0], n.lp2[1]] : [-1, -1, -1]; }
   allOff() { if (this.kit) for (const s of this.kit) { s.e.allOff(); s.hot = 0; } for (const v of this.voices) v.active = false; if (this.held) this.held.length = 0; }
   /* global modulation (reverb, delay, drive, clipper, high-pass, low-pass, width) comes from the newest sounding voice; the Build macro adds to it */
   globals() {
@@ -1323,7 +1324,7 @@ function sendSet(){send({t:"set",p:clone(P)});syncCycles();instEnsure();}
 /* ---------- audio ---------- */
 let ctx=null,node=null,outGain=null,ana=null,fb=null,audioMode="off";
 const WH={dly:[],rev:[]};function wetPush(a){WH.dly.push([a[0],a[1],a[2],a[3]]);WH.rev.push([a[4],a[5],a[6],a[7]]);if(WH.dly.length>240){WH.dly.shift();WH.rev.shift();}}
-const meter={l:0,r:0,act:0,lim:0,gr:[0,0,0],dm:[0,0,0],trips:0,load:0,cap:15,eqd:[0,0,0,0]};
+const meter={l:0,r:0,act:0,lim:0,gr:[0,0,0],dm:[0,0,0],trips:0,load:0,cap:15,eqd:[0,0,0,0],lph:[-1,-1,-1],lphT:0};
 /* ---------- instruments (multisampled piano, trumpet, strings) ----------
    Playground: the pack sits in instruments/ next to this page; a zone is fetched and decoded when an instrument is first used.
    Plugin: the native side lists and plays them (window.__INSTRUMENTS), nothing is decoded here. */
@@ -1356,16 +1357,16 @@ async function startAudio(){
   outGain=ctx.createGain();outGain.gain.value=+$("#vol").value;outGain.connect(ctx.destination);
   ana=ctx.createAnalyser();ana.fftSize=16384;ana.smoothingTimeConstant=0.82;outGain.connect(ana);
   try{
-    const src=ENGINE_SRC+"\n"+applyMsg.toString()+"\nclass SPN extends AudioWorkletProcessor{constructor(){super();this.e=new SupurrEngine(sampleRate);this.e.setParams(defaultParams());this.c=0;this.port.onmessage=m=>applyMsg(this.e,m.data);}process(i,o){var out=o[0],L=out[0],R=out[1]||out[0];this.e.render(L,R,L.length);if(++this.c%4===0)this.port.postMessage([this.e.meterL,this.e.meterR,this.e.activeCount,this.e.limEnv,this.e.gr[0],this.e.gr[1],this.e.gr[2],this.e.dmgr[0],this.e.dmgr[1],this.e.dmgr[2],this.e.trips,this.e.load,this.e.nvCap].concat(this.e.eq.live(),this.e.fx.wetTake()));return true;}}\nregisterProcessor('supurr',SPN);";
+    const src=ENGINE_SRC+"\n"+applyMsg.toString()+"\nclass SPN extends AudioWorkletProcessor{constructor(){super();this.e=new SupurrEngine(sampleRate);this.e.setParams(defaultParams());this.c=0;this.port.onmessage=m=>applyMsg(this.e,m.data);}process(i,o){var out=o[0],L=out[0],R=out[1]||out[0];this.e.render(L,R,L.length);if(++this.c%4===0)this.port.postMessage([this.e.meterL,this.e.meterR,this.e.activeCount,this.e.limEnv,this.e.gr[0],this.e.gr[1],this.e.gr[2],this.e.dmgr[0],this.e.dmgr[1],this.e.dmgr[2],this.e.trips,this.e.load,this.e.nvCap].concat(this.e.eq.live(),this.e.fx.wetTake()).concat(this.e.lfoPhases()));return true;}}\nregisterProcessor('supurr',SPN);";
     const url=URL.createObjectURL(new Blob([src],{type:"application/javascript"}));
     await ctx.audioWorklet.addModule(url);
     node=new AudioWorkletNode(ctx,"supurr",{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
-    node.port.onmessage=e=>{const d=e.data;meter.l=d[0];meter.r=d[1];meter.act=d[2];meter.lim=d[3];meter.gr[0]=d[4];meter.gr[1]=d[5];meter.gr[2]=d[6];meter.dm[0]=d[7];meter.dm[1]=d[8];meter.dm[2]=d[9];meter.load=d[11]||0;meter.cap=d[12]||15;meter.eqd[0]=d[13]||0;meter.eqd[1]=d[14]||0;meter.eqd[2]=d[15]||0;meter.eqd[3]=d[16]||0;if(d.length>=25)wetPush(d.slice(17,25));if(d[10]>meter.trips){meter.trips=d[10];setStatus("safety guard reset the engine",true);}};
+    node.port.onmessage=e=>{const d=e.data;meter.l=d[0];meter.r=d[1];meter.act=d[2];meter.lim=d[3];meter.gr[0]=d[4];meter.gr[1]=d[5];meter.gr[2]=d[6];meter.dm[0]=d[7];meter.dm[1]=d[8];meter.dm[2]=d[9];meter.load=d[11]||0;meter.cap=d[12]||15;meter.eqd[0]=d[13]||0;meter.eqd[1]=d[14]||0;meter.eqd[2]=d[15]||0;meter.eqd[3]=d[16]||0;if(d.length>=25)wetPush(d.slice(17,25));if(d.length>=28){meter.lph=[d[25],d[26],d[27]];meter.lphT=performance.now();}if(d[10]>meter.trips){meter.trips=d[10];setStatus("safety guard reset the engine",true);}};
     node.connect(outGain);audioMode="worklet";
   }catch(err){
     fb=new EN.SupurrEngine(ctx.sampleRate);fb.setParams(EN.defaultParams());
     node=ctx.createScriptProcessor(2048,0,2);
-    node.onaudioprocess=e=>{const L=e.outputBuffer.getChannelData(0),R=e.outputBuffer.getChannelData(1);fb.render(L,R,L.length);meter.l=fb.meterL;meter.r=fb.meterR;meter.act=fb.activeCount;meter.lim=fb.limEnv;meter.gr=fb.gr;meter.dm=fb.dmgr;meter.load=fb.load;meter.cap=fb.nvCap;meter.eqd=fb.eq.live();wetPush(fb.fx.wetTake());if(fb.trips>meter.trips){meter.trips=fb.trips;setStatus("safety guard reset the engine",true);}};
+    node.onaudioprocess=e=>{const L=e.outputBuffer.getChannelData(0),R=e.outputBuffer.getChannelData(1);fb.render(L,R,L.length);meter.l=fb.meterL;meter.r=fb.meterR;meter.act=fb.activeCount;meter.lim=fb.limEnv;meter.gr=fb.gr;meter.dm=fb.dmgr;meter.load=fb.load;meter.cap=fb.nvCap;meter.eqd=fb.eq.live();wetPush(fb.fx.wetTake());meter.lph=fb.lfoPhases();meter.lphT=performance.now();if(fb.trips>meter.trips){meter.trips=fb.trips;setStatus("safety guard reset the engine",true);}};
     node.connect(outGain);audioMode="script";
   }
   INSTPOSTED={};SENT[0]=SENT[1]=SENT[2]="";sendSet();if(window.__kitResend)window.__kitResend();
@@ -1878,7 +1879,7 @@ function lfoCard(n){
   const cv=el("canvas","disp");cv.style.height=SH(70,80);cv.style.marginTop="8px";c.appendChild(cv);
   c.appendChild(knobRow([LG(K("Rate"),"Rate",0.05,30,"Hz","LFO speed. At 150 BPM a 1/16 note is 10 Hz."),N(K("Depth"),"Depth",0,1,0.01,"","Master depth of this LFO. Everything it drives in the matrix scales with this."),N(K("Fade"),"Fade in",0,5,0.01,"s","LFO fades in after the note starts, like a vibrato that arrives late."),N(K("Start"),"Phase",0,1,0.01,"","Where in the cycle the LFO starts on every note.")]));
   c.appendChild(el("div","pill note",n===0?"Where the LFO goes is set in the matrix above.":"LFO "+(n+1)+" has its own rows in the matrix above."));
-  const shv=[.6,-.8,.2,.9,-.4,.5,-.7,.1];
+  const shv=[.6,-.8,.2,.9,-.4,.5,-.7,.1];let lastFr=0,side=0;
   function draw(){
     const {g,w,h,hidden}=hidpi(cv);if(hidden)return;g.clearRect(0,0,w,h);const cyc=2,q=P[K("Shape")],dp=P[K("Depth")],st=P[K("Start")];
     const rv=i=>shv[((i%8)+8)%8];
@@ -1887,7 +1888,12 @@ function lfoCard(n){
       const v=q===1?4*Math.abs(pp-0.5)-1:(q===2?(pp<0.5?1:-1):(q===3?2*pp-1:(q===6?1-2*pp:Math.sin(2*Math.PI*pp))));return v*dp;};
     g.strokeStyle="#241c52";g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();
     g.strokeStyle="#6cc9f5";g.lineWidth=2.8;g.shadowColor="#6cc9f5";g.shadowBlur=8;g.beginPath();for(let x=0;x<=w;x+=2){const y=h/2-f(x/w*cyc)*(h/2-6);x?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();g.shadowBlur=0;
-    const ph=(performance.now()/1000*P[K("Rate")])%cyc,y=h/2-f(ph)*(h/2-6);
+    let ph;const vp=meter.lph?meter.lph[n]:-1;
+    if(vp>=0&&performance.now()-meter.lphT<400){ /* the real phase of the newest voice, carried forward by the time since it was sent */
+      const tot=vp+Math.max(0,(performance.now()-meter.lphT)/1000)*P[K("Rate")],fr=tot%1;
+      if(fr<lastFr-0.5)side^=1; lastFr=fr; ph=side*1+fr;
+    } else {lastFr=0;side=0;ph=(performance.now()/1000*P[K("Rate")])%cyc;}
+    const y=h/2-f(ph)*(h/2-6);
     g.fillStyle="#ff7bb1";g.beginPath();g.arc(ph/cyc*w,y,5,0,7);g.fill();
   }
   reg(draw);LFODRAWS.push(draw);onChange(k=>{if(k.startsWith("lfo")||k==="all")draw();});return c;

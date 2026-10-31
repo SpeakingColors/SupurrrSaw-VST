@@ -1007,9 +1007,9 @@ class Engine {
   void setNotePress(int note, double x) { for (auto& v : voices) if (v.active && v.note == note && v.amp.stage != 3) v.press = x; }   // polyphonic key pressure
   void allOff() { for (auto& v : voices) v.active = false; nHeld = 0; }
   void releaseAll() { for (auto& v : voices) if (v.active && v.amp.stage != 3 && !v.oneShot) envsOff(v); }   // like every key let go: tails ring out
-  struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}; };
+  struct Meters { float l = 0.f, r = 0.f, lim = 0.f; int active = 0, trips = 0; float gr[3] = {0, 0, 0}, dm[3] = {0, 0, 0}, lph[3] = {-1.f, -1.f, -1.f}; };
   void wetTake(float* o) { fx.wetTake(o); }
-  Meters meters() const { Meters m = mtr; m.lim = (float)limEnv; m.trips = trips; for (int i = 0; i < 3; ++i) { m.gr[i] = (float)dyn.gr[i]; m.dm[i] = (float)dm.gr[i]; } return m; }
+  Meters meters() const { Meters m = mtr; m.lim = (float)limEnv; m.trips = trips; if (const Voice* nv = newestVoice()) { m.lph[0] = (float)nv->lfoPhase; m.lph[1] = (float)nv->lp2[0]; m.lph[2] = (float)nv->lp2[1]; } for (int i = 0; i < 3; ++i) { m.gr[i] = (float)dyn.gr[i]; m.dm[i] = (float)dm.gr[i]; } return m; }
   void reserve(int maxBlock) { if ((int)subBusL.size() < maxBlock) { subBusL.assign(maxBlock, 0.0); subBusR.assign(maxBlock, 0.0); } }
   const Voice* newestVoice() const { const Voice* v = nullptr; for (const auto& c : voices) if (c.active && (!v || c.age > v->age)) v = &c; return v; }   // for tests and meters
   const Params& effective() const { return pe; }   // the settings the effects really used in the last block (base plus modulation)
