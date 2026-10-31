@@ -211,6 +211,23 @@ canvas{display:block;max-width:100%}
 #histMenu div{padding:4px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;display:flex;justify-content:space-between;gap:14px}#histMenu div:hover{background:#2b2158}#histMenu .redo{color:var(--dim)}#histMenu .cur{color:var(--mint);cursor:default;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}#histMenu .none{color:var(--dim);cursor:default}
 .topk{display:flex;gap:4px;align-items:center;margin-right:10px}.topk .knob{width:54px}.topk .knob .n{display:block;font-size:9px;letter-spacing:1px}.topk .knob .v{display:none}.topk .knob svg{width:34px;height:34px}
 .lamp.cpu{position:relative;overflow:hidden;width:64px;padding:2px 0}.lamp.cpu i{position:absolute;left:0;top:0;bottom:0;width:0;background:#02ebba55;transition:width .15s}.lamp.cpu b{position:relative;font-weight:500}.lamp.cpu.mid i{background:#ffd10066}.lamp.cpu.hi i{background:#fe006dAA}.lamp.btnlike{cursor:pointer}#voices{white-space:nowrap}
+
+/* popup preset browser, opened from the preset name in the header */
+.pbm{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:70;padding:12px;box-sizing:border-box}
+.pbbox{background:#150f33;border:1px solid #ffa600;border-radius:14px;box-shadow:0 10px 40px #000b;width:min(1040px,100%);height:min(660px,100%);display:flex;flex-direction:column;overflow:hidden}
+.pbbox h3{margin:0;padding:16px 22px 12px;font-family:Fredoka,sans-serif;letter-spacing:3px;color:#ffa600;font-size:26px;font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.pbbody{flex:1;min-height:0;display:flex;gap:22px;padding:14px 22px}
+.pbl{flex:0 0 340px;display:flex;flex-direction:column;min-height:0;gap:8px}.pbr{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.pbbanks{display:flex;gap:6px;flex-wrap:wrap}.pbbanks .chip{padding:4px 12px;font-size:13px}
+.pblist{flex:1;min-height:0;overflow-y:auto;background:var(--inset);border-radius:10px;padding:6px;scrollbar-width:thin}
+.pblist .bhead{margin:10px 6px 4px}.pblist .brow{justify-content:space-between;margin-bottom:2px;font-size:15px}.pblist .brow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pblist .brow .ty{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim)}.pblist .brow.cur{background:#ffa60022;border-color:#ffa600;color:#ffa600}
+.pblist .brow .sn{color:var(--dim);font-size:11px;margin-right:6px}
+.pbr label{font-family:Fredoka,sans-serif;letter-spacing:2px;text-transform:uppercase;font-size:12px;color:var(--mint);margin-top:4px}
+.pbr input{width:100%;box-sizing:border-box;padding:9px 12px;font-size:15px}.pbr .chips{gap:6px}.pbr .chip{padding:4px 11px;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.pbr .chip.on{background:#ffa600;border-color:#ffa600;color:#241600}.pbbanks .chip.on{background:#ffa600;border-color:#ffa600;color:#241600}
+.pbfoot{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:10px 22px 14px;border-top:1px solid var(--line)}.pbfoot .pill{margin-right:auto}
+@media(max-width:760px){.pbbody{flex-direction:column;overflow-y:auto}.pbl{flex:0 0 auto;height:320px}.pbr{overflow:visible}}
 .dlg{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:50}.dlg[hidden]{display:none}
 .dbox{background:#150f33;border:1px solid var(--mint);border-radius:14px;padding:18px 20px;width:min(420px,92vw);box-shadow:0 10px 40px #000a}
 .dbox h3{margin:0 0 8px;font-family:Fredoka,sans-serif;letter-spacing:1px;color:var(--mint)}.dbox p{margin:0 0 12px;color:var(--fg);line-height:1.5;font-size:13.5px}
@@ -3114,7 +3131,7 @@ function loadPreset(val,why){
   if(P)["mpe","mpeRange","pitchBend","pressure","slide","modWheel"].forEach(k=>{p[k]=P[k];});   // the MPE switch and the live wheels belong to the player, not the patch
   const prev=CURNAME;
   P=p;BASE=clone(p);CURNAME=name;CURBASEKEY=val;touched={};MFXS=MFXS_IN||{};mfxLast=P.modFxType|0;
-  loads++;pushMove(why||"@load",prev,name);
+  loads++;pushMove(why||"@load",prev,name);mbHistPush(val,name);
   sendSet();
   $("#del").hidden=!val.startsWith("u:");$("#del").textContent="Delete preset";
   refreshAll();dirtyC=true;if(BF.tab==="banks")renderBank();
@@ -3229,6 +3246,47 @@ async function renamePreset(){
 }
 
 /* The plugin's web view does not reliably open a native select list, so the preset name opens this own list (same entries as the select, with a search box). */
+/* ----- popup preset browser: opened from the preset name in the header (all pages, app and plugin) ----- */
+var MBH=[];function mbHistPush(v,n){if(!v)return;const i=MBH.findIndex(x=>x[0]===v);if(i>=0)MBH.splice(i,1);MBH.unshift([v,String(n||"").replace(/ \*$/,"")]);if(MBH.length>8)MBH.length=8;}
+const MB={bank:"All",q:"",type:"",genre:""};
+function presetBrowser(){
+  const old=document.getElementById("pbm");if(old){old.remove();return;}
+  const ov=el("div","pbm");ov.id="pbm";const bx=el("div","pbbox");bx.setAttribute("role","dialog");bx.setAttribute("aria-label","Preset browser");ov.appendChild(bx);
+  bx.appendChild(el("h3","","Preset browser"));
+  const body=el("div","pbbody");bx.appendChild(body);const L=el("div","pbl"),R=el("div","pbr");body.append(L,R);
+  const bk=el("div","pbbanks");L.appendChild(bk);const list=el("div","pblist");L.appendChild(list);
+  R.appendChild(el("label","","Search"));const q=el("input");q.type="text";q.placeholder="name, type, genre or tag";q.value=MB.q;R.appendChild(q);
+  R.appendChild(el("label","","Type"));const tc=el("div","chips");R.appendChild(tc);
+  R.appendChild(el("label","","Genre"));const gc=el("div","chips");R.appendChild(gc);
+  R.appendChild(el("label","","History (click to go back)"));const hc=el("div","chips");R.appendChild(hc);
+  const note=el("div","pill","All shows every sound. Banks A to D are factory, E to G are yours (128 slots each).");note.style.marginTop="6px";R.appendChild(note);
+  const foot=el("div","pbfoot");const cnt=el("span","pill");foot.appendChild(cnt);const cl=el("button","btn","Close");foot.appendChild(cl);bx.appendChild(foot);
+  const close=()=>{MB.q=q.value;ov.remove();document.removeEventListener("keydown",key,true);};
+  const key=e=>{if(e.key==="Escape"){e.stopPropagation();close();}else if(e.key==="Enter"&&document.activeElement===q){const f=list.querySelector("[data-v]");if(f)f.click();}};
+  cl.onclick=close;ov.addEventListener("pointerdown",e=>{if(e.target===ov)close();});document.addEventListener("keydown",key,true);
+  const chipSet=(box,items,k)=>{box.textContent="";items.forEach(t=>{const b=el("button","chip"+(MB[k]===t?" on":""),t);b.onclick=()=>{MB[k]=MB[k]===t?"":t;draw();};box.appendChild(b);});};
+  const draw=()=>{
+    MB.q=q.value;const f=MB.q.toLowerCase().trim(),words=f?f.split(/\s+/):[];
+    bk.textContent="";["All",...BANKN].forEach(b=>{const x=el("button","chip"+(MB.bank===b?" on":""),b);x.dataset.tip=b==="All"?"Every sound, grouped.":"Bank "+b+(b<"E"?": factory, 128 slots.":": yours, 128 slots.");x.onclick=()=>{MB.bank=b;draw();};bk.appendChild(x);});
+    chipSet(tc,TYPES,"type");{const all=MB.more||GENRES.length<=16||GENRES.indexOf(MB.genre)>=16;chipSet(gc,all?GENRES:GENRES.slice(0,16),"genre");if(GENRES.length>16){const m=el("button","chip",all?"fewer":"+"+(GENRES.length-16)+" more");m.onclick=()=>{MB.more=!all;draw();};gc.appendChild(m);}}
+    hc.textContent="";MBH.forEach(([v,n])=>{const b=el("button","chip",n);b.title=n;b.onclick=()=>{try{loadPreset(v);}catch(e){}draw();};hc.appendChild(b);});if(!MBH.length)hc.appendChild(el("span","pill","nothing yet"));
+    list.textContent="";let shown=0;const filt=!!(f||MB.type||MB.genre);
+    const ok=(name,tags)=>{if(MB.type&&!tags.includes(MB.type))return false;if(MB.genre&&!tags.includes(MB.genre))return false;if(words.length){const hay=(name+" "+tags.join(" ")).toLowerCase();if(!words.every(w=>hay.includes(w)))return false;}return true;};
+    const row=(val,name,tag,pre,heart)=>{shown++;const r=el("div","brow"+(val===CURBASEKEY?" cur":""));r.dataset.v=val;
+      if(heart){const h=el("button","fav"+(isFav(val)?" on":""),isFav(val)?"♥":"♡");h.onclick=e=>{e.stopPropagation();favToggle(val);draw();};r.appendChild(h);}
+      const nm=el("span","nm");if(pre){const s=el("span","sn",pre);nm.appendChild(s);}nm.appendChild(document.createTextNode(name));r.appendChild(nm);r.appendChild(el("span","ty",tag));
+      r.onclick=()=>{try{loadPreset(val);}catch(e){}draw();};list.appendChild(r);return r;};
+    if(MB.bank==="All"){const groups=visGroups(true);
+      if(filt){const all=[];groups.forEach(([g,vs])=>vs.forEach(v=>{if(!all.some(a=>a[0]===v))all.push([v,labelOf(v)]);}));all.sort((a,b)=>a[1].localeCompare(b[1]));
+        all.forEach(([v,n])=>{const t=tagsOfKey(v),tags=[t.type,...t.genres,...(t.user||[])].filter(Boolean);if(ok(n,tags))row(v,n,t.type||"",null,true);});}
+      else groups.forEach(([g,vs])=>{list.appendChild(el("div","bhead",g));vs.forEach(v=>{const t=tagsOfKey(v);row(v,labelOf(v),t.type||"",null,true);});});}
+    else{for(let i=0;i<SLOTS;i++){const si=slotInfo(MB.bank,i);if(si.init&&!filt){row("s:"+MB.bank+":"+i,"Init","",pad3(i),false).style.opacity=".5";continue;}if(si.init)continue;const tags=(si.tags||[]).filter(Boolean);if(ok(si.name,tags))row("s:"+MB.bank+":"+i,si.name,tags[0]||"",pad3(i),false);}}
+    if(!shown)list.appendChild(el("div","bhead","Nothing matches. Clear a tag or the search."));
+    cnt.textContent=filt?shown+" found":(MB.bank==="All"?Object.keys(PRESETS).length+Object.keys(SAVED).length+" sounds":"Bank "+MB.bank);
+    const cur=list.querySelector(".cur");if(cur&&cur.scrollIntoView&&!filt)cur.scrollIntoView({block:"center"});
+  };
+  q.oninput=draw;document.body.appendChild(ov);draw();q.focus();
+}
 function presetMenu(){
   const old=document.getElementById("pmenu");if(old){old.remove();return;}
   const s=$("#preset"),r=$("#pbtn").getBoundingClientRect(),m=document.createElement("div");m.id="pmenu";
@@ -3251,7 +3309,7 @@ function presetMenu(){
   document.addEventListener("pointerdown",away,true);q.focus();
 }
 {let t=null;const b=$("#pbtn");
- b.addEventListener("click",()=>{clearTimeout(t);t=setTimeout(()=>{if(window.__SUPURR_PLUGIN){presetMenu();return;}const s=$("#preset");try{s.showPicker();}catch(e){s.style.pointerEvents="auto";s.focus();}},260);});
+ b.addEventListener("click",()=>{clearTimeout(t);t=setTimeout(()=>{presetBrowser();},260);});
  b.addEventListener("dblclick",()=>{clearTimeout(t);renamePreset();});
  $("#preset").addEventListener("blur",()=>{$("#preset").style.pointerEvents="none";});}
 /*NOTES_BEGIN*/$("#saven").onclick=async()=>{
