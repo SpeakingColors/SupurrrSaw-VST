@@ -1597,7 +1597,7 @@ function waveAt(L,base,t,pw){
 }
 function drawOsc(o,time){
   const {g,w,h,hidden}=hidpi(o.cv);if(hidden)return;const L=P.layers[o.i];g.clearRect(0,0,w,h);
-  const on=L.wave!=="Off";o.card.style.opacity=on?1:0.62;
+  const on=L.wave!=="Off";o.card.style.opacity=(on&&L.on!==false)?1:0.62;
   g.strokeStyle="#2a2060";g.lineWidth=1;g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();
   for(let i=1;i<8;i++){g.beginPath();g.moveTo(i*w/8,0);g.lineTo(i*w/8,h);g.strokeStyle="#1d1650";g.stroke();}
   if(!on){g.fillStyle="#a99fdc";g.font="12px IBM Plex Mono";g.fillText("off",8,h/2+4);return;}
@@ -1643,7 +1643,13 @@ function waveSelect(k,tip){
 function wselRefill(){WSELS.forEach(f=>f());}
 function layerCard(i){
   const c=card("Layer "+(i+1),"","c3 a-mint"),p="L"+i+"_";
-  {const lt=toggle(p+"on","On","Layer switch. Off mutes this layer but keeps its wave and every setting, so you can compare with and without it.");c.querySelector("h2").appendChild(lt);const dim=()=>{c.style.opacity=(P&&P.layers[i].on===false)?0.6:1;};onChange(k=>{if(k===p+"on"||k==="all")dim();});reg(dim);}
+  {/* the On switch is the one thing that says if the layer sounds: lit means it plays, dim means it is off (greyed, but its wave stays visible). With no wave chosen the layer cannot sound, so the switch shows off; pressing it then loads the default wave and turns the layer on. */
+    const lt=el("button","tog","On");lt.dataset.tip="Layer switch. Off mutes this layer but keeps its wave and every setting, so you can compare with and without it. If no wave is chosen yet, switching on loads the default wave (Super saw).";lt.setAttribute("aria-pressed","false");
+    const eff=()=>!!P&&P.layers[i].on!==false&&P.layers[i].wave!=="Off";
+    lt.onclick=()=>{if(P.layers[i].wave==="Off"){setParam(p+"wave","SuperSaw",true);if(CTRL[p+"wave"])CTRL[p+"wave"].refresh();setParam(p+"on",true,true);}else setParam(p+"on",!(P.layers[i].on!==false),true);CTRL[p+"on"].refresh();};
+    addCtrl(p+"on",{refresh(){const e=eff();lt.classList.toggle("on",e);lt.setAttribute("aria-pressed",e);},mark(){}});
+    c.querySelector("h2").appendChild(lt);
+    const dim=()=>{c.style.opacity=eff()?1:0.62;const e=eff();if(lt.classList.contains("on")!==e)CTRL[p+"on"].refresh();};onChange(k=>{if(k===p+"on"||k===p+"wave"||k==="all")dim();});reg(dim);}
   const top=el("div","row");const wsel=waveSelect(p+"wave","Oscillator type. Off mutes the layer. Custom plays the shape from the Presets and waves page. Your saved waves are listed under My waves.");wsel.style.width="96px";wsel.style.fontSize="12px";
   const stepW=d=>{const o=wsel.options,n=o.length;if(!n)return;wsel.selectedIndex=(wsel.selectedIndex+d+n)%n;wsel.dispatchEvent(new Event("change"));};
   const arr=(t,d,tp)=>{const b=el("button","btn sm",t);b.style.cssText="padding:2px 4px;min-width:0;font-size:10px;flex:0 0 auto";b.dataset.tip=tp;b.onclick=()=>stepW(d);return b;};
