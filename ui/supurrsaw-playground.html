@@ -2371,9 +2371,9 @@ const FXPS_BASE={
   ott:[{ottDepth:0.3,ottMix:0.3,ottLow:0,ottMid:0,ottHigh:0,ottTime:1},{ottDepth:0,ottMix:0}],
   dm:[{dmMix:0.4,dmDrive:0.5,dmClip:0.35,dmLow:0,dmMid:0,dmHigh:0},{dmMix:0}],
   wid:[{widMid:1,widHi:1,bassMonoHz:120,msMid:0,msSide:0},{widMid:1,widHi:1,msMid:0,msSide:0}],
-  pit:[{pitchAmt:0,pitchHold:0,pitchCurve:0,pitchTime:0.09,pitchAttack:0,pitchFall:0,pitchFallTime:1},{pitchAmt:0,pitchFall:0}],
+  pit:[{pitchAmt:0,pitchHold:0,pitchCurve:0,pitchTime:0.09,pitchAttack:0,pitchFall:0,pitchFallTime:1},{pitchAmt:0,pitchHold:0,pitchCurve:0,pitchAttack:0,pitchFall:0}],
   drv:[{drvDrive:0.25,drvXs:0,drvFuzz:0,drvMix:1,crushMix:0,crushBits:16,crushRate:1},{drvDrive:0,drvXs:0,drvFuzz:0,crushMix:0}]};
-for(const id in FXPS_BASE)if(FXPS[id]&&!FXPS[id].list.some(x=>x[0]==="Default"))FXPS[id].list.unshift(["Default",FXPS_BASE[id][0]],["OFF",FXPS_BASE[id][1]]);
+for(const id in FXPS_BASE)if(FXPS[id]&&!FXPS[id].list.some(x=>x[0]==="Default")){FXPS[id].list=FXPS[id].list.filter(x=>x[0].toLowerCase()!=="off");FXPS[id].list.unshift(["Default",FXPS_BASE[id][0]],["OFF",FXPS_BASE[id][1]]);}
 const FXPS_TITLE={"Mod FX":"mod","Delay":"dly","Reverb":"rev","Squeeze":"sqz","Opto leveller":"opto","OTT":"ott","Drive":"drv"};
 const FXU={};   // your own presets per effect: {id:[[name,{...}],...]}
 function fxpsSave(id){try{if(DB)DB.doc("fxpresets/"+id).set({list:(FXU[id]||[]).slice(0,60).map(([n,p])=>({name:n,p:JSON.stringify(p)}))});}catch(e){}}
@@ -2951,7 +2951,8 @@ function visGroups(withFav){const g=[],usedU=new Set();const used=new Set();
     if(vs.length||us.length)g.push([label,ordered(label,[...vs.map(n=>"b:"+n),...us])]);}
   const rest=Object.keys(PRESETS).filter(n=>!used.has(n)).sort(byName).map(n=>"b:"+n),ru=Object.keys(SAVED).filter(s=>!usedU.has(s)).map(s=>"u:"+s);
   if(rest.length||ru.length)g.push(["Other",ordered("Other",[...rest,...ru])]);return g;}
-const labelOf=v=>v.startsWith("u:")?(SAVED[v.slice(2)]||{name:v}).name:nice(v.slice(2));
+const labelOf=v=>{if(!v.startsWith("u:"))return nice(v.slice(2));const n=(SAVED[v.slice(2)]||{name:v}).name;   /* a saved preset of yours that shares a factory name is marked, so the list never shows the same name twice */
+  for(const k in PRESETS)if(nice(k)===n)return n+" (mine)";return n;};
 function movePreset(cat,val,d){const g=visGroups().find(x=>x[0]===cat);if(!g)return;const l=g[1].slice(),i=l.indexOf(val),j=i+d;if(i<0||j<0||j>=l.length)return;[l[i],l[j]]=[l[j],l[i]];PREFS.ord[cat]=l;prefsSave();fillPresetSelect($("#preset").value);}
 function favToggle(v){const i=PREFS.fav.indexOf(v);if(i<0)PREFS.fav.push(v);else PREFS.fav.splice(i,1);prefsSave();fillPresetSelect($("#preset").value);}
 function renderBrowser(){
