@@ -228,6 +228,7 @@ canvas{display:block;max-width:100%}
 .pbr .chip.on{background:#ffa600;border-color:#ffa600;color:#241600}.pbbanks .chip.on{background:#ffa600;border-color:#ffa600;color:#241600}
 .pbfoot{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:10px 22px 14px;border-top:1px solid var(--line)}.pbfoot .pill{margin-right:auto}
 
+.fxpw{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;min-width:0}.fxar{all:unset;box-sizing:border-box;cursor:pointer;width:15px;height:21px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#a99fdc;border-radius:5px}.fxar:hover{color:#ffa600;background:#2a2060}.fxar:active{transform:scale(.92)}
 .dlg{position:fixed;inset:0;background:#05030fcc;display:flex;align-items:center;justify-content:center;z-index:50}.dlg[hidden]{display:none}
 .dbox{background:#150f33;border:1px solid var(--mint);border-radius:14px;padding:18px 20px;width:min(420px,92vw);box-shadow:0 10px 40px #000a}
 .dbox h3{margin:0 0 8px;font-family:Fredoka,sans-serif;letter-spacing:1px;color:var(--mint)}.dbox p{margin:0 0 12px;color:var(--fg);line-height:1.5;font-size:13.5px}
@@ -2360,6 +2361,19 @@ const FXPS={
     ["Drive off",{drvDrive:0,drvXs:0,drvFuzz:0}],
     ["Crush off",{crushMix:0}]]}
 };
+/* every module starts its list with Default (a basic working setting) and OFF (the module does nothing) */
+const FXPS_BASE={
+  mod:[{modFxType:0,chorusMix:0.25,chorusDepth:0.5,chorusRate:0.6,chorusDelay:12,chorusWidth:1,chorusFb:0.5},{chorusMix:0}],
+  dly:[{delayMix:0.25,delaySync:false,delayDiv:7,delayTime:0.25,delayFb:0.4,delayDamp:0.7,delayPing:1},{delayMix:0}],
+  rev:[{reverbMix:0.15,reverbSize:0.6,reverbWidth:0.8,reverbLowCutHz:150,reverbPre:0,reverbDamp:0.25},{reverbMix:0}],
+  sqz:[{sqzAmt:0.3,sqzAtk:4,sqzRel:90,sqzMakeup:0},{sqzAmt:0}],
+  opto:[{optoAmt:0.4,optoRel:1,optoGain:0},{optoAmt:0}],
+  ott:[{ottDepth:0.3,ottMix:0.3,ottLow:0,ottMid:0,ottHigh:0,ottTime:1},{ottDepth:0,ottMix:0}],
+  dm:[{dmMix:0.4,dmDrive:0.5,dmClip:0.35,dmLow:0,dmMid:0,dmHigh:0},{dmMix:0}],
+  wid:[{widMid:1,widHi:1,bassMonoHz:120,msMid:0,msSide:0},{widMid:1,widHi:1,msMid:0,msSide:0}],
+  pit:[{pitchAmt:0,pitchHold:0,pitchCurve:0,pitchTime:0.09,pitchAttack:0,pitchFall:0,pitchFallTime:1},{pitchAmt:0,pitchFall:0}],
+  drv:[{drvDrive:0.25,drvXs:0,drvFuzz:0,drvMix:1,crushMix:0,crushBits:16,crushRate:1},{drvDrive:0,drvXs:0,drvFuzz:0,crushMix:0}]};
+for(const id in FXPS_BASE)if(FXPS[id]&&!FXPS[id].list.some(x=>x[0]==="Default"))FXPS[id].list.unshift(["Default",FXPS_BASE[id][0]],["OFF",FXPS_BASE[id][1]]);
 const FXPS_TITLE={"Mod FX":"mod","Delay":"dly","Reverb":"rev","Squeeze":"sqz","Opto leveller":"opto","OTT":"ott","Drive":"drv"};
 const FXU={};   // your own presets per effect: {id:[[name,{...}],...]}
 function fxpsSave(id){try{if(DB)DB.doc("fxpresets/"+id).set({list:(FXU[id]||[]).slice(0,60).map(([n,p])=>({name:n,p:JSON.stringify(p)}))});}catch(e){}}
@@ -2371,28 +2385,32 @@ function fxpsApply(id,p){const keys=FXPS[id].keys;
   if(id==="mod"){if(typeof mfxLast!=="undefined")mfxLast=P.modFxType|0;mfxPush(true);}}
 function fxpsSnap(id){const o={};FXPS[id].keys.forEach(k=>{if(k!=="mfxMulti")o[k]=P[k];});if(id==="mod"&&P.mfxMulti){const nt=P.modFxType|0,mu={};for(let t=0;t<3;t++){if(t===nt)continue;const st=MFXS[t];if(st)mu[t]=Object.assign({},st);}o.multi=mu;}return o;}
 function fxpsMenu(c,id,ref,host,title){
-  const h2=c.querySelector("h2"),s=el("select",ref?ref.className:"");s.style.cssText="max-width:"+(id==="opto"?"78px":"112px")+";min-width:0;font-size:10.5px;padding:2px 4px";h2.style.whiteSpace="nowrap";h2.style.gap="6px";
+  const h2=c.querySelector("h2"),s=el("select",ref?ref.className:"");s.style.cssText="max-width:"+(id==="opto"?"60px":(id==="mod"?"92px":"108px"))+";min-width:0;font-size:10.5px;padding:2px 4px";h2.style.whiteSpace="nowrap";h2.style.gap="6px";
   s.dataset.tip="Presets for this effect. Pick one to load its knob settings. Choose Save current to keep your own, they stay in the list.";
   let applying=false,cur="";
   const fill=()=>{s.innerHTML="";const add=(p,t,v)=>{const o=document.createElement("option");o.value=v;o.textContent=t;p.appendChild(o);};
     add(s,"Presets","");
     const g1=document.createElement("optgroup");g1.label="Factory";FXPS[id].list.forEach(([n],i)=>add(g1,n,"f"+i));s.appendChild(g1);
-    const u=FXU[id]||[];if(u.length){const g2=document.createElement("optgroup");g2.label="Mine";u.forEach(([n],i)=>add(g2,n,"u"+i));s.appendChild(g2);}
+    const u=FXU[id]||[];if(u.length){const g2=document.createElement("optgroup");g2.label="Mine";u.forEach(([n],i)=>add(g2,FXPS[id].list.some(x=>x[0]===n)?n+" (mine)":n,"u"+i));s.appendChild(g2);}
     const g3=document.createElement("optgroup");g3.label="Manage";add(g3,"Save current...","save");if(cur[0]==="u")add(g3,"Delete this preset","del");s.appendChild(g3);s.value=cur;};
   fill();
+  const load=v=>{const p=v[0]==="f"?FXPS[id].list[+v.slice(1)][1]:(FXU[id]||[])[+v.slice(1)][1];if(!p)return;
+    applying=true;fxpsApply(id,p);applying=false;cur=v;fill();
+    if(id==="drv"){const want=("crushMix" in p)&&!("drvDrive" in p)?"Crush":"Drive";const tb=[...c.querySelectorAll(".seg button")].find(x=>x.textContent.trim()===want);if(tb)tb.click();}};
+  const step=d=>{const all=[];FXPS[id].list.forEach((_,i)=>all.push("f"+i));(FXU[id]||[]).forEach((_,i)=>all.push("u"+i));if(!all.length)return;let i=all.indexOf(cur);i=i<0?(d>0?0:all.length-1):(i+d+all.length)%all.length;load(all[i]);};
   s.onchange=async()=>{const v=s.value;
     if(v==="save"){const t=title||h2.firstChild.textContent.trim();const r=await ask({title:"Save "+t+" preset",msg:"Saves the current "+t+" settings under this name.",input:"My "+t.toLowerCase(),buttons:[{t:"Save",k:"on",def:1},{t:"Cancel"}]});
       if(r.b==="Save"&&r.v&&r.v.trim()){const n=r.v.trim().slice(0,40),u=FXU[id]||(FXU[id]=[]),i=u.findIndex(x=>x[0]===n);if(i>=0)u[i]=[n,fxpsSnap(id)];else u.push([n,fxpsSnap(id)]);fxpsSave(id);cur="u"+(i>=0?i:u.length-1);}fill();return;}
     if(v==="del"){const i=+cur.slice(1),u=FXU[id]||[];if(u[i]){const r=await ask({title:"Delete this preset?",msg:"\""+u[i][0]+"\" will be removed from your list.",buttons:[{t:"Delete",k:"danger"},{t:"Keep",k:"on",def:1}]});if(r.b==="Delete"){u.splice(i,1);fxpsSave(id);cur="";}}fill();return;}
     if(!v){cur="";return;}
-    const p=v[0]==="f"?FXPS[id].list[+v.slice(1)][1]:(FXU[id]||[])[+v.slice(1)][1];if(!p)return;
-    applying=true;fxpsApply(id,p);applying=false;cur=v;fill();
-    if(id==="drv"){const want=("crushMix" in p)&&!("drvDrive" in p)?"Crush":"Drive";const tb=[...c.querySelectorAll(".seg button")].find(x=>x.textContent.trim()===want);if(tb)tb.click();}};
+    load(v);};
   onChange(k=>{if(!applying&&cur&&(FXPS[id].keys.includes(k)||k==="all")){cur="";fill();}});
   c._fxFill=()=>{fill();};c._fxId=id;
-  if(host){host.appendChild(s);return s;}
+  const arrow=(t,d,tip)=>{const b=el("button","fxar",t);b.type="button";b.dataset.tip=tip;b.onclick=e=>{e.stopPropagation();step(d);};return b;};
+  const wrap=el("span","fxpw");wrap.append(arrow("\u25C0",-1,"Previous preset of this effect (wraps around)."),s,arrow("\u25B6",1,"Next preset of this effect (wraps around)."));
+  if(host){host.appendChild(wrap);return s;}
   const sub=h2.querySelector(".sub");if(sub)sub.remove();
-  h2.appendChild(s);return s;}
+  h2.appendChild(wrap);return s;}
 function fxpsAttach(F){const ref=F.querySelector("select");F.querySelectorAll(".card").forEach(c=>{const h=c.querySelector("h2");if(!h||!h.firstChild)return;const id=FXPS_TITLE[h.firstChild.textContent.trim()];if(id)fxpsMenu(c,id,ref);});}
 function buildFx(F){
   // output and limiter
@@ -2422,7 +2440,7 @@ function buildFx(F){
      for(let b=0;b<3;b++){const a=hist[b];g.strokeStyle=cols[b];g.lineWidth=2;g.beginPath();a.forEach((v,i)=>{const x=w-(a.length-i)*2,y=3+clamp(v/R,0,1)*(h-8);i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();}
      g.fillStyle="#a99fdc";g.font="9px IBM Plex Mono";g.fillText("squeeze: low / mid / high",4,h-3);g.textAlign="right";g.fillText("0 dB",w-3,10);g.textAlign="left";},"Gain reduction of the three bands over the last seconds, newest on the right. Higher on the graph means more reduction.");
    STAGE&&(c1.classList.remove("fl"),c2.classList.remove("fl"));c1.style.flex="1";c2.style.flex="2";c1.style.minWidth="0";c2.style.minWidth="0";c1.style.marginTop=c2.style.marginTop="0";gr.appendChild(c1);gr.appendChild(c2);c.appendChild(gr);
-   {const dp=el("div","vf"),wp=el("div","vf");[...c.children].slice(1).forEach(x=>dp.appendChild(x));c.appendChild(dp);c.appendChild(wp);wp.hidden=true;const dr=el("div","row"),wr=el("div","row");dr.style.cssText=wr.style.cssText="justify-content:flex-start;margin-bottom:4px";dp.insertBefore(dr,dp.firstChild);wp.insertBefore(wr,wp.firstChild);{const g0=dp.querySelector("canvas");gr.querySelectorAll("canvas").forEach(x=>{x.style.height="61px"});gr.style.flex="0 0 auto";dp.style.cssText+=";display:flex;flex-direction:column;flex:1 1 auto;min-height:0";if(g0){g0.style.flex="1 1 60px";g0.style.height="auto";g0.style.minHeight="60px";}}fxpsMenu(c,"dm",null,dr,"Dance master");fxpsMenu(c,"wid",null,wr,"Width");const hd=c.querySelector("h2");const dsel=dr.querySelector("select"),wsl=wr.querySelector("select");[dsel,wsl].forEach(x=>{if(x){x.style.marginLeft="auto";x.style.maxWidth="150px";}});dr.style.display=wr.style.display="none";if(dsel)hd.appendChild(dsel);if(wsl){wsl.hidden=true;hd.appendChild(wsl);}
+   {const dp=el("div","vf"),wp=el("div","vf");[...c.children].slice(1).forEach(x=>dp.appendChild(x));c.appendChild(dp);c.appendChild(wp);wp.hidden=true;const dr=el("div","row"),wr=el("div","row");dr.style.cssText=wr.style.cssText="justify-content:flex-start;margin-bottom:4px";dp.insertBefore(dr,dp.firstChild);wp.insertBefore(wr,wp.firstChild);{const g0=dp.querySelector("canvas");gr.querySelectorAll("canvas").forEach(x=>{x.style.height="61px"});gr.style.flex="0 0 auto";dp.style.cssText+=";display:flex;flex-direction:column;flex:1 1 auto;min-height:0";if(g0){g0.style.flex="1 1 60px";g0.style.height="auto";g0.style.minHeight="60px";}}fxpsMenu(c,"dm",null,dr,"Dance master");fxpsMenu(c,"wid",null,wr,"Width");const hd=c.querySelector("h2");const dsel=dr.querySelector("select").parentNode,wsl=wr.querySelector("select").parentNode;[dsel,wsl].forEach(x=>{if(x){x.style.marginLeft="auto";x.style.maxWidth="150px";}});dr.style.display=wr.style.display="none";if(dsel)hd.appendChild(dsel);if(wsl){wsl.hidden=true;hd.appendChild(wsl);}
     const tb=el("span","seg");[["Dance","3 band compressor, clipper and the one-click starting points."],["Width","Stereo width, mono bass, and saturation of the mid and side signals."]].forEach(([t,tp],i)=>{const bt=el("button",i?"":"on",t);bt.dataset.tip=tp;bt.onclick=()=>{dp.hidden=!!i;wp.hidden=!i;if(dsel)dsel.hidden=!!i;if(wsl)wsl.hidden=!i;[...tb.children].forEach((x,j)=>x.classList.toggle("on",j===i));drawAll();};tb.appendChild(bt);});c.querySelector("h2").appendChild(tb);
     wp.appendChild(knobRow([N("widMid","Wid low",0,2,0.01,"","Stereo width below 2 kHz. 1 is as it comes, 0 is mono, up to 2 is double. Be careful: wide lows can hurt on a club system, the Mono below knob keeps the very low end centred."),N("widHi","Wid high",0,2,0.01,"","Stereo width above 2 kHz. 1 is as it comes, 0 is mono, up to 2 is double. Wide highs give air without hurting the bass."),LG("bassMonoHz","Mono",20,400,"Hz","Everything below this goes to mono. Same knob as Bass in the Voice card."),N("msMid","Mid drv",0,1,0.01,"","Saturation on the centre (mid) signal only: thickens the middle without touching the width."),N("msSide","Side drv",0,1,0.01,"","Saturation on the side signal above 2 kHz only: adds shimmer and width character to the highs.")]));
     wp.appendChild(fxGraph(150,(g,w,h)=>{const mh=clamp(P.bassMonoHz,20,400),f2=2000,X=f=>Math.log(f/20)/Math.log(1000)*w,Y=v=>h-6-v/2*(h-14);
