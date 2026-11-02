@@ -54,7 +54,7 @@ inline void tranceLead(Params& p) {
   p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 15; p.layer[1].detune = 0.8f;  p.layer[1].octave = -1; p.layer[1].level = 0.5f;          // sub-octave stack for body
   p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 9;  p.layer[2].detune = 0.75f; p.layer[2].octave = 1;  p.layer[2].level = 0.1f;          // a little air on top
   p.subLevel = 0.18f; p.subWave = Wave::Tri; p.subOctave = -1;
-  p.detuneRange = 1.3f; p.noiseLevel = 0.09f; p.noiseHpHz = 5000.f;
+  p.detuneRange = 1.3f; p.noiseLevel = 0.09f; p.noiseFilt = nfFromHz(5000.);
   p.cutoff = 1900.f; p.reso = 0.12f; p.drive = 0.25f; p.dist = 0.05f; p.envAmt = 0.5f; p.fenv = {0.004f, 0.6f, 0.55f, 0.5f}; p.lowCutHz = 80.f;
   p.master = 0.96f; p.amp = {0.004f, 0.8f, 0.85f, 0.45f}; p.spread = 1.f; p.chorusMix = 0.3f; p.delayMix = 0.08f; p.delayTime = 0.28f; p.delayFb = 0.3f; p.reverbMix = 0.07f; p.reverbSize = 0.6f;
 }
@@ -68,7 +68,7 @@ inline void tranceHybrid(Params& p) {
   p.layer[1].wave = Wave::SuperSaw; p.layer[1].voices = 9; p.layer[1].cents = 22.f; p.layer[1].tune = -6.f; p.layer[1].level = 0.55f; p.layer[1].pan = -0.2f;
   p.layer[2].wave = Wave::SuperSaw; p.layer[2].voices = 9; p.layer[2].cents = 22.f; p.layer[2].tune = 6.f;  p.layer[2].level = 0.55f; p.layer[2].pan = 0.2f;
   p.subLevel = 0.1f; p.subWave = Wave::Sine; p.subOctave = -1;
-  p.noiseLevel = 0.05f; p.noiseHpHz = 8000.f;
+  p.noiseLevel = 0.05f; p.noiseFilt = nfFromHz(8000.);
   p.cutoff = 11000.f; p.reso = 0.08f; p.drive = 0.2f; p.dist = 0.06f; p.envAmt = 0.1f; p.fenv = {0.003f, 0.5f, 0.7f, 0.3f}; p.lowCutHz = 270.f;
   p.master = 0.9f; p.amp = {0.003f, 0.35f, 0.6f, 0.2f}; p.spread = 1.f;
   p.chorusMix = 0.25f; p.delayMix = 0.12f; p.delayTime = 0.214f; p.delayFb = 0.35f; p.delayPing = 1.f; p.reverbMix = 0.12f; p.reverbSize = 0.7f; p.reverbLowCutHz = 500.f;
@@ -286,7 +286,7 @@ inline void hooverProdigy(Params& p) {
   p.mono = true; p.subPreFilter = true;
   p.layer[0].wave = Wave::SuperSquare; p.layer[0].voices = 4; p.layer[0].cents = 21.f; p.layer[0].pwm = 0.5f; p.layer[0].level = 0.7f;
   p.layer[1].wave = Wave::SuperSquare; p.layer[1].voices = 4; p.layer[1].cents = 21.f; p.layer[1].pwm = 0.5f; p.layer[1].octave = 2; p.layer[1].level = 0.3f;
-  p.subLevel = 1.4f; p.subWave = Wave::Tri; p.subOctave = -1; p.noiseLevel = 0.1f; p.noiseHpHz = 200.f;
+  p.subLevel = 1.4f; p.subWave = Wave::Tri; p.subOctave = -1; p.noiseLevel = 0.1f; p.noiseFilt = nfFromHz(200.);
   p.filterMode = FilterMode::BP; p.cutoff = 1780.f; p.reso = 0.4f; p.keyTrack = 0.7f;
   p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.1f; p.master = 1.44f;
 }
@@ -368,7 +368,7 @@ inline void pendulumLead(Params& p) {
 inline void nightCallKeys(Params& p) {
   p = Params();
   p.layer[0].wave = Wave::SuperSaw; p.layer[0].voices = 2; p.layer[0].cents = 8.f; p.layer[0].level = 1.0f;
-  p.noiseLevel = 0.15f; p.noiseHpHz = 200.f;
+  p.noiseLevel = 0.15f; p.noiseFilt = nfFromHz(200.);
   p.cutoff = 632.f; p.reso = 0.45f; p.envAmt = 0.9f; p.fenv = {0.001f, 3.7f, 0.f, 0.1f};
   p.amp = {0.001f, 0.1f, 1.f, 0.02f}; p.spread = 0.6f; p.chorusMix = 0.35f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 1.15f;
 }
@@ -388,7 +388,7 @@ inline void brejchaBass(Params& p) {
   p = Params();
   p.mono = true; p.phaseReset = true;
   p.layer[0].wave = Wave::Saw; p.layer[0].level = 0.8f; p.layer[1].wave = Wave::Saw; p.layer[1].octave = 1; p.layer[1].level = 0.2f;
-  p.noiseLevel = 0.7f; p.noiseHpHz = 100.f;
+  p.noiseLevel = 0.7f; p.noiseFilt = nfFromHz(100.);
   p.cutoff = 159.f; p.envAmt = 0.7f; p.fenv = {0.001f, 0.17f, 0.f, 10.f}; p.wheelCutoff = 1.1f;
   p.amp = {0.001f, 1.05f, 0.7f, 0.15f}; p.spread = 0.2f; p.bassMonoHz = 200.f;
   p.delayMix = 0.15f; p.delayTime = 0.2f; p.delayFb = 0.25f; p.reverbMix = 0.2f; p.reverbSize = 0.6f; p.master = 0.91f;
@@ -443,22 +443,22 @@ inline void kick(Params& p) {
 inline void snare(Params& p) {
   drumBase(p);
   p.layer[0].wave = Wave::Tri; p.layer[0].level = 0.55f; p.layer[0].octave = 1;
-  p.pitchAmt = 10.f; p.pitchTime = 0.03f; p.noiseLevel = 1.8f; p.noiseHpHz = 1400.f;
+  p.pitchAmt = 10.f; p.pitchTime = 0.03f; p.noiseLevel = 1.8f; p.noiseFilt = nfFromHz(1400.);
   p.cutoff = 11000.f; p.dist = 0.12f; p.lowCutHz = 110.f; p.amp = {0.001f, 0.17f, 0.f, 0.06f}; p.reverbMix = 0.08f; p.reverbSize = 0.35f; p.master = 0.89f;
 }
 inline void closedHat(Params& p) {
   drumBase(p);
-  p.noiseLevel = 2.f; p.noiseHpHz = 7000.f; p.filterMode = FilterMode::HP; p.cutoff = 6500.f; p.reso = 0.25f; p.lowCutHz = 300.f;
+  p.noiseLevel = 2.f; p.noiseFilt = nfFromHz(7000.); p.filterMode = FilterMode::HP; p.cutoff = 6500.f; p.reso = 0.25f; p.lowCutHz = 300.f;
   p.amp = {0.001f, 0.05f, 0.f, 0.03f}; p.master = 1.6f;
 }
 inline void openHat(Params& p) {
   drumBase(p);
-  p.noiseLevel = 2.f; p.noiseHpHz = 6500.f; p.filterMode = FilterMode::HP; p.cutoff = 6000.f; p.reso = 0.3f; p.lowCutHz = 300.f;
+  p.noiseLevel = 2.f; p.noiseFilt = nfFromHz(6500.); p.filterMode = FilterMode::HP; p.cutoff = 6000.f; p.reso = 0.3f; p.lowCutHz = 300.f;
   p.amp = {0.001f, 0.28f, 0.05f, 0.22f}; p.master = 1.44f;
 }
 inline void crash(Params& p) {
   drumBase(p);
-  p.noiseLevel = 2.f; p.noiseHpHz = 3500.f; p.filterMode = FilterMode::HP; p.cutoff = 2800.f; p.reso = 0.35f; p.lowCutHz = 250.f;
+  p.noiseLevel = 2.f; p.noiseFilt = nfFromHz(3500.); p.filterMode = FilterMode::HP; p.cutoff = 2800.f; p.reso = 0.35f; p.lowCutHz = 250.f;
   p.amp = {0.002f, 1.6f, 0.f, 1.2f}; p.chorusMix = 0.25f; p.reverbMix = 0.15f; p.reverbSize = 0.6f; p.master = 0.9f;
 }
 

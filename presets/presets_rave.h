@@ -182,7 +182,7 @@ inline void complextroLaser(Params& p) {   // sync sweep laser; the bitcrusher i
 }
 inline void industrialHammer(Params& p) {
   p = Params();
-  lay(p, 0, Wave::SuperSaw, 0.5f, 0, 0.f, 3, 26.f); p.noiseLevel = 0.4f; p.noiseHpHz = 800.f;
+  lay(p, 0, Wave::SuperSaw, 0.5f, 0, 0.f, 3, 26.f); p.noiseLevel = 0.4f; p.noiseFilt = nfFromHz(800.);
   p.cutoff = 1200.f; p.reso = 0.55f; p.envAmt = 0.45f; p.fenv = {0.001f, 0.15f, 0.f, 0.1f}; p.dist = 0.8f; p.lowCutHz = 180.f;
   p.amp = {0.001f, 0.2f, 0.f, 0.1f}; p.reverbMix = 0.12f; p.reverbSize = 0.5f;
 }
@@ -233,7 +233,7 @@ inline void breakbeatPad92(Params& p) {
 }
 inline void whiteNoiseRiser(Params& p) {   // all oscillators off; a band-pass sweeps the noise open (slow here, stretch the envelope for 8 or 16 bars)
   p = Params();
-  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::BP; p.cutoff = 100.f; p.reso = 0.15f; p.envAmt = 1.f; p.fenv = {2.5f, 0.1f, 1.f, 1.f};
+  p.noiseLevel = 1.f; p.noiseFilt = nfFromHz(100.); p.filterMode = FilterMode::BP; p.cutoff = 100.f; p.reso = 0.15f; p.envAmt = 1.f; p.fenv = {2.5f, 0.1f, 1.f, 1.f};
   p.wheelCutoff = 0.5f; p.amp = {1.5f, 0.1f, 1.f, 0.8f}; p.chorusMix = 1.f; p.chorusWidth = 1.f; p.spread = 1.f; p.bassMonoHz = 20.f; p.lowCutHz = 100.f;
 }
 
@@ -346,28 +346,28 @@ inline void gabberKick(Params& p) {
 }
 inline void snare909(Params& p) {
   drumBase(p);
-  lay(p, 0, Wave::Tri, 0.5f, 0); p.pitchAmt = 12.f; p.pitchTime = 0.03f; p.noiseLevel = 1.5f; p.noiseHpHz = 1500.f;
+  lay(p, 0, Wave::Tri, 0.5f, 0); p.pitchAmt = 12.f; p.pitchTime = 0.03f; p.noiseLevel = 1.5f; p.noiseFilt = nfFromHz(1500.);
   p.filterMode = FilterMode::BP; p.cutoff = 2500.f; p.reso = 0.2f; p.lowCutHz = 120.f; p.amp = {0.001f, 0.18f, 0.f, 0.08f};
 }
 inline void hat909Closed(Params& p) {
   drumBase(p);
   lay(p, 0, Wave::Pulse, 0.2f, 3); lay(p, 1, Wave::Pulse, 0.2f, 3, 530.f); lay(p, 2, Wave::Pulse, 0.2f, 3, 1050.f);
-  p.noiseLevel = 1.2f; p.noiseHpHz = 7000.f; p.filterMode = FilterMode::HP; p.cutoff = 7000.f; p.lowCutHz = 400.f; p.amp = {0.001f, 0.05f, 0.f, 0.03f};
+  p.noiseLevel = 1.2f; p.noiseFilt = nfFromHz(7000.); p.filterMode = FilterMode::HP; p.cutoff = 7000.f; p.lowCutHz = 400.f; p.amp = {0.001f, 0.05f, 0.f, 0.03f};
 }
 inline void hat909Open(Params& p) {
   drumBase(p);
   lay(p, 0, Wave::Pulse, 0.2f, 3); lay(p, 1, Wave::Pulse, 0.2f, 3, 530.f); lay(p, 2, Wave::Pulse, 0.2f, 3, 1050.f);
-  p.noiseLevel = 1.2f; p.noiseHpHz = 6500.f; p.filterMode = FilterMode::HP; p.cutoff = 6500.f; p.lowCutHz = 400.f; p.amp = {0.001f, 0.3f, 0.05f, 0.25f};
+  p.noiseLevel = 1.2f; p.noiseFilt = nfFromHz(6500.); p.filterMode = FilterMode::HP; p.cutoff = 6500.f; p.lowCutHz = 400.f; p.amp = {0.001f, 0.3f, 0.05f, 0.25f};
 }
 inline void ride909(Params& p) {
   drumBase(p);
   lay(p, 0, Wave::Pulse, 0.2f, 3); lay(p, 1, Wave::Pulse, 0.2f, 3, 410.f); lay(p, 2, Wave::Pulse, 0.15f, 3, 1130.f);
-  p.noiseLevel = 0.8f; p.noiseHpHz = 5000.f; p.filterMode = FilterMode::HP; p.cutoff = 5000.f; p.lowCutHz = 400.f; p.amp = {0.001f, 0.9f, 0.f, 0.6f};
+  p.noiseLevel = 0.8f; p.noiseFilt = nfFromHz(5000.); p.filterMode = FilterMode::HP; p.cutoff = 5000.f; p.lowCutHz = 400.f; p.amp = {0.001f, 0.9f, 0.f, 0.6f};
 }
 inline void crash909(Params& p) {
   drumBase(p);
   lay(p, 0, Wave::Pulse, 0.2f, 3); lay(p, 1, Wave::Pulse, 0.2f, 3, 530.f); lay(p, 2, Wave::Pulse, 0.15f, 3, 1050.f);
-  p.noiseLevel = 1.5f; p.noiseHpHz = 3500.f; p.filterMode = FilterMode::HP; p.cutoff = 3000.f; p.lowCutHz = 300.f; p.amp = {0.001f, 1.4f, 0.f, 1.2f};
+  p.noiseLevel = 1.5f; p.noiseFilt = nfFromHz(3500.); p.filterMode = FilterMode::HP; p.cutoff = 3000.f; p.lowCutHz = 300.f; p.amp = {0.001f, 1.4f, 0.f, 1.2f};
   p.reverbMix = 0.15f; p.reverbSize = 0.6f;
 }
 inline void cowbell808(Params& p) {
@@ -381,19 +381,19 @@ inline void cowbell808(Params& p) {
 // ---------- FX: risers, sweeps, downlifters, impacts (recipes round 3). Times are in seconds; stretch the envelope to fit 4 or 8 bars. ----------
 inline void noiseWashDown(Params& p) {   // white noise, LP12 closes from about 13 kHz to 450 Hz while it fades, 100 percent wet chorus keeps the centre free for the kick
   p = Params();
-  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::LP12; p.cutoff = 450.f; p.reso = 0.12f; p.envAmt = 1.f; p.fenv = {0.001f, 3.5f, 0.f, 3.5f, 0.f, 0.f, 0.f};
+  p.noiseLevel = 1.f; p.noiseFilt = nfFromHz(100.); p.filterMode = FilterMode::LP12; p.cutoff = 450.f; p.reso = 0.12f; p.envAmt = 1.f; p.fenv = {0.001f, 3.5f, 0.f, 3.5f, 0.f, 0.f, 0.f};
   p.amp = {0.001f, 3.5f, 0.f, 3.5f, 0.f, -0.2f, -0.2f};   // release as long as the decay, so even a short tap plays the whole downlifter
   p.spread = 1.f; p.chorusMix = 1.f; p.chorusDepth = 0.6f; p.chorusWidth = 1.f; p.lowCutHz = 150.f;
   p.delayMix = 0.3f; p.delaySync = true; p.delayDiv = 4; p.delayFb = 0.45f; p.bpm = 140.f; p.delayPing = 1.f; p.master = 0.8f;
 }
 inline void clubCrushWash(Params& p) {   // white noise rising over about 7 s, a ramp LFO pumps it on every quarter note (140 BPM) to leave room for the kick
   p = Params();
-  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::LP12; p.cutoff = 400.f; p.reso = 0.12f; p.envAmt = 1.f; p.fenv = {7.f, 0.1f, 1.f, 0.3f, 0.f, 0.f, -0.4f};
+  p.noiseLevel = 1.f; p.noiseFilt = nfFromHz(100.); p.filterMode = FilterMode::LP12; p.cutoff = 400.f; p.reso = 0.12f; p.envAmt = 1.f; p.fenv = {7.f, 0.1f, 1.f, 0.3f, 0.f, 0.f, -0.4f};
   p.amp = {1.f, 0.1f, 1.f, 0.6f}; p.lfoShape = 3; p.lfoRate = 2.333f; p.lfoAmp = 0.8f; p.spread = 1.f; p.chorusMix = 0.6f; p.lowCutHz = 150.f; p.master = 0.8f;
 }
 inline void subInverterRoll(Params& p) {   // dark noise roll: LP24 opens from 60 to about 400 Hz with 60 percent resonance (a moving sub bump). Noise high-pass is 100 Hz at the lowest.
   p = Params();
-  p.noiseLevel = 1.f; p.noiseHpHz = 100.f; p.filterMode = FilterMode::LP24; p.cutoff = 60.f; p.reso = 0.6f; p.envAmt = 0.55f; p.fenv = {5.f, 0.1f, 1.f, 0.3f, 0.f, 0.f, -0.4f};
+  p.noiseLevel = 1.f; p.noiseFilt = nfFromHz(100.); p.filterMode = FilterMode::LP24; p.cutoff = 60.f; p.reso = 0.6f; p.envAmt = 0.55f; p.fenv = {5.f, 0.1f, 1.f, 0.3f, 0.f, 0.f, -0.4f};
   p.amp = {1.f, 0.1f, 1.f, 0.4f}; p.spread = 0.f; p.bassMonoHz = 400.f; p.lowCutHz = 20.f;
 }
 inline void pitchScreamRiser(Params& p) {   // happy hardcore uplifter: stacked saws plus an octave saw climb three octaves in about 7 s, then snap back
@@ -423,7 +423,7 @@ inline void annihilatorAlarm(Params& p) {   // 90s rave alarm: square with FM fr
 }
 inline void metalScrape(Params& p) {   // jungle metal scrape (no comb filter here): pulse plus noise into a very resonant band-pass swept by a ramp LFO on 1/4 notes, hard clipped
   p = Params();
-  lay(p, 0, Wave::Pulse, 0.6f, 0, 0.f, 1, 0.f, 0.5f); p.noiseLevel = 0.35f; p.noiseHpHz = 1000.f;
+  lay(p, 0, Wave::Pulse, 0.6f, 0, 0.f, 1, 0.f, 0.5f); p.noiseLevel = 0.35f; p.noiseFilt = nfFromHz(1000.);
   p.filterMode = FilterMode::BP; p.cutoff = 1200.f; p.reso = 0.9f; p.lfoShape = 3; p.lfoRate = 2.333f; p.lfoCutoff = 1.2f; p.dist = 0.85f; p.drive = 0.5f;
   p.amp = {0.002f, 0.1f, 1.f, 0.1f}; p.spread = 0.6f; p.lowCutHz = 150.f;
 }

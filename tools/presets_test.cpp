@@ -120,11 +120,26 @@ int main(int argc, char** argv) {
   }
   { // noise: adds high-frequency content, nothing below its high-pass (low end stays clean)
     double b[2], lo[2];
-    for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Sine; e.p.cutoff = 18000; e.p.noiseLevel = k ? 0.3f : 0.f; e.p.noiseHpHz = 5000.f;
+    for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Sine; e.p.cutoff = 18000; e.p.noiseLevel = k ? 0.3f : 0.f; e.p.noiseFilt = nfFromHz(5000.);
       Result r = render(e, 40, 0.8f, 1.0f); b[k] = brightness(r.l);
       double s = 0, m = 0; float lp = 0; for (float x : r.l) { lp += 0.01f * (x - lp); s += lp * lp; m += x * x; } lo[k] = s; (void)m; }
     CHECK(b[1] > b[0] * 1.5);
     CHECK(lo[1] < lo[0] * 1.2);
+  }
+  { // noise mode and DJ-style noise filter: mode 0 rings with the amp release, mode 1 stops with the key, mode 2 plays with no note at all; filter 0 is open, left darkens, right thins
+    auto tailRms = [](const Result& r, double from, double to) { double s = 0; size_t a = (size_t)(from * 48000), b = std::min(r.l.size(), (size_t)(to * 48000)); for (size_t i = a; i < b; ++i) s += (double)r.l[i] * r.l[i]; return std::sqrt(s / std::max<size_t>(1, b - a)); };
+    double tail[3], held[3];
+    for (int m = 0; m < 3; ++m) { Engine e; e.p.layer[0].level = 0.f; e.p.layer[1].level = 0.f; e.p.layer[2].level = 0.f; e.p.subLevel = 0.f; e.p.noiseLevel = 0.5f; e.p.noiseMode = m; e.p.noiseFilt = 0.f; e.p.amp.s = 1.f; e.p.amp.r = 1.0f;
+      Result r = render(e, 60, 0.5f, 1.2f); held[m] = tailRms(r, 0.2, 0.45); tail[m] = tailRms(r, 0.8, 1.1); CHECK(!r.nan); }
+    CHECK(held[0] > 0.01 && held[1] > 0.01 && held[2] > 0.01);
+    CHECK(tail[0] > held[0] * 0.2);   // amp release still rings
+    CHECK(tail[1] < held[1] * 0.02);  // keys: gone with the key
+    CHECK(tail[2] > held[2] * 0.8);   // always: unchanged
+    { Engine e; e.p.layer[0].level = 0.f; e.p.layer[1].level = 0.f; e.p.layer[2].level = 0.f; e.p.subLevel = 0.f; e.p.noiseLevel = 0.5f; e.p.noiseMode = 2; e.prepare(48000); float lb[64], rb[64]; double s = 0; for (int i = 0; i < 100; ++i) { e.render(lb, rb, 64); if (i > 50) for (int k = 0; k < 64; ++k) s += lb[k] * lb[k]; } CHECK(s > 1e-3); }   // no note, still sounds
+    double br[3];
+    for (int k = 0; k < 3; ++k) { Engine e; e.p.layer[0].level = 0.f; e.p.layer[1].level = 0.f; e.p.layer[2].level = 0.f; e.p.subLevel = 0.f; e.p.noiseLevel = 0.5f; e.p.noiseMode = 2; e.p.noiseFilt = k == 0 ? -0.8f : (k == 1 ? 0.f : 0.8f); Result r = render(e, 60, 0.5f, 0.6f); br[k] = brightness(r.l); }
+    CHECK(br[0] < br[1] * 0.6);   // left: low-pass darkens
+    CHECK(br[2] > br[1] * 0.9 || br[2] > 0.0);  // right: high-pass keeps the top
   }
   { // distortion order: pre vs post the filter must sound different
     double d = 0; Result a, b;
@@ -474,7 +489,7 @@ int main(int argc, char** argv) {
     double d1 = stereoDiff(s1), d3 = stereoDiff(s3), d3w = stereoDiff(s3w); std::printf("sub stereo difference: 1 voice %.6f, 3 voices %.6f, 3 voices wide %.6f\n", d1, d3, d3w);
     CHECK(d1 < 1e-9); CHECK(d3 < 1e-9); CHECK(d3w > 1e-3);
     Params sp1 = s1; sp1.subPreFilter = false; Params sp3 = s3w; sp3.subPreFilter = false; CHECK(stereoDiff(sp1) < 1e-9); CHECK(stereoDiff(sp3) > 1e-3);   // post filter path is stereo too
-    Params nz = baseP(); nz.layer[0].level = 0.f; nz.layer[1].level = 0.f; nz.layer[2].level = 0.f; nz.subLevel = 0.f; nz.noiseLevel = 0.8f; nz.noiseHpHz = 2000.f; nz.filterMode = FilterMode::LP24; nz.cutoff = 18000.f; nz.chorusMix = nz.delayMix = nz.reverbMix = 0.f; nz.dmMix = 0.f;
+    Params nz = baseP(); nz.layer[0].level = 0.f; nz.layer[1].level = 0.f; nz.layer[2].level = 0.f; nz.subLevel = 0.f; nz.noiseLevel = 0.8f; nz.noiseFilt = nfFromHz(2000.); nz.filterMode = FilterMode::LP24; nz.cutoff = 18000.f; nz.chorusMix = nz.delayMix = nz.reverbMix = 0.f; nz.dmMix = 0.f;
     Params nw = nz; nw.noiseWidth = 1.f; Params nv = nz; nv.noiseVoices = 4; nv.noiseDetune = 0.5f;
     double nd0 = stereoDiff(nz), ndw = stereoDiff(nw), ndv = stereoDiff(nv); std::printf("noise stereo difference: default %.6f, wide %.4f, 4 voices %.6f\n", nd0, ndw, ndv); CHECK(nd0 < 1e-9); CHECK(ndw > 0.5); CHECK(ndv < 1e-9);
     auto xs = runP(nz), xv = runP(nv); double bz = 0, bv = 0; for (float x : xs) bz += std::fabs(x); for (float x : xv) bv += std::fabs(x); CHECK(bz > 0 && bv > 0 && std::fabs(bz - bv) > 1e-6);
@@ -581,7 +596,7 @@ int main(int argc, char** argv) {
     auto patch = [](Params& p) {
       for (int l = 0; l < 3; ++l) { p.layer[l].wave = Wave::SuperSquare; p.layer[l].voices = 5; p.layer[l].level = 0.5f; p.layer[l].detune = 0.4f; p.layer[l].fmSrc = (l + 1) % 3 + 1; p.layer[l].fmAmt = 0.3f; p.layer[l].amSrc = (l + 2) % 3 + 1; p.layer[l].amAmt = 0.3f; p.layer[l].pwm = 0.5f; }
       p.f2Mode = FilterMode::LP24; p.f3Mode = FilterMode::LP24; p.f2Env = 0.5f; p.f3Env = 0.5f; p.f2Res = 0.4f; p.f3Res = 0.4f; p.f2Drv = 0.5f; p.f3Drv = 0.5f; p.cutoff = 4000.f;
-      p.subLevel = 0.5f; p.subVoices = 3; p.subDetune = 0.3f; p.subWidth = 0.5f; p.noiseLevel = 0.4f; p.noiseVoices = 3; p.noiseDetune = 0.4f; p.noiseWidth = 0.5f; p.noiseHpHz = 800.f;
+      p.subLevel = 0.5f; p.subVoices = 3; p.subDetune = 0.3f; p.subWidth = 0.5f; p.noiseLevel = 0.4f; p.noiseVoices = 3; p.noiseDetune = 0.4f; p.noiseWidth = 0.5f; p.noiseFilt = nfFromHz(800.);
       p.dist = 0.3f; p.drift = 0.5f; p.spread = 0.5f; p.limiter = false; p.chorusMix = 0; p.delayMix = 0; p.reverbMix = 0; p.dmMix = 0;
       p.mx[0][0] = 0.15f; p.mx[9][0] = 0.3f; p.mx[10][0] = 0.15f; p.mx[1][1] = 0.2f; p.lfoRate = 6.f; p.lfoDepth = 0.8f; p.lfo2Depth = 0.8f; p.lfo3Depth = 0.8f; };
     int moved = 0;

@@ -33,7 +33,7 @@ constexpr int kMxSrc = 18, kMxDst = 23;
 static const char* const kMxSrcNames[kMxSrc] = {"lfo", "fenv", "aenv", "penv", "whl", "key", "vel", "rnd", "men", "lfo2", "lfo3", "fenv2", "fenv3", "men2", "men3", "prs", "sld", "bnd"};
 static const char* const kMxDstNames[kMxDst] = {"pitch", "cut", "res", "drv", "pwm", "det", "pan", "vol", "sy1", "sy2", "sy3", "sub", "nz", "lc", "cut2", "cut3", "rvb", "dly", "drs", "clip", "hpf", "lpf", "wid"};
 constexpr int kFreeN = 8, kFreeNFx = 45, kFreeDst = 73;   // free mod slots: one source to any knob in the list below, amount 1 = the whole knob range
-static const char* const kFreeDstNames[kFreeDst] = {"master","dmMix","dmDrive","dmClip","dmLow","dmMid","dmHigh","widMid","widHi","msMid","msSide","optoAmt","optoRel","optoGain","crushMix","crushBits","crushRate","drvDrive","drvXs","drvFuzz","drvMix","ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime","chorusMix","chorusDepth","chorusRate","chorusWidth","chorusFb","sqzAmt","sqzAtk","sqzRel","sqzMakeup","delayMix","delayFb","delayDamp","delayPing","reverbMix","reverbWidth","reverbLowCutHz","reverbDamp","dynMix","f2Res","f2Drv","f3Res","f3Drv","f2Env","f3Env","dist","lfoRate","lfoDepth","lfo2Rate","lfo2Depth","lfo3Rate","lfo3Depth","spread","subDetune","subWidth","noiseDetune","noiseWidth","noiseHpHz","L0_level","L0_fmAmt","L0_amAmt","L1_level","L1_fmAmt","L1_amAmt","L2_level","L2_fmAmt","L2_amAmt"};
+static const char* const kFreeDstNames[kFreeDst] = {"master","dmMix","dmDrive","dmClip","dmLow","dmMid","dmHigh","widMid","widHi","msMid","msSide","optoAmt","optoRel","optoGain","crushMix","crushBits","crushRate","drvDrive","drvXs","drvFuzz","drvMix","ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime","chorusMix","chorusDepth","chorusRate","chorusWidth","chorusFb","sqzAmt","sqzAtk","sqzRel","sqzMakeup","delayMix","delayFb","delayDamp","delayPing","reverbMix","reverbWidth","reverbLowCutHz","reverbDamp","dynMix","f2Res","f2Drv","f3Res","f3Drv","f2Env","f3Env","dist","lfoRate","lfoDepth","lfo2Rate","lfo2Depth","lfo3Rate","lfo3Depth","spread","subDetune","subWidth","noiseDetune","noiseWidth","noiseFilt","L0_level","L0_fmAmt","L0_amAmt","L1_level","L1_fmAmt","L1_amAmt","L2_level","L2_fmAmt","L2_amAmt"};
 
 // Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
 constexpr int kSmpCount = 34;
@@ -187,7 +187,8 @@ struct Params {
   float dist = 0.f;            // 0..1 distortion (acid, hoover, dirty reese, screech)
   bool distPre = false;        // true: distortion before the filter (the filter shapes the screech), false: after it
   float noiseLevel = 0.f;      // 0..1 white noise added before the filter
-  float noiseHpHz = 3000.f;    // high-pass on the noise so it never muddies the low end
+  float noiseFilt = 0.764f;    // noise filter, DJ mixer style: 0 off, right of centre high-pass (40 Hz to 12 kHz), left of centre low-pass (20 kHz to 100 Hz)
+  int noiseMode = 0;           // 0 plays with the amp envelope, 1 follows the keys (gate), 2 plays all the time
   Adsr amp, fenv;
   Adsr amp2, amp3, fenv2, fenv3;   // amp2 / amp3 are the volume envelopes of layers 2 and 3 when ampLink is off; fenv2 / fenv3 drive filters 2 and 3 and the mod matrix
   bool ampLink = true;             // true: the one amp envelope shapes the whole voice (the old behaviour); false: every layer has its own
@@ -351,7 +352,7 @@ static const FreeDst kFreeDstTab[kFreeDst] = {
   {&Params::subWidth, 0, 1, 0},
   {&Params::noiseDetune, 0, 1, 0},
   {&Params::noiseWidth, 0, 1, 0},
-  {&Params::noiseHpHz, 100, 12000, 1},
+  {&Params::noiseFilt, -1, 1, 0},
   {nullptr, 0, 1, 0, &LayerParams::level, 0},
   {nullptr, 0, 1, 0, &LayerParams::fmAmt, 0},
   {nullptr, 0, 1, 0, &LayerParams::amAmt, 0},
@@ -552,12 +553,16 @@ struct AuxF {
     return x;
   }
 };
+// Noise filter, DJ mixer style (same maps as the playground): 0 is off, right is a high-pass, left is a low-pass.
+inline double nfHp(double f) { return 40.0 * std::pow(300.0, (std::min(1.0, f) - 0.03) / 0.97); }
+inline double nfLp(double f) { return 20000.0 * std::pow(0.005, (std::min(1.0, -f) - 0.03) / 0.97); }
+inline float nfFromHz(double hz) { return (float)std::max(0.03, std::min(1.0, 0.03 + 0.97 * std::log(std::max(40.0, hz) / 40.0) / std::log(300.0))); }
 struct Voice {
   bool active = false; int note = 60; double vel = 1.0; uint64_t age = 0;
   double phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
   const Sample* zoneS[kLayers] = {}; int zoneN[kLayers] = {-1, -1, -1};   // chosen zone of a multisampled layer, and the note it was chosen for
-  double syncPhase[kLayers] = {}, noiseHp = 0, noiseHp2 = 0, gl = 0, glStep = 0, subPh[5] = {}, nzS[20] = {};
+  double syncPhase[kLayers] = {}, nzG = 0, gl = 0, glStep = 0, subPh[5] = {}, nzS[20] = {};
   double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
   double lfoPhase = 0, t = 0, stackCents = 0, stackGain = 1;
   int ch = 0; double bend = 0, press = 0, slide = 0;   // MPE: channel of the note, its own bend (semitones), pressure and slide (0..1)
@@ -1033,6 +1038,7 @@ class Engine {
       ne /= std::max(1, std::min(4, p.stackCount));
       const double tg = ne > 1.0 ? std::pow(ne, -0.5 * p.polyNorm) : 1.0, g0 = pnG; const double g1 = tg < g0 ? g0 + (tg - g0) * 0.6 : g0 + (tg - g0) * 0.04; pnG = g1;
       if (std::fabs(g1 - 1.0) > 1e-4 || std::fabs(g0 - 1.0) > 1e-4) for (int i = 0; i < n; ++i) { const double g = g0 + (g1 - g0) * (i + 1) / n; outL[i] = (float)(outL[i] * g); outR[i] = (float)(outR[i] * g); subBusL[i] *= g; subBusR[i] *= g; } }
+    if (p.noiseMode == 2 && p.noiseLevel > 0.f) { const double gl = p.noiseLevel * 0.45; for (int i = 0; i < n; ++i) { noiseOut(gnz); outL[i] = (float)(outL[i] + gl * nL); outR[i] = (float)(outR[i] + gl * nR); } }   // mode 2: noise that plays all the time
     globals();
     { // effective voice hi pass (series: the highest, parallel: the lowest branch) -> half of it again after DYN
       const bool on2 = p.f2Mode != FilterMode::Off, on3 = p.f3Mode != FilterMode::Off; const double h2 = on2 ? p.f2LowCut : 0., h3 = on3 ? p.f3LowCut : 0.;
@@ -1087,6 +1093,24 @@ class Engine {
   int trips = 0;   // how many times the safety guard reset the engine
   Meters mtr; Params pe;   // pe: the settings the effects really use this block (p plus global modulation and the Build macro)
   std::shared_ptr<const SampleBank> bank; std::vector<float> combPool;
+  double nL = 0, nR = 0; double gnz[20] = {};
+  static double nzF(double* z, int o, double x, double a, bool lp) { z[o] += a * (x - z[o]); if (lp) { z[o + 1] += a * (z[o] - z[o + 1]); return z[o + 1]; } const double h = x - z[o]; z[o + 1] += a * (h - z[o + 1]); return h - z[o + 1]; }
+  void noiseOut(double* z) {   // one sample of filtered noise into nL / nR (level and envelope applied by the caller)
+    const double f = p.noiseFilt; const bool none = std::fabs(f) < 0.03, lp = f < 0; const double base = none ? 0.0 : (lp ? nfLp(f) : nfHp(f)); const int nvz = std::max(1, std::min(5, p.noiseVoices));
+    if (nvz == 1 && p.noiseWidth <= 0.f && p.noiseDetune <= 0.f) {
+      const double nz = 2.0 * rng.next() - 1.0;
+      if (none) { nL = nR = nz * 0.5; return; }
+      nL = nR = 0.5 * nzF(z, 0, nz, 1.0 - std::exp(-2.0 * kPiD * std::min(0.45 * sr, base) / sr), lp); return;
+    }
+    const double w = std::min(1.0, (double)p.noiseWidth), nrm = 0.5 / std::sqrt((double)nvz); double sl = 0.0, srr = 0.0;
+    for (int k = 0; k < nvz; ++k) {
+      const double x = nvz > 1 ? 2.0 * k / (nvz - 1) - 1.0 : 0.0, c = 2.0 * rng.next() - 1.0, nl = c * (1.0 - w) + w * (2.0 * rng.next() - 1.0), nr = c * (1.0 - w) + w * (2.0 * rng.next() - 1.0);
+      if (none) { sl += nl; srr += nr; continue; }
+      const double a = 1.0 - std::exp(-2.0 * kPiD * std::min(0.45 * sr, std::max(20.0, base * std::pow(2.0, x * p.noiseDetune * 2.0))) / sr);
+      sl += nzF(z, k * 4, nl, a, lp); srr += nzF(z, k * 4 + 2, nr, a, lp);
+    }
+    nL = nrm * sl; nR = nrm * srr;
+  }
   double pnG = 1.0;
   std::vector<double> subBusL, subBusR; double* sbL = nullptr; double* sbR = nullptr;
   double bl = 0, br = 0, bl2 = 0, br2 = 0, limEnv = 0, limAtk = 0.05, limRel = 0.0002;
@@ -1334,22 +1358,10 @@ class Engine {
         if (dlt == 0) { L += lp.level * lL * v.pcC[ly] * le; R += lp.level * lR * v.psC[ly] * le; } else { v.bL[dlt] += lp.level * lL * v.pcC[ly] * le; v.bR[dlt] += lp.level * lR * v.psC[ly] * le; }
       }
       const double nzl = std::max(0.0, p.noiseLevel + md[12] * 0.5), subL = std::max(0.0, p.subLevel + md[11] * 0.7), en = link ? 1.0 : ampE;
-      if (nzl > 0.0) {  // white noise, high-passed (two poles) so only the top end is added
-        const int nvz = std::max(1, std::min(5, p.noiseVoices));
-        if (nvz == 1 && p.noiseWidth <= 0.f && p.noiseDetune <= 0.f) {
-          const double nz = 2.0 * rng.next() - 1.0, a = 1.0 - std::exp(-2.0 * kPiD * std::min(0.45 * sr, std::max(100.0, (double)p.noiseHpHz)) / sr);
-          v.noiseHp += a * (nz - v.noiseHp); const double h1 = nz - v.noiseHp; v.noiseHp2 += a * (h1 - v.noiseHp2); const double h2 = h1 - v.noiseHp2;
-          L += nzl * 0.5 * h2 * en; R += nzl * 0.5 * h2 * en;
-        } else {   // several noise streams with spread high-pass points, and a decorrelated left and right
-          const double w = std::min(1.0, (double)p.noiseWidth), nrm = nzl * 0.5 / std::sqrt((double)nvz); double sl = 0.0, srr = 0.0; double* z = v.nzS;
-          for (int k = 0; k < nvz; ++k) {
-            const double x = nvz > 1 ? 2.0 * k / (nvz - 1) - 1.0 : 0.0, hz = std::min(0.45 * sr, std::max(100.0, p.noiseHpHz * std::pow(2.0, x * p.noiseDetune * 2.0))), a = 1.0 - std::exp(-2.0 * kPiD * hz / sr);
-            const double c = 2.0 * rng.next() - 1.0, nl = c * (1.0 - w) + w * (2.0 * rng.next() - 1.0), nr = c * (1.0 - w) + w * (2.0 * rng.next() - 1.0); const int o = k * 4;
-            z[o] += a * (nl - z[o]); const double l1 = nl - z[o]; z[o + 1] += a * (l1 - z[o + 1]); sl += l1 - z[o + 1];
-            z[o + 2] += a * (nr - z[o + 2]); const double r1 = nr - z[o + 2]; z[o + 3] += a * (r1 - z[o + 3]); srr += r1 - z[o + 3];
-          }
-          L += nrm * sl * en; R += nrm * srr * en;
-        }
+      if (nzl > 0.0 && p.noiseMode != 2) {  // mode 0 follows the amp envelope, mode 1 follows the keys (gate), mode 2 is the global generator in render
+        double g = en;
+        if (p.noiseMode == 1) { v.nzG += ((v.amp.stage == 3 ? 0.0 : 1.0) - v.nzG) * 0.02; g = v.nzG; }
+        noiseOut(v.nzS); L += nzl * nL * g; R += nzl * nR * g;
       }
       if (p.nzSmp != 0 && bank) { const std::vector<float>& d = bank->d[p.nzSmp]; if (!d.empty()) {
         if (ctl) v.sq[3] = std::pow(2.0, (p.nzSmpPitch + (p.nzSmpKey == 1 || (p.nzSmpKey != 2 && smpKeyed(p.nzSmp)) ? v.note - 60 + v.gl : 0.0)) / 12.0);
