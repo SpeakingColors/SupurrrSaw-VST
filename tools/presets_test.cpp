@@ -141,6 +141,13 @@ int main(int argc, char** argv) {
     CHECK(br[0] < br[1] * 0.6);   // left: low-pass darkens
     CHECK(br[2] > br[1] * 0.9 || br[2] > 0.0);  // right: high-pass keeps the top
   }
+  { auto hf = [](const std::vector<float>& x) { double a = 0, b = 1e-12; for (size_t i = 2; i < x.size(); ++i) { const double d = x[i] - 2.0 * x[i - 1] + x[i - 2]; a += d * d; b += (double)x[i] * x[i]; } (void)b; return a; };
+    // filter mix: 0 leaves the sound unfiltered, 1 is fully filtered, in between blends
+    double r[3];
+    for (int k = 0; k < 3; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.filterMode = FilterMode::LP24; e.p.cutoff = 300.f; e.p.fMix = k == 0 ? 0.f : (k == 1 ? 0.5f : 1.f); Result q = render(e, 60, 0.6f, 0.8f); CHECK(!q.nan); r[k] = hf(q.l); }
+    CHECK(r[0] > r[1] && r[1] > r[2]);
+    for (int f = 2; f <= 3; ++f) { double x[2]; for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.filterMode = FilterMode::Off; (f == 2 ? e.p.f2Mode : e.p.f3Mode) = FilterMode::LP24; (f == 2 ? e.p.f2Cut : e.p.f3Cut) = 300.f; (f == 2 ? e.p.f2Mix : e.p.f3Mix) = k ? 1.f : 0.f; Result q = render(e, 60, 0.6f, 0.8f); x[k] = hf(q.l); } CHECK(x[0] > x[1] * 1.5); }
+  }
   { // distortion order: pre vs post the filter must sound different
     double d = 0; Result a, b;
     for (int k = 0; k < 2; ++k) { Engine e; e.p.layer[0].wave = Wave::Saw; e.p.cutoff = 900; e.p.reso = 0.5f; e.p.dist = 0.8f; e.p.distPre = k == 1; Result r = render(e, 57, 0.4f, 0.5f); (k ? b : a) = r; }

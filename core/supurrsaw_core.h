@@ -261,6 +261,7 @@ struct Params {
   // filters 2 and 3 (the first filter is filterMode / cutoff / reso / drive / envAmt / keyTrack). Off by default. fRoute 0 = in series, 1 = in parallel. Their envelope is fenv2 / fenv3.
   FilterMode f2Mode = FilterMode::Off, f3Mode = FilterMode::Off; int fRoute = 0;
   float f2LowCut = 5.f, f2HighCut = 20000.f, f3LowCut = 5.f, f3HighCut = 20000.f; int f2Slope = 1, f3Slope = 1;   // own hi pass / lo pass after filter 2 and 3 (5 Hz and 20 kHz = off); slope 0..5 as auxSlope
+  float fMix = 1.f, f2Mix = 1.f, f3Mix = 1.f;   // dry/wet of each filter, 1 is fully filtered
   float f2Cut = 4000.f, f2Res = 0.2f, f2Drv = 0.f, f2Env = 0.f, f2Key = 0.f, f3Cut = 4000.f, f3Res = 0.2f, f3Drv = 0.f, f3Env = 0.f, f3Key = 0.f, f2Wheel = 0.f, f3Wheel = 0.f;
   // LFO 2 and 3: rate, shape (0 sine, 1 tri, 2 square, 3 saw, 4 random square, 5 random round, 6 ramp down), depth, fade-in and start phase. They feed the mod matrix only.
   float lfo2Rate = 6.f, lfo3Rate = 6.f, lfo2Depth = 1.f, lfo3Depth = 1.f, lfo2Fade = 0.f, lfo3Fade = 0.f, lfo2Start = 0.f, lfo3Start = 0.f; int lfo2Shape = 0, lfo3Shape = 0;
@@ -1379,16 +1380,17 @@ class Engine {
         { const int ns0 = p.auxSlope; if (ns0 >= 4) { const bool hp0 = modes[0] == FilterMode::HP || modes[0] == FilterMode::HP24; const double f0 = hp0 ? std::max(20.0, std::min(0.45 * sr, (double)p.highCutHz)) : std::max(5.0, std::min(0.45 * sr, p.lowCutHz * std::pow(2.0, md[13] * 4.0))); const int sec0 = ns0 == 4 ? 4 : 8; if (f0 != v.bwF || sec0 != v.bwN || hp0 != v.bwH) { v.bwF = f0; v.bwN = sec0; v.bwH = hp0; bwDesign(v.bw, sec0, f0, sr, !hp0); } } }
       }
       const double rs0 = std::min(1.0, std::max(0.0, p.reso + md[2] * 0.5)), dv = std::min(1.0, std::max(0.0, p.drive + md[3] * 0.75));
-      const double rrr[3] = {rs0, rr[1], rr[2]}, ddd[3] = {dv, dd[1], dd[2]};
+      const double rrr[3] = {rs0, rr[1], rr[2]}, ddd[3] = {dv, dd[1], dd[2]}, mxF[3] = {p.fMix, p.f2Mix, p.f3Mix};
       AuxF* axA[3] = {nullptr, (p.f2LowCut > 5.5f || p.f2HighCut < 19990.f) ? &v.ax2[0] : nullptr, (p.f3LowCut > 5.5f || p.f3HighCut < 19990.f) ? &v.ax2[1] : nullptr};
       if (axA[1]) axA[1]->set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2]->set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
-      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (axA[q]) { L = axA[q]->tick(L, 0); R = axA[q]->tick(R, 1); } } }
-      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; double bl = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr), brr = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (axA[q]) { bl = axA[q]->tick(bl, 0); brr = axA[q]->tick(brr, 1); } al += bl; ar += brr; ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
+      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; { const double iL = L, iR = R; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (mxF[q] < 1.0) { L = iL + (L - iL) * mxF[q]; R = iR + (R - iR) * mxF[q]; } } if (axA[q]) { L = axA[q]->tick(L, 0); R = axA[q]->tick(R, 1); } } }
+      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; double bl = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr), brr = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (mxF[q] < 1.0) { bl = L + (bl - L) * mxF[q]; brr = R + (brr - R) * mxF[q]; } if (axA[q]) { bl = axA[q]->tick(bl, 0); brr = axA[q]->tick(brr, 1); } al += bl; ar += brr; ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
       if (usedD & 30) {   // layers sent to one filter only (1..3) or past all filters (4)
         const bool dpre = p.distPre && p.dist > 0.f;
         for (int q = 1; q <= 3; ++q) { if (!(usedD & (1 << q))) continue; double xl = v.bL[q], xr = v.bR[q]; const FilterMode m = modes[q - 1];
           if (dpre) { xl = std::tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = std::tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; }
-          if (m != FilterMode::Off) { xl = v.fl2[q - 1].process(xl, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr); xr = v.fr2[q - 1].process(xr, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr);
+          if (m != FilterMode::Off) { const double x0l = xl, x0r = xr; xl = v.fl2[q - 1].process(xl, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr); xr = v.fr2[q - 1].process(xr, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr);
+            if (mxF[q - 1] < 1.0) { xl = x0l + (xl - x0l) * mxF[q - 1]; xr = x0r + (xr - x0r) * mxF[q - 1]; }
             if (q > 1) { const float lo = q == 2 ? p.f2LowCut : p.f3LowCut, hi = q == 2 ? p.f2HighCut : p.f3HighCut; const int sl = q == 2 ? p.f2Slope : p.f3Slope;
               if (lo > 5.5f || hi < 19990.f) { AuxF& a3 = v.ax3[q - 2]; a3.set(lo, hi, sl, sr); xl = a3.tick(xl, 0); xr = a3.tick(xr, 1); } } }
           L += xl; R += xr; }
