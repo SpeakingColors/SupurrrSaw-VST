@@ -155,19 +155,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { path: parts }
-      - name: Assemble the zip
+      - name: Assemble one zip per system
         run: |
+          # the instrument samples are inside every plugin file (about 215 MB each), so one zip for all three systems would pass GitHub's 2 GB limit per release file
           tag="$GITHUB_REF_NAME"; if [ "$GITHUB_REF_TYPE" != "tag" ]; then tag="${TAGIN:-dev}"; fi
-          d="$NAME-$tag"; mkdir -p "$d/windows" "$d/macos" "$d/linux"
-          cp parts/windows/*.exe "$d/windows/"
-          if ls parts/macos/*.pkg >/dev/null 2>&1; then cp parts/macos/*.pkg "$d/macos/"; else rmdir "$d/macos"; fi
-          cp parts/linux/* "$d/linux/"
-          cp docs/SupurrSaw_Manual.pdf "$d/$NAME-manual.pdf"; cp LICENSE "$d/"
-          cp packaging/INSTALL.txt "$d/INSTALL.txt"
-          (cd "$d" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS)
-          zip -r "$d.zip" "$d"
-          ls -l "$d.zip"; unzip -l "$d.zip"
-          echo "TAG=$tag" >> "$GITHUB_ENV"; echo "ZIP=$d.zip" >> "$GITHUB_ENV"
+          for os in windows macos linux; do
+            case $os in
+              windows) ls parts/windows/*.exe >/dev/null 2>&1 || continue ;;
+              macos)   ls parts/macos/*.pkg >/dev/null 2>&1 || continue ;;
+              linux)   ls parts/linux/* >/dev/null 2>&1 || continue ;;
+            esac
+            d="$NAME-$tag-$os"; mkdir -p "$d"
+            case $os in
+              windows) cp parts/windows/*.exe "$d/" ;;
+              macos)   cp parts/macos/*.pkg "$d/" ;;
+              linux)   cp parts/linux/* "$d/" ;;
+            esac
+            cp docs/SupurrSaw_Manual.pdf "$d/$NAME-manual.pdf"; cp LICENSE "$d/"
+            cp packaging/INSTALL.txt "$d/INSTALL.txt"
+            (cd "$d" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS)
+            zip -0 -r "$d.zip" "$d"   # the samples are already compressed, so storing is faster and not larger
+            ls -l "$d.zip"
+          done
+          echo "TAG=$tag" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
           name: release-zip
@@ -178,8 +188,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP" --clobber
+            gh release upload "$TAG" *.zip --clobber
             gh release edit "$TAG" --notes-file release/NOTES.md
           else
-            gh release create "$TAG" "$ZIP" --target "$GITHUB_SHA" --title "$PRODUCT $TAG" --notes-file release/NOTES.md
+            gh release create "$TAG" *.zip --target "$GITHUB_SHA" --title "$PRODUCT $TAG" --notes-file release/NOTES.md
           fi
