@@ -36,9 +36,9 @@ constexpr int kFreeN = 8, kFreeNFx = 45, kFreeDst = 73;   // free mod slots: one
 static const char* const kFreeDstNames[kFreeDst] = {"master","dmMix","dmDrive","dmClip","dmLow","dmMid","dmHigh","widMid","widHi","msMid","msSide","optoAmt","optoRel","optoGain","crushMix","crushBits","crushRate","drvDrive","drvXs","drvFuzz","drvMix","ottDepth","ottMix","ottLow","ottMid","ottHigh","ottTime","chorusMix","chorusDepth","chorusRate","chorusWidth","chorusFb","sqzAmt","sqzAtk","sqzRel","sqzMakeup","delayMix","delayFb","delayDamp","delayPing","reverbMix","reverbWidth","reverbLowCutHz","reverbDamp","dynMix","f2Res","f2Drv","f3Res","f3Drv","f2Env","f3Env","dist","lfoRate","lfoDepth","lfo2Rate","lfo2Depth","lfo3Rate","lfo3Depth","spread","subDetune","subWidth","noiseDetune","noiseWidth","noiseFilt","L0_level","L0_fmAmt","L0_amAmt","L1_level","L1_fmAmt","L1_amAmt","L2_level","L2_fmAmt","L2_amAmt"};
 
 // Built-in procedural samples (made from maths when the engine is prepared; no recorded audio). Index 0 is Off.
-constexpr int kSmpCount = 34;
-static const char* const kSmpIds[kSmpCount] = {"Off", "click_soft", "click_hard", "click_tok", "kick_punch", "kick_hard", "sub_thump", "snare_crack", "snare_tight", "clap", "rim", "hat_closed", "hat_open", "pluck_soft", "pluck_hard", "pluck_pizz", "pluck_glass", "chime", "zap", "air_puff", "piano_hammer", "piano_tick", "kick_click", "kick_beater", "kick_knock", "bow_bite", "bow_chiff", "breath_chiff", "pick_attack", "mallet_tok", "key_thock", "brass_blat", "vinyl_pop", "tine_ping"};
-inline bool smpKeyed(int i) { return (i >= 13 && i <= 17) || i == 21 || i == 26 || i == 28 || i == 33; }   // the plucks and the chime follow the key
+constexpr int kSmpCount = 40;
+static const char* const kSmpIds[kSmpCount] = {"Off", "click_soft", "click_hard", "click_tok", "kick_punch", "kick_hard", "sub_thump", "snare_crack", "snare_tight", "clap", "rim", "hat_closed", "hat_open", "pluck_soft", "pluck_hard", "pluck_pizz", "pluck_glass", "chime", "zap", "air_puff", "piano_hammer", "piano_tick", "kick_click", "kick_beater", "kick_knock", "bow_bite", "bow_chiff", "breath_chiff", "pick_attack", "mallet_tok", "key_thock", "brass_blat", "vinyl_pop", "tine_ping", "piano_thump", "piano_body", "piano_felt", "pizz_knock", "click_fat", "hammer_thud"};
+inline bool smpKeyed(int i) { return (i >= 13 && i <= 17) || i == 21 || i == 26 || i == 28 || i == 33 || i == 34 || i == 35 || i == 37; }   // the plucks and the chime follow the key
 inline int smpFromId(const char* n) { for (int i = 0; i < kSmpCount; ++i) { const char* a = kSmpIds[i]; const char* b = n; while (*a && *a == *b) { ++a; ++b; } if (!*a && !*b) return i; } return 0; }
 
 // A loaded sample (WAV data already decoded). Shared between layers and voices, read only while playing.
@@ -955,6 +955,14 @@ inline std::shared_ptr<const SampleBank> makeSamples(double sr) {
   { Buf a(N(0.12), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr, env = (1 - std::exp(-t / 0.01)) * std::exp(-t / 0.04); const double r = rnd(); a[i] = (float)((saw(233, t) * 0.5 + r * 0.6) * env); } fin(31, bpn(a, 500, 5000)); }
   { Buf a(N(0.03), 0.f); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(rnd() * std::exp(-(double)i / sr / 0.002)); fin(32, lpn(a, 0.4)); }
   { Buf a(N(0.2), 0.f); const double f = 1046.5; for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(std::sin(TP * f * t) * std::exp(-t / 0.03) + 0.5 * std::sin(TP * f * 5.4 * t) * std::exp(-t / 0.008)); } fin(33, a); }
+
+  // thicker, longer attacks (added after the originals, so every old preset keeps its sound)
+  { Buf a = ks(0.3, 261.63, 0.45, 0.6); for (size_t i = 0; i < a.size(); ++i) a[i] = (float)(a[i] * std::exp(-(double)i / sr / 0.07)); fin(34, lpn(a, 0.5)); }
+  { Buf a = ks(0.25, 196, 0.5, 0.5); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(a[i] * std::exp(-t / 0.08) * 0.8 + std::sin(TP * 130 * t) * std::exp(-t / 0.06) * 0.6); } fin(35, a); }
+  { Buf a(N(0.14), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)((r * 0.8 + std::sin(TP * 220 * t) * 0.9) * std::exp(-t / 0.03) * std::min(1.0, t / 0.001)); } fin(36, lpn(a, 0.15)); }
+  { Buf a = ks(0.25, 329.63, 0.5, 0.45); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; a[i] = (float)(a[i] * std::exp(-t / 0.07) + 0.7 * std::sin(TP * (180 * t + 3 * (1 - std::exp(-t / 0.02)))) * std::exp(-t / 0.05)); } fin(37, a); }
+  { Buf a(N(0.08), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)(r * std::exp(-t / 0.012) + 0.8 * std::sin(TP * 150 * t) * std::exp(-t / 0.03)); } fin(38, lpn(a, 0.3)); }
+  { Buf a(N(0.15), 0.f); for (size_t i = 0; i < a.size(); ++i) { const double t = (double)i / sr; const double r = rnd(); a[i] = (float)(std::sin(TP * (55 * t + 0.875 * (1 - std::exp(-t / 0.025)))) * std::exp(-t / 0.05) + 0.3 * r * std::exp(-t / 0.004)); } fin(39, lpn(a, 0.35)); }
   return bank;
 }
 inline std::shared_ptr<const SampleBank> sampleBank(double sr) {   // one bank per sample rate, shared by all engines
