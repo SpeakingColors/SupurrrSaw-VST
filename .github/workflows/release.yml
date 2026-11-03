@@ -104,7 +104,9 @@ jobs:
         run: |
           ver="${TAGIN:-$GITHUB_REF_NAME}"; ver="${ver#v}"; if echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then sed -i.bak -E "s/^(project\([A-Za-z0-9_]+ VERSION )[0-9.]+/\1$ver/" plugin/CMakeLists.txt; rm -f plugin/CMakeLists.txt.bak; fi
           cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel 4
+          # the 215 MB of embedded instrument data is compiled one file at a time (four at once ran the runner out of memory)
+          cmake --build build --target SupurrSawInstruments --parallel 1
+          cmake --build build --parallel 3
           mkdir -p payload out
           v=$(find build -type d -name "*.vst3" | head -1); echo "VST3: $v"; cp -R "$v" payload/
           s=$(find build -type f -name SupurrSaw -path "*Standalone*" | head -1); echo "APP: $s"; cp "$s" payload/SupurrSaw
