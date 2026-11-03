@@ -3,6 +3,7 @@
 // The standard packs are compiled into the plugin (assets/instruments.bin, instruments2.bin, instruments3.bin, S87InstData). A folder with instruments.json, in any of the places
 // returned by searchFolders(), adds more instruments or replaces one of the same name.
 #pragma once
+#include "InstrumentAlias.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <map>
 #include <memory>
@@ -56,10 +57,11 @@ public:
     }
 
     // Decodes an instrument (once; the result is cached and kept for the life of the plugin, because playing voices point into it).
-    std::shared_ptr<const supurr::SampleSet> load (const juce::String& name)
+    std::shared_ptr<const supurr::SampleSet> load (const juce::String& nameIn)
     {
         const juce::ScopedLock sl (lock);
-        if (name.isEmpty()) return nullptr;
+        if (nameIn.isEmpty()) return nullptr;
+        const juce::String name = supurr::instrumentAlias (nameIn);
         if (auto c = cache.find (name); c != cache.end()) return c->second;
         auto it = infos.find (name);
         if (it == infos.end()) { refresh(); it = infos.find (name); }

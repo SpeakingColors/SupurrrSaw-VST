@@ -26,7 +26,7 @@ add_custom_target(S87Page DEPENDS ${S87_PAGE_OUT})
 juce_add_binary_data(SupurrSawUI SOURCES ${S87_PAGE_OUT})
 add_dependencies(SupurrSawUI S87Page)
 
-# the instrument pack (piano, trumpet, strings, M1 and RLD sets), three files so each stays under the 100 MB GitHub limit (tools/make_instruments_bin.py), compiled into the plugin
+# the instrument pack (piano, trumpet, strings, Meow1 sets and the sampled-synth sets), three files so each stays under the 100 MB GitHub limit (tools/make_instruments_bin.py), compiled into the plugin
 juce_add_binary_data(SupurrSawInstruments NAMESPACE S87InstData HEADER_NAME S87InstData.h SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../assets/instruments.bin ${CMAKE_CURRENT_SOURCE_DIR}/../assets/instruments2.bin ${CMAKE_CURRENT_SOURCE_DIR}/../assets/instruments3.bin)
 
 if(WIN32)
