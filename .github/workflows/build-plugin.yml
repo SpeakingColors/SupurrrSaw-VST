@@ -48,7 +48,11 @@ jobs:
           cmake -S plugin -B build -DCMAKE_BUILD_TYPE=Release $EXTRA
 
       - name: Build
-        run: cmake --build build --config Release --parallel 4
+        shell: bash
+        run: |
+          # the embedded instrument data is compiled one file at a time (four at once can run a runner out of memory)
+          cmake --build build --config Release --target SupurrSawInstruments --parallel 1
+          cmake --build build --config Release --parallel 3
 
       - name: Collect
         shell: bash
