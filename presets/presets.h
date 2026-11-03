@@ -139,12 +139,12 @@ inline void feltPiano(Params& p) {
 // Drawbar organ: 8', 4' and 2 2/3' sine drawbars plus a sub, a little key click drive and a rotary-style chorus.
 inline void organ(Params& p) {
   p = Params();
-  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.6f;
-  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.4f; p.layer[1].octave = 1;
-  p.layer[2].wave = Wave::Sine; p.layer[2].level = 0.3f; p.layer[2].octave = 1; p.layer[2].semi = 7; p.layer[2].tune = 2.f;
-  p.subLevel = 0.35f; p.subWave = Wave::Sine; p.subOctave = -1;
-  p.cutoff = 9000.f; p.dist = 0.12f; p.drive = 0.1f; p.lowCutHz = 40.f;
-  p.master = 0.26f; p.amp = {0.004f, 0.05f, 1.f, 0.06f}; p.chorusMix = 0.5f; p.chorusRate = 6.f; p.chorusDepth = 0.5f; p.reverbMix = 0.1f; p.spread = 0.5f;
+  p.layer[0].wave = Wave::Sine; p.layer[0].level = 0.55f; p.layer[0].voices = 1;
+  p.layer[1].wave = Wave::Sine; p.layer[1].level = 0.38f; p.layer[1].octave = 1; p.layer[1].voices = 1;
+  p.layer[2].wave = Wave::Sine; p.layer[2].level = 0.26f; p.layer[2].octave = 1; p.layer[2].semi = 7; p.layer[2].voices = 1;
+  p.subLevel = 0.3f; p.subWave = Wave::Sine; p.subOctave = -1;
+  p.cutoff = 14000.f; p.dist = 0.f; p.drive = 0.f; p.lowCutHz = 40.f;
+  p.master = 0.6f; p.amp = {0.006f, 0.05f, 1.f, 0.09f}; p.chorusMix = 0.3f; p.chorusRate = 0.8f; p.chorusDepth = 0.3f; p.reverbMix = 0.12f; p.spread = 0.5f;
 }
 // Clavinet: narrow pulse, very short filter decay that follows the key.
 inline void clav(Params& p) {
