@@ -3173,8 +3173,8 @@ function renderBrowser(){
   const fb=$("#bfav");if(fb){fb.classList.toggle("on",!!BF.fav);fb.textContent="♥ Favorites ("+PREFS.fav.length+")";}
   const eb=$("#bedit");if(eb){eb.classList.toggle("on",!!BF.edit);eb.textContent=BF.edit?"Done ordering":"Re-order";}
 }
-/* ----- banks: A to T, 128 slots each. A to D start with the factory presets, E to T start as Init. Edits are stored per slot. ----- */
-const BANKN=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"],SLOTS=128,BOV={};let BANKV="A",SLOTSEL=0,FACT=null;
+/* ----- banks: A to U, 128 slots each. A to D start with the factory presets, E to U start as Init. Edits are stored per slot. ----- */
+const BANKN=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U"],SLOTS=128,BOV={};let BANKV="A",SLOTSEL=0,FACT=null;
 const pad3=n=>String(n+1).padStart(3,"0");
 function initParams(){const p=EN.defaultParams();p.layers[0].wave="Saw";p.layers[0].level=0.7;p.cutoff=9000;p.reso=0.1;return p;}
 const FACTORY_ORDER={"A":["alexf_lead","alpha909_screech","better_off_alone","bigroom_lead_2013","bigroom_square_lead","complextro_laser","daft_funk","daft_funk_fat","dream_soft_lead","edm_pluck_lead","euphoric_hardstyle_lead","flute_lead","gabber_detuned_lead","gigi_lead","gimme_lead","goa_acid_lead","hh_donk_pluck_lead","hoover","hoover_1991","hoover_classic","hoover_prodigy","hoover_stab_lead","levels_lead","melodic_techno_lead","mgmt_lead","pendulum_lead","pwm_mono_lead","raw_hardstyle_lead","sandstorm_lead","siren_screech","sync_screamer_lead","synthwave_mono_lead","talking_lead","trance_90s","trance_90s_pro","trance_hybrid","trance_lead","uplifting_trance_lead","virus_commercial","wide_supersaw_lead"],"B":["access_bass","acid303_80s","acid_303_resonant","acid_squelch_v2","brejcha_bass","dnb_neuro_bass","donk_organ_bass","dubstep_tear_growl","electro_house_bass","electro_pluck_bass","feellove_bass","fm_wobble_bass","freeway_bass","funk_bass","garage_bassline_pluck","happy_hardcore_pluck_bass","hardcore_reese","hardstyle_reverse_bass","house_rolling_bass","italo_bass","moog_bass","moog_fat_mono","nboy_303","psy_rolling_bass","reese_sem_bass","reese_tear","spaghetti_bass","sub_808_long","sub_donk_bass","sub_sine_pure","synthwave_arp_bass","talking_yoi_bass","techhouse_sub_pluck","trance_bass","trap_808_distorted","uk_bassline_warped","uk_hardcore_dirty_bass","uk_hardcore_donk_bass","uk_hardcore_hoover_bass","uk_hardcore_offbeat_bass","uk_hardcore_reese_stab","uk_hardcore_sub_bounce"],"C":["analog_poly_brass","anjuna_pluck","bell","brass","breakbeat_pad_92","brute_brass","choir","clav","donk_organ_keys","dream_trance_piano","epiano_dx","epiano_wurly","eurodance_chord_stack","felt_piano","formant_pad_90s","formant_vowel_pad","future_bass_swell","garage_4am_epiano","glass_bell_pad","glass_fm","glass_pad","pluck_glass_lead","hardcore_piano","hardstyle_stab","honky_piano","house_m1_piano","hyper_trance_chord","hyperpop_pluck","ice_bells","industrial_hammer","kalimba_pluck","koto_pluck","lush_string_pad","marimba_soft","minimal_pluck","nightcall_keys","organ","organ_drawbar_full","piano","pick","pizz_pluck_bell","plastic_fm_organ","pluck","rave_brass_2unl","rave_chab","soft_ep_tine","strings","vocal_ooh_pad","vocal_trance_pluck","vowel_pluck","warm_analog_pad","warm_pad","wurli_bark_keys"],"D":["annihilator_alarm","blip_zap_fx","bubble_sweep_fx","chime_shard_down","clap_drum","closed_hat","hat_909_closed","club_crush_wash","comb_stab","conga_perc","cowbell_808","crash","crash_909","downlifter_short","fm_laser_chop","gabber_kick","glass_shrapnel","hat_closed_tight","hat_open_long","impact_boom","kick","kick_808_drum","kick_909","kick_click_layered","kick_deep_house","kick_dnb_tight","kick_hardstyle_dist","kick_punch_drum","laser_roll_riser","metal_scrape","noise_wash_down","open_hat","hat_909_open","pitch_scream_riser","reverse_cymbal_riser","ride_909","rim_drum","riser_build_4bar","shaker_drum","siren_sweep_fx","snare","snare_909","snare_crack_drum","snare_dnb_tight","stretched_string_riser","sub_drop_impact","sub_inverter_roll","sub_suck_sweeper","tape_stop_glitch","tom_drum","tom_floor","white_noise_riser"]};/* frozen: never reorder; new presets are only appended */
@@ -3202,7 +3202,7 @@ function sxDecode(u8){const out=[];let i=0;
     if(m.length<14||m.length>300000)continue;let ok=true;for(let k=0;k<6;k++)if(m[k]!==SXH[k])ok=false;if(!ok||m[6]!==1)continue;
     const bank=m[7],slot=m[8],n=(m[9]<<14)|(m[10]<<7)|m[11],pk=m.subarray(12,m.length-2);let s=0;for(const x of pk)s=(s+x)&0x7F;if(s!==m[m.length-2])continue;
     try{const by=unpack7(pk,n);const o=JSON.parse(new TextDecoder().decode(new Uint8Array(by)));if(!o||typeof o.n!=="string"||typeof o.d!=="object")continue;
-      out.push({bank:Math.min(19,bank),slot:Math.min(127,slot),name:o.n.slice(0,40),tags:(Array.isArray(o.t)?o.t:[]).filter(x=>typeof x==="string").slice(0,8).map(x=>x.slice(0,24)),d:o.d});}catch(e){}}
+      out.push({bank:Math.min(20,bank),slot:Math.min(127,slot),name:o.n.slice(0,40),tags:(Array.isArray(o.t)?o.t:[]).filter(x=>typeof x==="string").slice(0,8).map(x=>x.slice(0,24)),d:o.d});}catch(e){}}
   return out;}
 const sxPreset=(b,i,name,tags,d)=>sxEncode(BANKN.indexOf(b),i,{n:name,t:tags,d});
 function bytesOf(msgs){let n=0;msgs.forEach(m=>n+=m.length);const u=new Uint8Array(n);let o=0;msgs.forEach(m=>{u.set(m,o);o+=m.length;});return u;}
@@ -3230,14 +3230,14 @@ function bankPanel(){
     const r=await ask({title:"Write to "+BANKV+pad3(SLOTSEL)+"?",msg:si.init?"This slot is empty. Name for the preset.":"This replaces \""+si.name+"\" in slot "+BANKV+pad3(SLOTSEL)+".",input:CURNAME.replace(/ \*$/,""),buttons:[{t:"Write",k:si.init?"on":"danger",def:1},{t:"Cancel"}]});
     if(r.b!=="Write"||!r.v||!r.v.trim())return;const t=tagsOfKey(CURBASEKEY),tags=[...new Set([t.type,...t.genres,...t.user].filter(Boolean))].slice(0,8);
     await slotWrite(BANKV,SLOTSEL,r.v.trim().slice(0,40),tags,flatDiff(P));pushMove("@bank",BANKV+pad3(SLOTSEL),r.v.trim());renderBank();},"on"));
-  r1.appendChild(mk("Clear slot",BANKV<"E"?"Empty slots in banks E to T go back to Init, slots in A to D go back to the factory preset.":"Empties the selected slot.",async()=>{
+  r1.appendChild(mk("Clear slot",BANKV<"E"?"Empty slots in banks E to U go back to Init, slots in A to D go back to the factory preset.":"Empties the selected slot.",async()=>{
     const si=slotInfo(BANKV,SLOTSEL);if(!si.ov){setStatus("slot has nothing of yours to clear");return;}
     const r=await ask({title:"Clear slot "+BANKV+pad3(SLOTSEL)+"?",msg:"\""+si.name+"\" will be removed from this slot.",buttons:[{t:"Clear",k:"danger"},{t:"Cancel",def:1}]});
     if(r.b==="Clear"){await slotClear(BANKV,SLOTSEL);renderBank();}}));
   w.appendChild(r1);
   const r2=el("div","row");r2.style.marginTop="6px";
   r2.appendChild(mk("Export bank .syx","Saves this bank as one SysEx file (one message per preset). Slots still at Init are left out.",()=>{const m=bankMsgs(BANKV);if(!m.length){setStatus("bank is empty, nothing to export");return;}saveFile("supurrsaw_bank_"+BANKV+".syx",new Blob([bytesOf(m)],{type:"application/octet-stream"}));}));
-  r2.appendChild(mk("Export all","Saves banks A to T in one SysEx file.",()=>{const m=[];BANKN.forEach(b=>bankMsgs(b).forEach(x=>m.push(x)));saveFile("supurrsaw_all_banks.syx",new Blob([bytesOf(m)],{type:"application/octet-stream"}));}));
+  r2.appendChild(mk("Export all","Saves banks A to U in one SysEx file.",()=>{const m=[];BANKN.forEach(b=>bankMsgs(b).forEach(x=>m.push(x)));saveFile("supurrsaw_all_banks.syx",new Blob([bytesOf(m)],{type:"application/octet-stream"}));}));
   const fi=el("input");fi.type="file";fi.accept=".syx,application/octet-stream";fi.hidden=true;
   fi.onchange=async()=>{const f=fi.files[0];fi.value="";if(!f)return;if(f.size>12e6){setStatus("file too large for a bank",true);return;}
     const items=sxDecode(new Uint8Array(await f.arrayBuffer()));if(!items.length){setStatus("no SupurrSaw presets found in that file",true);return;}
@@ -3488,7 +3488,7 @@ function presetBrowser(){
   R.appendChild(el("label","","Type"));const tc=el("div","chips");R.appendChild(tc);
   R.appendChild(el("label","","Genre"));const gc=el("div","chips");R.appendChild(gc);
   R.appendChild(el("label","","History (click to go back)"));const hc=el("div","chips");R.appendChild(hc);
-  const note=el("div","pill","All shows every sound. Banks A to D are factory, E to T are yours (128 slots each).");note.style.marginTop="6px";R.appendChild(note);
+  const note=el("div","pill","All shows every sound. Banks A to D are factory, E to U are yours (128 slots each).");note.style.marginTop="6px";R.appendChild(note);
   const foot=el("div","pbfoot");const cnt=el("span","pill");foot.appendChild(cnt);const cl=el("button","btn","Close");foot.appendChild(cl);bx.appendChild(foot);
   const close=()=>{MB.q=q.value;ov.remove();window.removeEventListener("resize",sz);document.removeEventListener("keydown",key,true);};
   const key=e=>{if(e.key==="Escape"){e.stopPropagation();close();}else if(e.key==="Enter"&&document.activeElement===q){const f=list.querySelector("[data-v]");if(f)f.click();}};
