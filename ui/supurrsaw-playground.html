@@ -1368,7 +1368,7 @@ async function instLoad(name){
   INSTBUSY[name]=1;if(typeof instNote==="function")instNote("Loading "+name+"...");
   try{
     const oc=new OfflineAudioContext(2,1,44100),zones=[];
-    for(const z of inst.zones){const r=await fetch("instruments/"+z.file.split("/").map(encodeURIComponent).join("/"));const b=await oc.decodeAudioData(await r.arrayBuffer());zones.push({l:b.getChannelData(0).slice(),r:b.numberOfChannels>1?b.getChannelData(1).slice():null,sr:b.sampleRate,root:z.root,tune:z.tune,lo:z.lo,hi:z.hi,loop:inst.loop,ls:z.loopStart,le:z.loopEnd});}
+    const PK={};for(const z of inst.zones){let b,o0=0,o1=0;if(z.pack){if(!PK[z.pack]){const r=await fetch("instruments/"+encodeURIComponent(z.pack));PK[z.pack]=await oc.decodeAudioData(await r.arrayBuffer());}b=PK[z.pack];o0=z.off;o1=z.off+z.len;}else{const r=await fetch("instruments/"+z.file.split("/").map(encodeURIComponent).join("/"));b=await oc.decodeAudioData(await r.arrayBuffer());}const cut=ch=>z.pack?b.getChannelData(ch).slice(o0,o1):b.getChannelData(ch).slice();zones.push({l:cut(0),r:b.numberOfChannels>1?cut(1):null,sr:b.sampleRate,root:z.root,tune:z.tune,lo:z.lo,hi:z.hi,loop:inst.loop,ls:z.loopStart,le:z.loopEnd});}
     INSTSETS[name]={zones:zones};
   }catch(e){console.log("instrument failed",name,e);}
   delete INSTBUSY[name];if(typeof instNote==="function")instNote("");post();
