@@ -562,6 +562,7 @@ struct Voice {
   bool active = false; int note = 60; double vel = 1.0; uint64_t age = 0;
   double phase[kLayers][kMaxSaws] = {};
   double samplePos[kLayers] = {};
+  double samplePosU[kLayers][kMaxSaws] = {};   // read positions of the extra unison copies of a sample layer
   const Sample* zoneS[kLayers] = {}; int zoneN[kLayers] = {-1, -1, -1};   // chosen zone of a multisampled layer, and the note it was chosen for
   double syncPhase[kLayers] = {}, nzG = 0, gl = 0, glStep = 0, subPh[5] = {}, nzS[20] = {};
   double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
@@ -1226,7 +1227,7 @@ class Engine {
     // per-block tables for the supersaw layers (pan law and spread depend only on settings, so they are not recomputed per sample)
     double tSp[kLayers][kMaxSaws], tCl[kLayers][kMaxSaws], tCr[kLayers][kMaxSaws]; bool tOn[kLayers][kMaxSaws];
     for (int ly = 0; ly < kLayers; ++ly) { const LayerParams& q = p.layer[ly];
-      if (!(q.wave == Wave::SuperSaw || q.wave == Wave::SuperSquare || (q.wave == Wave::Custom && q.table && q.table->ready()))) continue;
+      if (!(q.wave == Wave::SuperSaw || q.wave == Wave::SuperSquare || q.wave == Wave::Sample || (q.wave == Wave::Custom && q.table && q.table->ready()))) continue;
       const int nv = std::max(1, std::min(kMaxSaws, q.voices)); const double sideFade = q.cents > 0.f ? 1.0 : std::min(1.0, q.detune * 20.0), norm = 1.0 / (1.0 + (double)(nv - 1) * 0.62 * sideFade);
       for (int j = 0; j < nv; ++j) { const double sp = sawSpread(j, nv); const bool centre = (nv % 2 == 1 && j == nv / 2); double g = centre ? 1.0 : 0.62 * sideFade; g *= norm;
         const double ang = (sp * p.spread + 1.0) * kPiD * 0.25; tSp[ly][j] = sp; tOn[ly][j] = g > 0.0; tCl[ly][j] = g * std::cos(ang) * 1.414; tCr[ly][j] = g * std::sin(ang) * 1.414; } }
@@ -1311,27 +1312,37 @@ class Engine {
         } else if (lp.wave == Wave::Sample && (lp.sampleSet || (lp.sample && !lp.sample->l.empty()))) {
           const Sample* smp = lp.sample.get();
           if (lp.sampleSet) {
-            if (v.zoneN[ly] != v.note) { const Sample* z = lp.sampleSet->pick(v.note); if (z != v.zoneS[ly]) { v.zoneS[ly] = z; v.samplePos[ly] = 0.0; } v.zoneN[ly] = v.note; }
+            if (v.zoneN[ly] != v.note) { const Sample* z = lp.sampleSet->pick(v.note); if (z != v.zoneS[ly]) { v.zoneS[ly] = z; v.samplePos[ly] = 0.0; for (int u = 0; u < kMaxSaws; ++u) v.samplePosU[ly][u] = 0.0; } v.zoneN[ly] = v.note; }
             smp = v.zoneS[ly];
           }
           if (!smp || smp->l.empty()) { v.lyOut[ly] = 0.0; continue; }
           const Sample& sm = *smp;
-          double rate = (double)(f / midiToHz((double)sm.rootNote)) * sm.sampleRate / sr * std::pow(2.0, -sm.tune / 1200.0);
-          double& pos = v.samplePos[ly];
-          size_t N = sm.l.size();
-          if (sm.loop && sm.loopEnd > sm.loopStart && pos >= (double)sm.loopEnd) pos -= (double)(sm.loopEnd - sm.loopStart);
-          if (pos < (double)N - 2) {
-            size_t i0 = (size_t)pos; float fr = (float)(pos - (double)i0);
-            auto h = [&](const std::vector<float>& a) {  // cubic hermite
-              float y0 = a[i0 ? i0 - 1 : 0], y1 = a[i0], y2 = a[i0 + 1], y3 = a[std::min(N - 1, i0 + 2)];
-              float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
-              return ((c3 * fr + c2) * fr + c1) * fr + y1;
-            };
-            float sl = h(sm.l), sr_ = h(sm.r.empty() ? sm.l : sm.r);
-            // width control also applies to samples (mid/side)
-            double mid = 0.5 * (sl + sr_), side = 0.5 * (sl - sr_) * p.spread;
-            lL = mid + side; lR = mid - side;
-            pos += rate;
+          const double baseRate = (double)(f / midiToHz((double)sm.rootNote)) * sm.sampleRate / sr * std::pow(2.0, -sm.tune / 1200.0);
+          // Voices and Detune also work on samples: several copies of the sample, each a little off in pitch, spread across the stereo field
+          const int nvS = std::max(1, std::min(kMaxSaws, lp.voices)); const bool uni = nvS > 1;
+          double det = 0.0;
+          if (uni) det = lp.cents > 0.f ? std::pow(2.0, std::max(0.0, lp.cents + md[5] * 50.0) / 1200.0) - 1.0 : jpDetune(std::min(1.0, std::max(0.0, lp.detune * (1.0 + p.lfoDetune * lfo) + md[5] * 0.5))) * kMaxDetune * p.detuneRange;
+          double uc = 1.0; if (uni) { const double sf = lp.cents > 0.f ? 1.0 : std::min(1.0, (double)lp.detune * 20.0), nm = 1.0 / (1.0 + (double)(nvS - 1) * 0.62 * sf); uc = 1.0 / (nm * std::sqrt(1.0 + (double)(nvS - 1) * 0.3844 * sf * sf)); }   // the copies add up incoherently, so lift the sum to keep the level steady
+          const size_t N = sm.l.size();
+          for (int j = 0; j < nvS; ++j) {
+            if (uni && !tOn[ly][j]) continue;
+            double& pos = uni ? v.samplePosU[ly][j] : v.samplePos[ly];
+            const double rate = uni ? baseRate * (1.0 + det * tSp[ly][j] + v.drift[j]) : baseRate;
+            if (sm.loop && sm.loopEnd > sm.loopStart && pos >= (double)sm.loopEnd) pos -= (double)(sm.loopEnd - sm.loopStart);
+            if (pos < (double)N - 2) {
+              size_t i0 = (size_t)pos; float fr = (float)(pos - (double)i0);
+              auto h = [&](const std::vector<float>& a) {  // cubic hermite
+                float y0 = a[i0 ? i0 - 1 : 0], y1 = a[i0], y2 = a[i0 + 1], y3 = a[std::min(N - 1, i0 + 2)];
+                float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+                return ((c3 * fr + c2) * fr + c1) * fr + y1;
+              };
+              float sl = h(sm.l), sr_ = h(sm.r.empty() ? sm.l : sm.r);
+              // width control also applies to samples (mid/side)
+              double mid = 0.5 * (sl + sr_), side = 0.5 * (sl - sr_) * p.spread;
+              const double oL = mid + side, oR = mid - side;
+              if (uni) { lL += uc * tCl[ly][j] * oL; lR += uc * tCr[ly][j] * oR; } else { lL = oL; lR = oR; }
+              pos += rate;
+            }
           }
         } else if (lp.wave == Wave::Sample) {
           lL = lR = 0.0;   // no instrument or sample loaded: silent, not a stray oscillator

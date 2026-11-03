@@ -7,6 +7,7 @@ namespace supurr
     inline juce::String instrumentAlias (const juce::String& name)
     {
         static const std::pair<const char*, const char*> table[] = {
+        { "JD800 Piano", "800 Piano" },
         { "M1 Flutes", "Meow1 Flutes" },
         { "M1 Grand Piano", "Meow1 Grand Piano" },
         { "M1 Piano 16", "Meow1 Piano 1" },
@@ -44,7 +45,7 @@ namespace supurr
         { "RLD Flute 2", "Flute 2" },
         { "RLD Flute 3", "Flute 3" },
         { "RLD Hardstyle Lead", "Hardstyle Lead" },
-        { "RLD JD800 Piano", "JD800 Piano" },
+        { "RLD JD800 Piano", "800 Piano" },
         { "RLD JP Bell", "JP Bell" },
         { "RLD Juno Square Bass", "Juno Square Bass" },
         { "RLD Long Pizz", "Long Pizz" },

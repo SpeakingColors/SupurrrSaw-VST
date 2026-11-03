@@ -32,7 +32,7 @@ int main() {
   set->zones.push_back({sine(48, 0, 3.0, true), 0, 53});
   set->zones.push_back({sine(60, 20, 3.0, true), 54, 65});      // recorded 20 cents sharp
   set->zones.push_back({sine(72, 0, 3.0, false), 66, 127});
-  auto mk = [&]() { auto e = std::make_unique<Engine>(); Params& p = e->p; p.layer[0].wave = Wave::Sample; p.layer[0].sampleSet = set; p.layer[0].level = 1.f;
+  auto mk = [&]() { auto e = std::make_unique<Engine>(); Params& p = e->p; p.layer[0].wave = Wave::Sample; p.layer[0].voices = 1; p.layer[0].sampleSet = set; p.layer[0].level = 1.f;
     p.cutoff = 20000; p.reso = 0.f; p.lowCutHz = 20; p.amp = {0.001f, 0.2f, 1.f, 0.2f}; p.spread = 0.f; p.subLevel = 0.f; e->prepare(48000); return e; };
   for (int note : {40, 48, 50, 60, 64, 65, 72, 84, 100}) {
     auto e = mk(); auto x = run(*e, note, 0.5, 0.1); const double want = 440.0 * std::pow(2.0, (note - 69) / 12.0), got = freqOf(x, 48000.0);

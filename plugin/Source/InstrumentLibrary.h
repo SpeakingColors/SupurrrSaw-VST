@@ -105,6 +105,12 @@ public:
                 if (s->loop && (s->loopEnd <= s->loopStart || s->loopEnd + 4 >= (size_t) n)) s->loop = false;   // a broken loop plays once instead of glitching
                 s->l.assign (buf.getReadPointer (0), buf.getReadPointer (0) + n);
                 if (buf.getNumChannels() > 1) s->r.assign (buf.getReadPointer (1), buf.getReadPointer (1) + n);
+                if (const double gdb = (double) info.json["gain"]; gdb != 0.0)   // optional per-instrument level trim in dB, so every set plays at a similar loudness
+                {
+                    const float g = (float) std::pow (10.0, gdb / 20.0);
+                    for (auto& v : s->l) v *= g;
+                    for (auto& v : s->r) v *= g;
+                }
                 set->zones.push_back ({ s, juce::jlimit (0, 127, (int) z["lo"]), juce::jlimit (0, 127, (int) z["hi"]) });
             }
         if (set->zones.empty()) { Diagnostics::log ("instrument has no usable zones: " + name); return nullptr; }
