@@ -1,6 +1,6 @@
 // Studio 87 SupurrSaw: finds and loads the optional instrument pack (multisampled piano, FM piano, trumpet, violin, strings).
 // A pack is a folder with instruments.json and the FLAC files it lists; tools/make_instruments.py builds one from CC0 sample libraries.
-// The standard pack is compiled into the plugin (assets/instruments.bin, S87InstData). A folder with instruments.json, in any of the places
+// The standard packs are compiled into the plugin (assets/instruments.bin, instruments2.bin, instruments3.bin, S87InstData). A folder with instruments.json, in any of the places
 // returned by searchFolders(), adds more instruments or replaces one of the same name.
 #pragma once
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -127,11 +127,16 @@ private:
             }
     }
 
-    // the pack inside the plugin: "S87I", u32 version, u32 jsonLen, json, then u32 length + FLAC bytes for every zone in json order
+    // the packs inside the plugin: "S87I", u32 version, u32 jsonLen, json, then u32 length + FLAC bytes for every zone in json order
     void scanEmbedded()
     {
-        const char* d = S87InstData::instruments_bin;
-        const size_t n = (size_t) S87InstData::instruments_binSize;
+        scanBlob (S87InstData::instruments_bin, (size_t) S87InstData::instruments_binSize);
+        scanBlob (S87InstData::instruments2_bin, (size_t) S87InstData::instruments2_binSize);
+        scanBlob (S87InstData::instruments3_bin, (size_t) S87InstData::instruments3_binSize);
+    }
+
+    void scanBlob (const char* d, size_t n)
+    {
         auto u32 = [&] (size_t p) { return (uint32_t) (uint8_t) d[p] | ((uint32_t) (uint8_t) d[p + 1] << 8) | ((uint32_t) (uint8_t) d[p + 2] << 16) | ((uint32_t) (uint8_t) d[p + 3] << 24); };
         if (n < 12 || std::memcmp (d, "S87I", 4) != 0) return;
         const size_t jl = u32 (8);
