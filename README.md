@@ -18,6 +18,8 @@ By **Studio 87**.
 
 <p align="center"><img src="docs/screenshot.png" alt="SupurrSaw editor" width="900"><br><sub>The SupurrSaw editor (v0.3.2).</sub></p>
 
+<p align="center"><b><a href="https://speakingcolors.github.io/SupurrrSaw-VST/mockups/SupurrSaw_interactive_mockup.html">Try the interactive mockup in your browser</a></b><br><sub>Mod matrix and drag-to-modulate included. Nothing is sent anywhere.</sub></p>
+
 ## What it does
 
 - **3 layers.** Each one is an oscillator or a loaded sample: Super Saw (JP-8000 style), Super Square (PWM), Saw, Pulse, Triangle, Sine, Sample.
