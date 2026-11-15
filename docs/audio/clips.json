@@ -1,0 +1,7 @@
+[
+  {"file": "hoover-classic.mp3", "preset": "Hoover Classic", "description": "The classic rave hoover riff in A minor at 140 BPM."},
+  {"file": "trance-90s-pro.mp3", "preset": "Trance 90s Pro", "description": "Bright 90s trance lead played as a 16th note arpeggio over Am, F, C, G."},
+  {"file": "warm-pad.mp3", "preset": "Warm Pad", "description": "Slow, wide analog style pad chords, no effects needed."},
+  {"file": "organ.mp3", "preset": "Organ", "description": "The rebuilt clean organ on offbeat house stabs."},
+  {"file": "trance-bass.mp3", "preset": "Trance Bass", "description": "Rolling offbeat trance bass on A, F, C and G."}
+]
