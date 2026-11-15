@@ -2,12 +2,12 @@
   {
     "file": "hoover-classic.mp3",
     "preset": "Hoover",
-    "description": "Rave hoover riff in A minor at 160 BPM: power chords on the wide detuned hoover with its fast pitch dive and wobble."
+    "description": "Dirty rave hoover riff in A Phrygian at 160 BPM: stab rhythm on power chords, wide detune, drive and grit, ending on a long dive."
   },
   {
     "file": "trance-90s-pro.mp3",
     "preset": "Trance 90s Pro",
-    "description": "Uplifting trance melody in A minor at 138 BPM built from long notes: it starts sparse, thickens with octaves, runs up and holds the peak."
+    "description": "Uplifting trance hook in A minor at 138 BPM: one rhythm every bar, a rising call and a falling answer over Am, F, C, G, with offbeat bass underneath."
   },
   {
     "file": "warm-pad.mp3",
@@ -17,7 +17,7 @@
   {
     "file": "organ.mp3",
     "preset": "Organ",
-    "description": "Rhythmic house chord melody on organ at 124 BPM: the chord changes every two beats (Cmaj7, Em7, Am7, Fmaj7, Dm7, G7sus, G7) with syncopated stabs and early pushes."
+    "description": "House organ chord melody at 124 BPM over Am7, Dm7, G7, Cmaj7: one syncopated stab rhythm every bar, a top note melody, the last stab pushing into the next chord, funk bass under it."
   },
   {
     "file": "trance-bass.mp3",
