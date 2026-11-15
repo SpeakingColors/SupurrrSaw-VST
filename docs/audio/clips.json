@@ -1,13 +1,13 @@
 [
   {
     "file": "hoover-classic.mp3",
-    "preset": "Hoover Classic",
-    "description": "Long held hoover notes with the pitch dive and movement, 140 BPM."
+    "preset": "Hoover",
+    "description": "Rave hoover riff in A minor at 160 BPM: power chords on the wide detuned hoover with its fast pitch dive and wobble."
   },
   {
     "file": "trance-90s-pro.mp3",
     "preset": "Trance 90s Pro",
-    "description": "Uplifting trance melody in A minor over Am, F, C, G at 138 BPM, rising to a peak and resolving home."
+    "description": "Uplifting trance melody in A minor at 138 BPM built from long notes: it starts sparse, thickens with octaves, runs up and holds the peak."
   },
   {
     "file": "warm-pad.mp3",
@@ -17,7 +17,7 @@
   {
     "file": "organ.mp3",
     "preset": "Organ",
-    "description": "Rhythmic house chord melody on organ at 124 BPM: syncopated stabs, early pushes and a moving top note."
+    "description": "Rhythmic house chord melody on organ at 124 BPM: the chord changes every two beats (Cmaj7, Em7, Am7, Fmaj7, Dm7, G7sus, G7) with syncopated stabs and early pushes."
   },
   {
     "file": "trance-bass.mp3",
