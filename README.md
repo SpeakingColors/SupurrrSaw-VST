@@ -2,6 +2,8 @@
 
 # SupurrSaw 🐈🎹
 
+<p align="center"><a href="https://ko-fi.com/studio87"><img src="https://raw.githubusercontent.com/SpeakingColors/.github/main/assets/kofi-banner.svg" alt="Support Studio 87 on Ko-fi" width="440"></a></p>
+
 A free, open source supersaw, hoover and acid synth for **Linux, Windows and macOS** (VST3 and standalone app, built from one codebase).
 
 > Status: first release candidate. The engine is tested offline, and the VST3 and standalone are built for Linux, Windows and macOS (Apple silicon) by GitHub Actions. Not signed yet, see the install steps in the release notes.
