@@ -85,5 +85,6 @@ Free to use.
 Not affiliated with or endorsed by Roland, Korg or any other brand mentioned. Names are used only to describe sounds and compatibility.
 
 ## Docs
-- [Interactive mockups](docs/README.md)
+- [Interactive mockup (current)](docs/mockups/SupurrSaw_interactive_mockup.html)
+- [Older mockups](docs/README.md)
 - [Roadmap](ROADMAP.md)
