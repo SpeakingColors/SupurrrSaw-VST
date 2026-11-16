@@ -26,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: SupurrSaw (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Linux packages
         if: matrix.name == 'linux'
@@ -64,7 +64,7 @@ jobs:
           find build/SupurrSaw_artefacts -maxdepth 3 \( -name "*.vst3" -o -name "SupurrSaw" -o -name "SupurrSaw.exe" -o -name "SupurrSaw.app" \) -not -path "*/JuceLibraryCode/*" | while read f; do cp -R "$f" out/; done
           ls -la out
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: SupurrSaw-${{ matrix.name }}
           path: out
