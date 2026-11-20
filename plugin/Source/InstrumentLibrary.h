@@ -1,4 +1,4 @@
-// Studio 87 SupurrSaw: finds and loads the optional instrument pack (multisampled piano, FM piano, trumpet, violin, strings).
+// Studio 87 SupurrSaw: loads the built-in instrument pack (and any extra user folders) (multisampled piano, FM piano, trumpet, violin, strings).
 // A pack is a folder with instruments.json and the FLAC files it lists; tools/make_instruments.py builds one from CC0 sample libraries.
 // The standard packs are compiled into the plugin (assets/instruments.bin, instruments2.bin, instruments3.bin, S87InstData). A folder with instruments.json, in any of the places
 // returned by searchFolders(), adds more instruments or replaces one of the same name.
