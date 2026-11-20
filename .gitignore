@@ -6,3 +6,4 @@ build/
 /samples/
 *.flac
 /Instruments/
+__pycache__/
