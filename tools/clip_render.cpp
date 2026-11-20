@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
   std::vector<Ev> ev; if (!readMidi(argv[1], ev) || ev.empty()) { std::puts("no notes in the file"); return 2; }
   double bpm = atof(argv[3]); int split = atoi(argv[4]); int trH = argc > 7 ? atoi(argv[7]) : 0, trL = argc > 8 ? atoi(argv[8]) : 0; const int sr = 48000;
   Engine eng[2]; bool use[2] = {true, true}; for (int k = 0; k < 2; ++k) { std::string n = argv[5 + k]; if (n == "none") use[k] = false; else if (!presets::byName(n, eng[k].p)) { std::printf("unknown preset %s\n", n.c_str()); return 3; } eng[k].prepare(sr); }
-  for (int a = 9; a < argc; ++a) { std::string kv = argv[a]; size_t q = kv.find('='); if (q == std::string::npos) continue; std::string k = kv.substr(0, q); float v = (float)atof(kv.c_str() + q + 1); Params& P = eng[1].p;
+  for (int a = 9; a < argc; ++a) { std::string kv = argv[a]; size_t q = kv.find('='); if (q == std::string::npos) continue; std::string k = kv.substr(0, q); float v = (float)atof(kv.c_str() + q + 1); bool lo = k.rfind("lo:", 0) == 0; if (lo) k = k.substr(3); Params& P = eng[lo ? 0 : 1].p;
     if (k == "dist") P.dist = v; else if (k == "drive") P.drive = v; else if (k == "reso") P.reso = v; else if (k == "cutoff") P.cutoff = v; else if (k == "chorusMix") P.chorusMix = v; else if (k == "lfoPwm") P.lfoPwm = v;
     else if (k == "lfoDetune") P.lfoDetune = v; else if (k == "pitchAmt") P.pitchAmt = v; else if (k == "pitchTime") P.pitchTime = v; else if (k == "spread") P.spread = v; else if (k == "detuneRange") P.detuneRange = v; else if (k == "master") P.master = v;
     else { std::printf("unknown override %s\n", k.c_str()); return 4; } }

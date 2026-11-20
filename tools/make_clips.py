@@ -56,13 +56,18 @@ def house():
     n.append((S(4,0),3.6,45,72))
     return n
 CLIPS=[ # file, midi builder, bpm, split, low preset, high preset, overrides
- ('hoover-classic',hoover,160,0,'none','hoover',['dist=0.42','drive=0.8','reso=0.42','cutoff=4300','detuneRange=1.9','lfoDetune=0.6','chorusMix=0.5']),
+ ('hoover-classic',hoover,160,0,'none','hoover',['dist=0.08','drive=0.2','reso=0.3','cutoff=4800','detuneRange=1.8','lfoDetune=0.55','chorusMix=0.5']),
  ('trance-90s-pro',trance,138,60,'trance_bass','trance_90s_pro',[]),
- ('organ',house,124,56,'funk_bass','organ',[])]
+ ('organ',house,124,56,'funk_bass','organ',['lo:drive=0.05','lo:dist=0.0','lo:reso=0.25'])]
 if __name__=='__main__':
     tool,out=sys.argv[1],sys.argv[2]; tmp=tempfile.mkdtemp()
     for name,fn,bpm,split,low,high,ov in CLIPS:
         mid=os.path.join(tmp,name+'.mid'); wav=os.path.join(tmp,name+'.wav'); write_mid(mid,fn())
         subprocess.run([tool,mid,wav,str(bpm),str(split),low,high,'0','0']+ov,check=True)
-        subprocess.run(['ffmpeg','-y','-loglevel','error','-i',wav,'-af','loudnorm=I=-17:TP=-1.5:LRA=11,afade=t=in:d=0.03,afade=t=out:st=8.8:d=0.6','-t','10.4','-ar','44100','-c:a','libmp3lame','-b:a','112k','-map_metadata','-1',os.path.join(out,name+'.mp3')],check=True)
+        # two-pass linear loudnorm: plain gain, no dynamic pumping that can sound like distortion on short clips
+        import json
+        r=subprocess.run(['ffmpeg','-hide_banner','-i',wav,'-af','loudnorm=I=-17:TP=-1.5:LRA=11:print_format=json','-f','null','-'],capture_output=True,text=True).stderr
+        d=json.loads(r[r.rindex('{'):r.rindex('}')+1])
+        ln='loudnorm=I=-17:TP=-1.5:LRA=11:linear=true:measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s'%(d['input_i'],d['input_tp'],d['input_lra'],d['input_thresh'],d['target_offset'])
+        subprocess.run(['ffmpeg','-y','-loglevel','error','-i',wav,'-af',ln+',afade=t=in:d=0.03,afade=t=out:st=8.8:d=0.6','-t','10.4','-ar','44100','-c:a','libmp3lame','-b:a','112k','-map_metadata','-1',os.path.join(out,name+'.mp3')],check=True)
         print('rendered',name)
