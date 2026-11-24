@@ -2,7 +2,7 @@
   {
     "file": "hoover-classic.mp3",
     "preset": "Hoover",
-    "description": "Dirty rave hoover riff in A Phrygian at 160 BPM: stab rhythm on power chords, wide detune, drive and grit, ending on a long dive."
+    "description": "Rave hoover riff in A Phrygian at 160 BPM: stab rhythm on power chords, wide detune, a smooth dive and a long hold at the end."
   },
   {
     "file": "trance-90s-pro.mp3",
@@ -23,5 +23,45 @@
     "file": "trance-bass.mp3",
     "preset": "Trance Bass",
     "description": "Rolling offbeat trance bass on A, F, C and G."
+  },
+  {
+    "file": "acid-bass.mp3",
+    "preset": "Acid Bass",
+    "description": "Squelchy acid line in A minor at 132 BPM: 16 steps, accents on the strong steps, octave jumps and a climb in the last bar."
+  },
+  {
+    "file": "epiano.mp3",
+    "preset": "Electric Piano",
+    "description": "Soft house chords at 122 BPM over Dm9, G7, Cmaj9, Am9: syncopated stabs with a melody on top and a light bass."
+  },
+  {
+    "file": "pluck-arp.mp3",
+    "preset": "Pluck Arp",
+    "description": "Trance pluck arpeggio at 138 BPM over a warm pad: Am, F, C, G with accents on every third and second sixteenth."
+  },
+  {
+    "file": "strings.mp3",
+    "preset": "Strings",
+    "description": "Wide string section at 108 BPM: Am, F, C, G, Am with a rising top line that lands back on A."
+  },
+  {
+    "file": "brass.mp3",
+    "preset": "Brass",
+    "description": "Rave brass stabs at 128 BPM in A minor: one stab rhythm every bar, a funk bass locked to the hits, ending on a long chord."
+  },
+  {
+    "file": "bell.mp3",
+    "preset": "Bell",
+    "description": "Bell melody at 112 BPM over a glass pad: a short call and answer in A minor that resolves on A."
+  },
+  {
+    "file": "choir.mp3",
+    "preset": "Choir",
+    "description": "Slow choir chords at 112 BPM: Am, F, C, G, Am with smooth voice leading."
+  },
+  {
+    "file": "clav.mp3",
+    "preset": "Clav",
+    "description": "Funk clav riff in E dorian at 104 BPM: ghost notes, a chord hit, bass on the strong steps and a climb in the last bar."
   }
 ]
