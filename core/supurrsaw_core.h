@@ -207,7 +207,7 @@ struct Params {
   float lfoDetune = 0.f;       // 0..1: LFO moves the super saw detune (hoover shimmer)
   // analog feel and range
   float drift = 0.f;
-  bool osc2x = true;           // SuperSaw and SuperSquare oscillators run at twice the sample rate (cleaner high notes, more CPU)
+  bool osc2x = true;           // HQ: SuperSaw and SuperSquare oscillators and the filter drive stage run at twice the sample rate (less aliasing fizz, more CPU)
   float detuneRange = 1.f;     // 1 = JP-8000 range. Raise it to push further.
   // stereo
   float spread = 0.7f;         // 0 = mono, 1 = full width
@@ -432,9 +432,21 @@ struct EnvState {
 // Filters. LP24 / LP18 / LP12 / LP6 / Jupiter: four pole ladder (zero delay feedback) with the taps. Moog and Acid: nonlinear four stage ladders, 2x oversampled. MS-20: two pole with hot resonance and clipped state.
 // SEM: clean two pole. HP, BP, Notch, HP24, BP24: state variable filters. Comb+ and Comb-: feedback comb tuned by the cutoff. Formant: three vowel resonators, the cutoff sweeps A E I O U.
 static const double kFormants[5][3] = {{730, 1090, 2440}, {530, 1840, 2480}, {270, 2290, 3010}, {570, 840, 2410}, {300, 870, 2240}};
+struct HalfBand33 { double h[33], o[16];
+  HalfBand33() { auto i0 = [](double x) { double s = 1, t = 1; for (int k = 1; k < 30; ++k) { t *= (x / (2 * k)) * (x / (2 * k)); s += t; } return s; };
+    for (int j = 0; j < 33; ++j) { double r = 2.0 * j / 32.0 - 1.0, w = i0(8.0 * std::sqrt(1.0 - r * r)) / i0(8.0); int k = j - 16; h[j] = (k == 0 ? 0.5 : std::sin(3.14159265358979323846 * k / 2.0) / (3.14159265358979323846 * k)) * w; }
+    for (int k = 0; k < 16; ++k) o[k] = h[2 * k + 1]; } };
+inline const HalfBand33& halfBand33() { static const HalfBand33 hb; return hb; }
+// push two samples taken at twice the rate, return one sample at the base rate (33 tap half-band, 8 sample delay at the base rate)
+inline double dec2(double* s, int& i, double a, double b) {
+  const HalfBand33& hb = halfBand33(); i = (i + 1) & 63; s[i] = a; const int p = i;
+  double y = 0.5 * s[(p - 16) & 63]; for (int k = 0; k < 16; ++k) y += hb.o[k] * s[(p - 2 * k - 1) & 63];
+  i = (i + 1) & 63; s[i] = b; return y;
+}
 struct Filter {
   double s[4] = {0, 0, 0, 0}, z1 = 0, z2 = 0, z3 = 0, z4 = 0, y[4] = {0, 0, 0, 0}, inE = 0, outE = 0, t[4] = {0, 0, 0, 0}, yy[4] = {0, 0, 0, 0}, fbl = 0, cd = 0, fz[6] = {0, 0, 0, 0, 0, 0}, hp_ = 0, bp_ = 0, lp_ = 0;
   double se = 0, ssr = 0, sa = 0, sl = 0, sm = 0, mi = 0, mo = 0;   // filter Drive: level tracking saturator in front of every filter type
+  double hx[32] = {}, hs[64] = {}; int hxi = 0, hsi = 0;   // history of the 2x oversampled drive stage (HQ)
   double lc = -1, lsr = -1, lg = 0; int ci = 0; float* cb = nullptr; bool cbInit = false;   // cb: 4096 floats for the comb modes, lent by the engine
   void svf(double x, double g, double R, bool st) {
     const double a1 = st ? z3 : z1, a2 = st ? z4 : z2;
@@ -452,9 +464,18 @@ struct Filter {
     y *= mo > 1e-7 ? std::min(2.0, mi / mo) : 1.0;
     return x + (y - x) * std::min(1.0, d * 12);
   }
-  double process(double x, FilterMode m, double cutoffHz, double reso, double drive, double sr) {
+  // HQ: the drive stage runs at twice the sample rate (same 33 tap half-band as the colour stack, 8 samples of delay), so its harmonics do not fold back as fizz
+  double satOS(double v, double d, double sr) {
+    const HalfBand33& hb = halfBand33(); hx[hxi] = v; const int xc = hxi; hxi = (hxi + 1) & 31;
+    const double u0 = hx[(xc - 8) & 31]; double u1 = 0; for (int k = 0; k < 16; ++k) u1 += hb.o[k] * hx[(xc - k) & 31]; u1 *= 2.0;
+    hsi = (hsi + 1) & 63; hs[hsi] = sat(u0, d, 2.0 * sr);
+    const int p = hsi; double y = 0.5 * hs[(p - 16) & 63]; for (int k = 0; k < 16; ++k) y += hb.o[k] * hs[(p - 2 * k - 1) & 63];
+    hsi = (hsi + 1) & 63; hs[hsi] = sat(u1, d, 2.0 * sr);
+    return y;
+  }
+  double process(double x, FilterMode m, double cutoffHz, double reso, double drive, double sr, bool hq = true) {
     if (m == FilterMode::Off) return x;
-    if (drive > 0.001) { x = sat(x, drive, sr); drive *= (m == FilterMode::Moog || m == FilterMode::Acid) ? 0.15 : 0.4; }   // the ladders keep a little of their own drive on top
+    if (drive > 0.001) { x = hq ? satOS(x, drive, sr) : sat(x, drive, sr); drive *= (m == FilterMode::Moog || m == FilterMode::Acid) ? 0.15 : 0.4; }   // the ladders keep a little of their own drive on top
     double g; if (cutoffHz == lc && sr == lsr) g = lg; else { const double fc = std::min(cutoffHz, 0.45 * sr); g = std::tan(kPiD * fc / sr); lc = cutoffHz; lsr = sr; lg = g; }
     switch (m) {
       case FilterMode::LP24: case FilterMode::LP18: case FilterMode::LP12: case FilterMode::LP6: case FilterMode::Jupiter: {
@@ -617,17 +638,6 @@ inline double purrShaper(double x, double drive, double xs, double fuzz) {
   return y;
 }
 inline double purrMakeup(double drive, double xs, double fuzz, double ref) { double a = 0., b = 0.; for (int i = 0; i < 64; ++i) { const double x = ref * std::sin(2. * kPiD * (double)i / 64.); a += x * x; const double y = purrShaper(x, drive, xs, fuzz); b += y * y; } const double m = b > 1e-9 ? std::sqrt(a / b) : 1.; return std::min(4., std::max(0.25, m)); }
-struct HalfBand33 { double h[33], o[16];
-  HalfBand33() { auto i0 = [](double x) { double s = 1, t = 1; for (int k = 1; k < 30; ++k) { t *= (x / (2 * k)) * (x / (2 * k)); s += t; } return s; };
-    for (int j = 0; j < 33; ++j) { double r = 2.0 * j / 32.0 - 1.0, w = i0(8.0 * std::sqrt(1.0 - r * r)) / i0(8.0); int k = j - 16; h[j] = (k == 0 ? 0.5 : std::sin(3.14159265358979323846 * k / 2.0) / (3.14159265358979323846 * k)) * w; }
-    for (int k = 0; k < 16; ++k) o[k] = h[2 * k + 1]; } };
-inline const HalfBand33& halfBand33() { static const HalfBand33 hb; return hb; }
-// push two samples taken at twice the rate, return one sample at the base rate (33 tap half-band, 8 sample delay at the base rate)
-inline double dec2(double* s, int& i, double a, double b) {
-  const HalfBand33& hb = halfBand33(); i = (i + 1) & 63; s[i] = a; const int p = i;
-  double y = 0.5 * s[(p - 16) & 63]; for (int k = 0; k < 16; ++k) y += hb.o[k] * s[(p - 2 * k - 1) & 63];
-  i = (i + 1) & 63; s[i] = b; return y;
-}
 struct DriveCh {
   double x[32] = {}, s[64] = {}, dd[16] = {}; int xi = 0, si = 0, di = 0; double dc = 0.;
   double run(double v, bool on, double drive, double xs, double fuzz, double mk, double mix) {
@@ -1428,13 +1438,13 @@ class Engine {
       const double rrr[3] = {rs0, rr[1], rr[2]}, ddd[3] = {dv, dd[1], dd[2]}, mxF[3] = {p.fMix, p.f2Mix, p.f3Mix};
       AuxF* axA[3] = {nullptr, (p.f2LowCut > 5.5f || p.f2HighCut < 19990.f) ? &v.ax2[0] : nullptr, (p.f3LowCut > 5.5f || p.f3HighCut < 19990.f) ? &v.ax2[1] : nullptr};
       if (axA[1]) axA[1]->set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2]->set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
-      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; { const double iL = L, iR = R; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (mxF[q] < 1.0) { L = iL + (L - iL) * mxF[q]; R = iR + (R - iR) * mxF[q]; } } if (axA[q]) { L = axA[q]->tick(L, 0); R = axA[q]->tick(R, 1); } } }
-      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; double bl = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr), brr = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr); if (mxF[q] < 1.0) { bl = L + (bl - L) * mxF[q]; brr = R + (brr - R) * mxF[q]; } if (axA[q]) { bl = axA[q]->tick(bl, 0); brr = axA[q]->tick(brr, 1); } al += bl; ar += brr; ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
+      if (!parallel) { for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; { const double iL = L, iR = R; L = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr, p.osc2x); R = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr, p.osc2x); if (mxF[q] < 1.0) { L = iL + (L - iL) * mxF[q]; R = iR + (R - iR) * mxF[q]; } } if (axA[q]) { L = axA[q]->tick(L, 0); R = axA[q]->tick(R, 1); } } }
+      else { double al = 0.0, ar = 0.0; int cn = 0; for (int q = 0; q < 3; ++q) { if (modes[q] == FilterMode::Off) continue; double bl = v.fl[q].process(L, modes[q], v.cc[q], rrr[q], ddd[q], sr, p.osc2x), brr = v.fr[q].process(R, modes[q], v.cc[q], rrr[q], ddd[q], sr, p.osc2x); if (mxF[q] < 1.0) { bl = L + (bl - L) * mxF[q]; brr = R + (brr - R) * mxF[q]; } if (axA[q]) { bl = axA[q]->tick(bl, 0); brr = axA[q]->tick(brr, 1); } al += bl; ar += brr; ++cn; } if (cn) { const double k = 1.0 / std::sqrt((double)cn); L = al * k; R = ar * k; } }
       if (usedD & 30) {   // layers sent to one filter only (1..3) or past all filters (4)
         const bool dpre = p.distPre && p.dist > 0.f;
         for (int q = 1; q <= 3; ++q) { if (!(usedD & (1 << q))) continue; double xl = v.bL[q], xr = v.bR[q]; const FilterMode m = modes[q - 1];
           if (dpre) { xl = std::tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = std::tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; }
-          if (m != FilterMode::Off) { const double x0l = xl, x0r = xr; xl = v.fl2[q - 1].process(xl, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr); xr = v.fr2[q - 1].process(xr, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr);
+          if (m != FilterMode::Off) { const double x0l = xl, x0r = xr; xl = v.fl2[q - 1].process(xl, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr, p.osc2x); xr = v.fr2[q - 1].process(xr, m, v.cc[q - 1], rrr[q - 1], ddd[q - 1], sr, p.osc2x);
             if (mxF[q - 1] < 1.0) { xl = x0l + (xl - x0l) * mxF[q - 1]; xr = x0r + (xr - x0r) * mxF[q - 1]; }
             if (q > 1) { const float lo = q == 2 ? p.f2LowCut : p.f3LowCut, hi = q == 2 ? p.f2HighCut : p.f3HighCut; const int sl = q == 2 ? p.f2Slope : p.f3Slope;
               if (lo > 5.5f || hi < 19990.f) { AuxF& a3 = v.ax3[q - 2]; a3.set(lo, hi, sl, sr); xl = a3.tick(xl, 0); xr = a3.tick(xr, 1); } } }

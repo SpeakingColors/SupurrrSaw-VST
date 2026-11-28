@@ -475,9 +475,19 @@ class Filter {
     y *= this.mo > 1e-7 ? Math.min(2, this.mi / this.mo) : 1;   /* same average level in and out: drive adds density, not volume */
     return x + (y - x) * Math.min(1, d * 12);
   }
-  process(x, m, cutoffHz, reso, drive, sr) {
+  /* HQ: the drive stage runs at twice the sample rate (same 33 tap half-band as the colour stack, 8 samples of delay) */
+  satOS(v, d, sr) {
+    if (!this.hx) { this.hx = new Float64Array(32); this.hs = new Float64Array(64); this.hxi = 0; this.hsi = 0; }
+    const hx = this.hx, hs = this.hs; hx[this.hxi] = v; const xc = this.hxi; this.hxi = (this.hxi + 1) & 31;
+    const u0 = hx[(xc - 8) & 31]; let u1 = 0; for (let k = 0; k < 16; k++) u1 += HBO[k] * hx[(xc - k) & 31]; u1 *= 2;
+    this.hsi = (this.hsi + 1) & 63; hs[this.hsi] = this.sat(u0, d, 2 * sr);
+    const p = this.hsi; let y = 0.5 * hs[(p - 16) & 63]; for (let k = 0; k < 16; k++) y += HBO[k] * hs[(p - 2 * k - 1) & 63];
+    this.hsi = (this.hsi + 1) & 63; hs[this.hsi] = this.sat(u1, d, 2 * sr);
+    return y;
+  }
+  process(x, m, cutoffHz, reso, drive, sr, hq) {
     if (m === "Off") return x;
-    if (drive > 0.001) { x = this.sat(x, drive, sr); drive *= (m === "Moog" || m === "Acid") ? 0.15 : 0.4; }   /* the ladders keep a little of their own drive on top */
+    if (drive > 0.001) { x = hq ? this.satOS(x, drive, sr) : this.sat(x, drive, sr); drive *= (m === "Moog" || m === "Acid") ? 0.15 : 0.4; }   /* the ladders keep a little of their own drive on top */
     let g; if (cutoffHz === this.lc && sr === this.lsr) g = this.lg; else { const fc = Math.min(cutoffHz, 0.45 * sr); g = Math.tan(kPi * fc / sr); this.lc = cutoffHz; this.lsr = sr; this.lg = g; } const s = this.s;
     if (m === "LP24" || m === "LP18" || m === "LP12" || m === "LP6" || m === "Jupiter") {
       const G = g / (1 + g), G2 = G * G, G4 = G2 * G2, k = 3.95 * reso, ig = 1 / (1 + g);
@@ -1295,13 +1305,13 @@ class SupurrEngine {
       const rr = [rs, p.f2Res, p.f3Res], dd = [dv, p.f2Drv, p.f3Drv], mxF = [p.fMix, p.f2Mix, p.f3Mix];   /* mxF: per filter dry/wet, 1 is fully filtered */
       const axA = [null, p.f2LowCut > 5.5 || p.f2HighCut < 19990 ? v.ax2[0] : null, p.f3LowCut > 5.5 || p.f3HighCut < 19990 ? v.ax2[1] : null];
       if (axA[1]) axA[1].set(p.f2LowCut, p.f2HighCut, p.f2Slope, sr); if (axA[2]) axA[2].set(p.f3LowCut, p.f3HighCut, p.f3Slope, sr);
-      if (!parallel) { for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; { const iL = st.L, iR = st.R, mq = mxF[q]; st.L = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr); st.R = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); if (mq < 1) { st.L = iL + (st.L - iL) * mq; st.R = iR + (st.R - iR) * mq; } } if (axA[q]) { st.L = axA[q].tick(st.L, 0); st.R = axA[q].tick(st.R, 1); } } }
-      else { let al = 0, ar = 0, cn = 0; for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; let bl = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr), br2 = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr); if (mxF[q] < 1) { bl = st.L + (bl - st.L) * mxF[q]; br2 = st.R + (br2 - st.R) * mxF[q]; } if (axA[q]) { bl = axA[q].tick(bl, 0); br2 = axA[q].tick(br2, 1); } al += bl; ar += br2; cn++; } if (cn) { const k = 1 / Math.sqrt(cn); st.L = al * k; st.R = ar * k; } }
+      if (!parallel) { for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; { const iL = st.L, iR = st.R, mq = mxF[q]; st.L = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr, p.osc2x); st.R = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr, p.osc2x); if (mq < 1) { st.L = iL + (st.L - iL) * mq; st.R = iR + (st.R - iR) * mq; } } if (axA[q]) { st.L = axA[q].tick(st.L, 0); st.R = axA[q].tick(st.R, 1); } } }
+      else { let al = 0, ar = 0, cn = 0; for (let q = 0; q < 3; q++) { if (modes[q] === "Off") continue; let bl = v.fl[q].process(st.L, modes[q], cc[q], rr[q], dd[q], sr, p.osc2x), br2 = v.fr[q].process(st.R, modes[q], cc[q], rr[q], dd[q], sr, p.osc2x); if (mxF[q] < 1) { bl = st.L + (bl - st.L) * mxF[q]; br2 = st.R + (br2 - st.R) * mxF[q]; } if (axA[q]) { bl = axA[q].tick(bl, 0); br2 = axA[q].tick(br2, 1); } al += bl; ar += br2; cn++; } if (cn) { const k = 1 / Math.sqrt(cn); st.L = al * k; st.R = ar * k; } }
       if (usedD & 30) {   /* layers sent to one filter only (1..3) or past all filters (4) */
         const dpre = p.distPre && p.dist > 0;
         for (let q = 1; q <= 3; q++) { if (!(usedD & (1 << q))) continue; let xl = bL[q], xr = bR[q]; const m = modes[q - 1];
           if (dpre) { xl = Math.tanh(dk * xl + 0.15 * p.dist) * dnm * 0.8; xr = Math.tanh(dk * xr + 0.15 * p.dist) * dnm * 0.8; }
-          if (m !== "Off") { const x0l = xl, x0r = xr; xl = v.fl2[q - 1].process(xl, m, cc[q - 1], rr[q - 1], dd[q - 1], sr); xr = v.fr2[q - 1].process(xr, m, cc[q - 1], rr[q - 1], dd[q - 1], sr);
+          if (m !== "Off") { const x0l = xl, x0r = xr; xl = v.fl2[q - 1].process(xl, m, cc[q - 1], rr[q - 1], dd[q - 1], sr, p.osc2x); xr = v.fr2[q - 1].process(xr, m, cc[q - 1], rr[q - 1], dd[q - 1], sr, p.osc2x);
             if (mxF[q - 1] < 1) { xl = x0l + (xl - x0l) * mxF[q - 1]; xr = x0r + (xr - x0r) * mxF[q - 1]; }
             if (q > 1) { const a3 = v.ax3[q - 2]; if (p[q === 2 ? "f2LowCut" : "f3LowCut"] > 5.5 || p[q === 2 ? "f2HighCut" : "f3HighCut"] < 19990) { a3.set(p[q === 2 ? "f2LowCut" : "f3LowCut"], p[q === 2 ? "f2HighCut" : "f3HighCut"], p[q === 2 ? "f2Slope" : "f3Slope"], sr); xl = a3.tick(xl, 0); xr = a3.tick(xr, 1); } } }
           st.L += xl; st.R += xr; }
@@ -2118,7 +2128,7 @@ function voiceCard(){
     ["mono","stackCount"].forEach(k=>CTRL[k]&&CTRL[k].refresh());};s.appendChild(b);});
   const ref=()=>[...s.children].forEach((b,i)=>b.classList.toggle("on",modes[i][0]===cur()));
   addCtrl("mono",{refresh:ref,mark(){}});addCtrl("stackCount",{refresh:ref,mark(){}});
-  const ph=toggle("phaseReset","Phase reset","Every note starts with the same phase."),hq=toggle("osc2x","HQ osc","Super waves run at twice the sample rate: cleaner high notes, a little more CPU.");r.appendChild(s);if(STAGE){const h2=c.querySelector("h2");ph.style.textTransform="none";ph.style.letterSpacing="0";h2.appendChild(ph);hq.style.textTransform="none";hq.style.letterSpacing="0";h2.appendChild(hq);}else{r.appendChild(ph);r.appendChild(hq);}c.appendChild(r);
+  const ph=toggle("phaseReset","Phase reset","Every note starts with the same phase."),hq=toggle("osc2x","HQ osc","Super waves and the filter drive run at twice the sample rate: less fizz and aliasing on bright sounds, more CPU on big chords.");r.appendChild(s);if(STAGE){const h2=c.querySelector("h2");ph.style.textTransform="none";ph.style.letterSpacing="0";h2.appendChild(ph);hq.style.textTransform="none";hq.style.letterSpacing="0";h2.appendChild(hq);}else{r.appendChild(ph);r.appendChild(hq);}c.appendChild(r);
   c.appendChild(knobRow([N("polyphony","Poly",1,32,1,"","How many voices can sound at once. A Stack key uses one voice per copy. Higher costs more CPU in the browser."),N("stackCount","Stack",1,4,1,"","Copies per key in Stack mode. 1 is plain poly."),N("stackCents","Stack ct",0,50,0.5,"ct","Pitch spread of the stacked copies in cents."),N("drift","Drift",0,1,0.01,"","Slow random pitch drift."),N("detuneRange","Range",0.2,2,0.01,"","Scales every detune amount."),N("spread","Spread",0,1,0.01,"","Width of the stacked voices."),LG("bassMonoHz","Bass",20,400,"Hz","Everything below this goes to mono."),N("glide","Glide",0,1,0.001,"s","Glide time. Always works in Mono. In Poly and Stack it needs Poly glide. 0 is off.")]));
   const gr=el("div","glrow");gr.style.cssText="display:flex;align-items:center;gap:10px;margin-top:2px";
   const gc=el("div","");gc.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:5px;flex:1;min-width:0";

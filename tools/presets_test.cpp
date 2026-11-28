@@ -608,17 +608,19 @@ int main(int argc, char** argv) {
       p.mx[0][0] = 0.15f; p.mx[9][0] = 0.3f; p.mx[10][0] = 0.15f; p.mx[1][1] = 0.2f; p.lfoRate = 6.f; p.lfoDepth = 0.8f; p.lfo2Depth = 0.8f; p.lfo3Depth = 0.8f; };
     int moved = 0;
     for (int d = kFreeNFx + 1; d <= kFreeDst; ++d) {
-      auto run = [&](float amt, float* baseOut) {
+      auto run = [&](float amt, float* baseOut, std::vector<double>* wf = nullptr) {
         Params p; patch(p); p.fsSrc[0] = 7; p.fsDst[0] = d; p.fsAmt[0] = amt;   // 7 = velocity
         const FreeDst& fd = kFreeDstTab[d - 1]; const float base = fd.layer >= 0 ? p.layer[fd.layer].*(fd.lm) : p.*(fd.m); if (baseOut) *baseOut = base;
         Engine e; e.prepare(48000); e.p = p; e.noteOn(60, 0.9f);
         std::vector<float> l(256), r(256); double sum = 0; bool fin = true;
-        for (int b = 0; b < 30; ++b) { e.render(l.data(), r.data(), 256); for (int i = 0; i < 256; ++i) { if (!std::isfinite(l[i]) || !std::isfinite(r[i])) fin = false; sum += (double)l[i] * l[i] + (double)r[i] * r[i]; } }
+        for (int b = 0; b < 30; ++b) { e.render(l.data(), r.data(), 256); for (int i = 0; i < 256; ++i) { if (!std::isfinite(l[i]) || !std::isfinite(r[i])) fin = false; sum += (double)l[i] * l[i] + (double)r[i] * r[i]; if (wf) wf->push_back((double)l[i]); } }
         CHECK(fin); const float after = fd.layer >= 0 ? e.p.layer[fd.layer].*(fd.lm) : e.p.*(fd.m); CHECK(after == base);   // restored
         return sum; };
-      float base = 0; const double off = run(0.f, &base), up = run(0.4f, nullptr), dn = run(-0.4f, nullptr);
+      float base = 0; std::vector<double> w0, wu, wd; const double off = run(0.f, &base, &w0), up = run(0.4f, nullptr, &wu), dn = run(-0.4f, nullptr, &wd);
       const double rel = std::max(std::fabs(up - off), std::fabs(dn - off)) / (off + 1e-9);
-      if (rel > 1e-4) ++moved; else std::printf("voice slot %s did not change the sound (%.2e)\n", kFreeDstNames[d - 1], rel);
+      double e0 = 1e-12, du = 0, dd = 0; for (size_t i = 0; i < w0.size(); ++i) { e0 += w0[i] * w0[i]; du += (wu[i] - w0[i]) * (wu[i] - w0[i]); dd += (wd[i] - w0[i]) * (wd[i] - w0[i]); }
+      const double wrel = std::max(du, dd) / e0;   // level matched stages (filter drive) keep the energy, so also accept a changed waveform
+      if (rel > 1e-4 || wrel > 1e-4) ++moved; else std::printf("voice slot %s did not change the sound (%.2e)\n", kFreeDstNames[d - 1], rel);
     }
     CHECK(moved == kFreeDst - kFreeNFx);
     std::printf("voice slots: %d of %d voice knobs change the sound\n", moved, (int)(kFreeDst - kFreeNFx));
