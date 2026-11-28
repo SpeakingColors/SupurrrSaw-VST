@@ -207,6 +207,7 @@ struct Params {
   float lfoDetune = 0.f;       // 0..1: LFO moves the super saw detune (hoover shimmer)
   // analog feel and range
   float drift = 0.f;
+  bool osc2x = true;           // SuperSaw and SuperSquare oscillators run at twice the sample rate (cleaner high notes, more CPU)
   float detuneRange = 1.f;     // 1 = JP-8000 range. Raise it to push further.
   // stereo
   float spread = 0.7f;         // 0 = mono, 1 = full width
@@ -566,6 +567,7 @@ struct Voice {
   const Sample* zoneS[kLayers] = {}; int zoneN[kLayers] = {-1, -1, -1};   // chosen zone of a multisampled layer, and the note it was chosen for
   double syncPhase[kLayers] = {}, nzG = 0, gl = 0, glStep = 0, subPh[5] = {}, nzS[20] = {};
   double rnd = 0, sh = 0, sh0 = 0, subPhase = 0, drift[kMaxSaws] = {}, driftT[kMaxSaws] = {};
+  double hoL[kLayers][64] = {}, hoR[kLayers][64] = {}; int hoi[kLayers] = {};   // 2x oscillator decimator history
   double lfoPhase = 0, t = 0, stackCents = 0, stackGain = 1;
   int ch = 0; double bend = 0, press = 0, slide = 0;   // MPE: channel of the note, its own bend (semitones), pressure and slide (0..1)
   double lyOut[kLayers] = {}, fmSubPh = 0;
@@ -620,6 +622,12 @@ struct HalfBand33 { double h[33], o[16];
     for (int j = 0; j < 33; ++j) { double r = 2.0 * j / 32.0 - 1.0, w = i0(8.0 * std::sqrt(1.0 - r * r)) / i0(8.0); int k = j - 16; h[j] = (k == 0 ? 0.5 : std::sin(3.14159265358979323846 * k / 2.0) / (3.14159265358979323846 * k)) * w; }
     for (int k = 0; k < 16; ++k) o[k] = h[2 * k + 1]; } };
 inline const HalfBand33& halfBand33() { static const HalfBand33 hb; return hb; }
+// push two samples taken at twice the rate, return one sample at the base rate (33 tap half-band, 8 sample delay at the base rate)
+inline double dec2(double* s, int& i, double a, double b) {
+  const HalfBand33& hb = halfBand33(); i = (i + 1) & 63; s[i] = a; const int p = i;
+  double y = 0.5 * s[(p - 16) & 63]; for (int k = 0; k < 16; ++k) y += hb.o[k] * s[(p - 2 * k - 1) & 63];
+  i = (i + 1) & 63; s[i] = b; return y;
+}
 struct DriveCh {
   double x[32] = {}, s[64] = {}, dd[16] = {}; int xi = 0, si = 0, di = 0; double dc = 0.;
   double run(double v, bool on, double drive, double xs, double fuzz, double mk, double mix) {
@@ -1294,6 +1302,23 @@ class Engine {
           const int nv = std::max(1, std::min(kMaxSaws, lp.voices));
           const double det = lp.cents > 0.f ? std::pow(2.0, std::max(0.0, lp.cents + md[5] * 50.0) / 1200.0) - 1.0 : jpDetune(std::min(1.0, std::max(0.0, lp.detune * (1.0 + p.lfoDetune * lfo) + md[5] * 0.5))) * kMaxDetune * p.detuneRange;
           const double pw = std::min(0.95, std::max(0.05, lp.pwm + p.lfoPwm * lfo * 0.45 + md[4] * 0.45));
+          if (p.osc2x && lp.wave != Wave::Custom) {
+            double aL = 0.0, aR = 0.0, bL = 0.0, bR = 0.0;
+            for (int j = 0; j < nv; ++j) {
+              if (!tOn[ly][j]) continue;
+              const double dh = 0.5 * std::min(0.45, dt * (1.0 + det * tSp[ly][j] + v.drift[j]));
+              double x = v.phase[ly][j];
+              for (int h = 0; h < 2; ++h) {
+                double s;
+                if (lp.wave == Wave::SuperSaw) s = (2.0 * x - 1.0) - blep(x, dh);
+                else { s = (x < pw ? 1.0 : -1.0) + blep(x, dh); double t2 = x - pw; if (t2 < 0.0) t2 += 1.0; s -= blep(t2, dh); s *= 0.8; }
+                x += dh; if (x >= 1.0) x -= 1.0;
+                if (h == 0) { aL += tCl[ly][j] * s; aR += tCr[ly][j] * s; } else { bL += tCl[ly][j] * s; bR += tCr[ly][j] * s; }
+              }
+              v.phase[ly][j] = x;
+            }
+            int hi = v.hoi[ly]; const int hi0 = hi; lL = dec2(v.hoL[ly], hi, aL, bL); hi = hi0; lR = dec2(v.hoR[ly], hi, aR, bR); v.hoi[ly] = hi;
+          } else {
           for (int j = 0; j < nv; ++j) {
             if (!tOn[ly][j]) continue;
             const double d = std::min(0.45, dt * (1.0 + det * tSp[ly][j] + v.drift[j]));
@@ -1308,6 +1333,7 @@ class Engine {
             }
             x += d; if (x >= 1.0) x -= 1.0; v.phase[ly][j] = x;
             lL += tCl[ly][j] * s; lR += tCr[ly][j] * s;
+          }
           }
         } else if (lp.wave == Wave::Sample && (lp.sampleSet || (lp.sample && !lp.sample->l.empty()))) {
           const Sample* smp = lp.sample.get();

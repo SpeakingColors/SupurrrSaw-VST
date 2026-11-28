@@ -62,7 +62,7 @@ inline const std::unordered_map<std::string, Setter>& globalTable()
         S87_F(noiseLevel); S87_F(noiseFilt); S87_IR(noiseMode, 0, 2); S87_IR(subVoices, 1, 5); S87_F(subDetune); S87_F(subWidth); S87_IR(noiseVoices, 1, 5); S87_F(noiseDetune); S87_F(noiseWidth);
         S87_F(pitchAmt); S87_F(pitchTime); S87_F(pitchAttack); S87_F(pitchFall); S87_F(pitchFallTime);
         S87_F(lfoRate); S87_F(lfoPwm); S87_F(lfoPitch); S87_F(lfoCutoff); S87_F(lfoDetune); S87_I(lfoShape); S87_F(lfoPan); S87_F(lfoAmp);
-        S87_F(wheelCutoff); S87_F(velCutoff); S87_F(wheelVib); S87_B(phaseReset); S87_F(drift); S87_F(detuneRange);
+        S87_F(wheelCutoff); S87_F(velCutoff); S87_F(wheelVib); S87_B(phaseReset); S87_B(osc2x); S87_F(drift); S87_F(detuneRange);
         S87_F(spread); S87_F(bassMonoHz);
         S87_F(chorusMix); S87_F(chorusDepth); S87_F(chorusRate); S87_F(delayMix); S87_F(delayTime); S87_F(delayFb); S87_B(delaySync); S87_I(delayDiv);
         S87_F(bpm); S87_F(optoAmt); S87_F(ottDepth); S87_F(ottMix); S87_F(sqzAmt);
